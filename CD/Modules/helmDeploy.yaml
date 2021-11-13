@@ -1,0 +1,64 @@
+parameters:
+- name: ServiceConnection
+  type: string
+- name: ClusterResourceGroup
+  type: string
+- name: ClusterName
+  type: string
+- name: ApplicationNamespace
+  type: string
+- name: ChartFolder
+  type: string
+- name: ChartFileName
+  type: string
+  default: Chart.yaml
+- name: ValuesFolder
+  type: string
+- name: ValuesFileName
+  type: string
+  default: values.yaml
+- name: ReleaseName
+  type: string
+- name: OverridenValues
+  type: string
+  default: ''
+- name: skipInstall
+  type: boolean
+  default: false  
+- name: helmVersion
+  type: string
+  default: '3.0.2'
+
+steps:
+- task: HelmInstaller@0
+  displayName: 'Install Helm ${{ parameters.helmVersion }}'
+  inputs:
+    helmVersion: ${{ parameters.helmVersion }}
+  condition: eq('${{ parameters.skipInstall }}', 'false')
+  
+- task: HelmDeploy@0
+  displayName: 'Helm ls'
+  inputs:
+    azureSubscription: ${{ parameters.ServiceConnection }}
+    azureResourceGroup: ${{ parameters.ClusterResourceGroup }}
+    kubernetesCluster:  ${{ parameters.ClusterName }}
+    namespace: ${{ parameters.ApplicationNamespace }}
+    failOnStderr: true
+
+- task: HelmDeploy@0
+  displayName: 'Helm upgrade'
+  inputs:
+    azureSubscription: ${{ parameters.ServiceConnection }}
+    azureResourceGroup:  ${{ parameters.ClusterResourceGroup }}
+    kubernetesCluster: ${{ parameters.ClusterName }}
+    namespace: ${{ parameters.ApplicationNamespace }}
+    command: upgrade
+    chartType: FilePath
+    chartPath: '${{ parameters.ChartFolder }}/${{ parameters.ChartFileName }}'
+    releaseName: '${{ parameters.ReleaseName }}'
+    overrideValues: '${{ parameters.OverridenValues }}'
+    valueFile: '${{ parameters.ValuesFolder }}/${{ parameters.ValuesFileName }}'
+    recreate: false
+    arguments: '--namespace ${{ parameters.ApplicationNamespace }} --create-namespace --install'
+    failOnStderr: true
+

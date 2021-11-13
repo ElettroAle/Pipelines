@@ -1,0 +1,33 @@
+parameters:
+- name: Projects
+  type: string
+  default: ''
+- name: VstsFeed
+  type: string
+  default: ''
+- name: BuildConfiguration
+  type: string
+  default: 'Release'
+  
+steps:
+
+# I create NuGet package
+- task: DotNetCoreCLI@2
+  displayName: '.Net Core CLI - Create All NuGet Packages'
+  inputs:
+    command: 'pack'
+    packagesToPack: ${{ Parameters.Projects }}
+    configuration: ${{ Parameters.BuildConfiguration }}
+    includesymbols: true
+    includesource: true
+    versioningScheme: 'off'
+    
+# I push NuGet package in feed
+- task: NuGetCommand@2
+  displayName: 'NuGet CLI - Push NuGet Package In Feed'
+  inputs:
+    command: 'push'
+    packagesToPush: '$(Build.ArtifactStagingDirectory)/**/*.nupkg;!$(Build.ArtifactStagingDirectory)/**/*.symbols.nupkg'
+    nuGetFeedType: 'internal'
+    publishVstsFeed: '${{ Parameters.VstsFeed }}'
+    allowPackageConflicts: true

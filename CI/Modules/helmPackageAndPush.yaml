@@ -1,0 +1,26 @@
+parameters:
+- name: chartPath
+  type: string
+- name: chartVersion
+  type: string
+- name: imageRepository
+  type: string
+- name: chartfilePath
+  type: string
+- name: helmImageRegistryService
+  type: string
+
+steps:  
+  #init
+  - template: ../Modules/helmPackage.yaml
+    parameters:   
+      ChartPath: '${{ parameters.chartPath }}'
+      DestinationPath : $(Build.ArtifactStagingDirectory)
+      Version: '${{ parameters.chartVersion }}'
+
+  #dockerImage
+  - template: ../Modules/helmPush.yaml
+    parameters:
+      helmImageRegistryService: ${{ parameters.helmImageRegistryService }}
+      imageRepository: ${{ parameters.imageRepository }}
+      chartfilePath: ${{ parameters.chartfilePath }}

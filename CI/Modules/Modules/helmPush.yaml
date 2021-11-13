@@ -1,0 +1,12 @@
+parameters:
+- name: imageRepository
+  type: string
+  default: ''
+- name: chartfilePath
+  type: string
+  default: ''
+- name: helmImageRegistryService
+  type: string
+  default: ''
+
+# TODO: importare qui dentro gli steps helm Packaging and Push

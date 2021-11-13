@@ -1,0 +1,24 @@
+parameters:
+- name: ImageRepository
+  type: string
+  default: ''
+- name: DockerfilePath
+  type: string
+  default: ''
+- name: DockerRegistryService
+  type: string
+  default: ''
+
+steps:
+#build and push image
+- task: Docker@2
+  displayName: 'Docker - Build and push image'
+  inputs:
+    containerRegistry: ${{ Parameters.DockerRegistryService }}
+    repository: ${{ Parameters.ImageRepository }}
+    command: buildAndPush
+    dockerfile: ${{ Parameters.DockerfilePath }}
+    buildContext: '.'
+    tags: |
+      $(Build.BuildId)-$(Build.SourceBranchName)
+      $(Build.BuildId)

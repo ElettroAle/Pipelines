@@ -1,0 +1,16 @@
+parameters:
+- name: Projects
+  type: string
+  default: ''
+- name: BuildConfiguration
+  type: string
+  default: 'Release'
+
+steps:
+
+# I build the project
+- task: DotNetCoreCLI@2
+  displayName: '.Net Core CLI - Build Projects'
+  inputs:
+    projects: ${{ Parameters.Projects }}
+    arguments: '--configuration ${{ Parameters.BuildConfiguration }}'

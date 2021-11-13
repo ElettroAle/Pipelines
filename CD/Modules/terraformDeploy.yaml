@@ -1,0 +1,69 @@
+ #0.14.10
+parameters:
+- name: version
+  type: string
+  default: ''
+- name: serviceConnection
+  type: string
+- name: resourceGroupName
+  type: string
+- name: storageAccountName
+  type: string
+- name: stateContainerName
+  type: string
+- name: storageAccountAccessKey
+  type: string
+- name: stateFileName
+  type: string
+- name: workingDirectory
+  type: string
+  default: '$(System.DefaultWorkingDirectory)'
+- name: varFileRelativePath
+  type: string
+  default: 'Variables/$(Release.EnvironmentName).tfvars'
+- name: targetModule
+  type: string
+  default: ''
+- name: overridenVariables
+  type: string
+  default: ''
+
+steps:
+- task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@0
+  displayName: 'Terraform : install'
+  ${{ if not(eq(parameters['version'], '')) }}:
+    inputs:
+      terraformVersion: '${{ parameters.version }}'
+
+- task: ms-devlabs.custom-terraform-tasks.custom-terraform-release-task.TerraformTaskV1@0
+  displayName: 'Terraform : init'
+  inputs:
+    command: init
+    workingDirectory: ${{ parameters.workingDirectory }}
+    commandOptions: '-reconfigure -backend-config="access_key=${{ parameters.storageAccountAccessKey }}'
+    backendServiceArm: '${{ parameters.serviceConnection }}'
+    backendAzureRmResourceGroupName: '${{ parameters.resourceGroupName }}'
+    backendAzureRmStorageAccountName: '${{ parameters.storageAccountName }}'
+    backendAzureRmContainerName: ${{ parameters.stateContainerName }}
+    backendAzureRmKey: ${{ parameters.stateFileName }}
+
+- task: ms-devlabs.custom-terraform-tasks.custom-terraform-release-task.TerraformTaskV1@0
+  displayName: 'Terraform : plan'
+  inputs:
+    command: plan
+    workingDirectory: '${{ parameters.workingDirectory }}'
+    ${{ if eq(parameters['targetModule'], '') }}:
+      commandOptions: '-var-file="${{ parameters.varFileRelativePath }}" -out="plan-$(Release.EnvironmentName).tfplan"'
+    ${{ else }}:
+      commandOptions: '-var-file="${{ parameters.varFileRelativePath }}" -out="plan-$(Release.EnvironmentName).tfplan" -target="$${{ parameters.targetModule }}"'
+    environmentServiceNameAzureRM: '${{ parameters.serviceConnection }}'
+ 
+- task: ms-devlabs.custom-terraform-tasks.custom-terraform-release-task.TerraformTaskV1@0
+  displayName: 'Terraform : validate and apply'
+  inputs:
+    command: apply
+    workingDirectory: '${{ parameters.workingDirectory }}'
+    commandOptions: 'plan-$(Release.EnvironmentName).tfplan'
+    environmentServiceNameAzureRM: '${{ parameters.serviceConnection }}'
+
+  

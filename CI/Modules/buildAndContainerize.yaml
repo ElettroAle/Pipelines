@@ -1,0 +1,29 @@
+parameters:
+- name: BuildProjects
+  type: string
+  default: '**/*.csproj'
+- name: VstsFeed
+  type: string
+  default: ''
+- name: DockerRegistryService
+  type: string
+  default: ''
+- name: ImageRepository
+  type: string
+  default: ''
+- name: DockerfilePath
+  type: string
+  default: ''
+
+steps:  
+  #init
+  - template: ../Modules/init.yaml
+    parameters:
+      Projects: ${{ parameters.BuildProjects }}
+
+  #dockerImage
+  - template: ../Modules/dockerImage.yaml
+    parameters:
+      DockerRegistryService: ${{ parameters.DockerRegistryService }}
+      ImageRepository: ${{ parameters.ImageRepository }}
+      DockerfilePath: ${{ parameters.DockerfilePath }}

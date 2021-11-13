@@ -1,0 +1,24 @@
+parameters:
+- name: ChartPath
+  type: string
+- name: DestinationPath
+  type: string
+- name: Version
+  type: string
+
+steps:
+
+  - task: HelmDeploy@0
+    displayName: Helm Package Chart
+    inputs:
+      version: ${{ parameters.Version }}
+      command: 'package'
+      chartPath: ${{ parameters.ChartPath }}
+      destination: ${{ parameters.DestinationPath }}
+
+  - task: PublishBuildArtifacts@1
+    displayName: Publish Artifact HelmChart
+    inputs:
+      PathtoPublish: ${{ parameters.DestinationPath }}
+      ArtifactName: 'HelmChart'
+      publishLocation: 'Container'

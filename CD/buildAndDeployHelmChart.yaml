@@ -1,0 +1,27 @@
+# TODO
+
+parameters:
+  - name: helmChartPath
+    type: string
+  - name: appVersion
+
+steps:
+
+- template: ../Modules/helmDrop.yaml@devSecOpsRepo
+  parameters:   
+    ChartPath: '$(Build.SourcesDirectory)/${{ parameters.helmChartPath }}'
+    DestinationPath : $(Build.ArtifactStagingDirectory)
+    Version: ${{ parameters)
+
+- template: ../Modules/helmDeploy.yaml@devSecOpsRepo
+  parameters:
+    ServiceConnection: $(serviceConnection)
+    ClusterResourceGroup: $(clusterResourceGroup)
+    ClusterName: $(clusterName)
+    ApplicationNamespace: $(environmentPrefix)
+    ChartFolder: $(Build.ArtifactStagingDirectory)
+    ChartFileName: '$(chartApplicationName)-$(Build.BuildId).tgz'
+    ReleaseName: '$(applicationName)-$(environmentPrefix)'
+    ValuesFolder: '$(Build.SourcesDirectory)/$(helmChartPath)'
+    ValuesFileName: 'values.$(environmentPrefix).yaml'
+    OverridenValues: 'ContainerRegistry.Repos.ApiGateway.Tag=$(apiGatewayImageTag),ContainerRegistry.Repos.WebTv.Tag=$(webTvImageTag)'

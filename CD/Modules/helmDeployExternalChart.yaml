@@ -1,0 +1,71 @@
+parameters:
+- name: ServiceConnection
+  type: string
+- name: ClusterResourceGroup
+  type: string
+- name: ClusterName
+  type: string
+- name: ApplicationNamespace
+  type: string
+- name: RepoUrl
+  type: string
+- name: RepoName
+  type: string
+- name: ChartName
+  type: string
+- name: ChartVersion
+  type: string
+  default: ''
+- name: ReleaseName
+  type: string
+- name: OverridenValues
+  type: string
+  default: ''
+- name: skipInstall
+  type: boolean
+  default: false  
+- name: helmVersion
+  type: string
+  default: '3.0.2'
+
+steps:
+- task: HelmInstaller@0
+  displayName: 'Install Helm ${{ parameters.helmVersion }}'
+  inputs:
+    helmVersion: ${{ parameters.helmVersion }}
+  condition: eq('${{ parameters.skipInstall }}', 'false')
+  
+- script: |
+    helm repo add ${{ parameters.RepoName }} ${{ parameters.RepoUrl }}
+    helm repo update
+    helm search repo dapr --devel --versions
+  displayName: 'Install ${{ parameters.RepoName }} repo'
+
+- task: HelmDeploy@0
+  displayName: 'Helm ls'
+  inputs:
+    azureSubscription: ${{ parameters.ServiceConnection }}
+    azureResourceGroup: ${{ parameters.ClusterResourceGroup }}
+    kubernetesCluster:  ${{ parameters.ClusterName }}
+    namespace: ${{ parameters.ApplicationNamespace }}
+    failOnStderr: true
+
+- task: HelmDeploy@0
+  displayName: 'Helm upgrade'
+  inputs:
+    azureSubscription: ${{ parameters.ServiceConnection }}
+    azureResourceGroup:  ${{ parameters.ClusterResourceGroup }}
+    kubernetesCluster: ${{ parameters.ClusterName }}
+    namespace: ${{ parameters.ApplicationNamespace }}
+    command: upgrade
+    chartType: Name
+    chartName: '${{ parameters.ChartName }}'
+    releaseName: '${{ parameters.ReleaseName }}'
+    recreate: false
+    ${{ if eq(parameters['ChartVersion'], '') }}:
+      arguments: '--namespace ${{ parameters.ApplicationNamespace }} --create-namespace --install --wait}'
+    ${{ else }}:
+      arguments: '--namespace ${{ parameters.ApplicationNamespace }} --create-namespace --install --wait --version ${{ parameters.ChartVersion }}'
+    overrideValues: ${{ parameters.OverridenValues }}
+    failOnStderr: true
+

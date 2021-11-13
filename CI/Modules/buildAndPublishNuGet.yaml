@@ -1,0 +1,32 @@
+parameters:
+- name: Project
+  type: string
+- name: BuildProjects
+  type: string
+  default: '**/*.csproj'
+- name: BuildPlatform
+  type: string
+  default: 'Any CPU'
+- name: BuildConfiguration
+  type: string
+  default: 'Release'
+- name: VstsFeed
+  type: string
+  default: ''
+
+steps:  
+  #init
+  - template: ../Modules/init.yaml
+    parameters:
+      Projects: ${{ parameters.BuildProjects }}
+
+  #build
+  - template: ../Modules/build.yaml
+    parameters:
+      Projects: ${{ parameters.Project }}
+
+  #nuget
+  - template: ../Modules/nuget.yaml
+    parameters:
+      Projects: ${{ parameters.Project }}
+      VstsFeed: ${{ parameters.VstsFeed }}

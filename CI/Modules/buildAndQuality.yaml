@@ -1,0 +1,42 @@
+parameters:
+- name: AppServices
+  type: string
+- name: BuildProjects
+  type: string
+  default: '**/*.csproj'
+- name: TestProjects
+  type: string
+  default: '**/*.UnitTest.*.csproj'
+- name: BuildPlatform
+  type: string
+  default: 'Any CPU'
+- name: BuildConfiguration
+  type: string
+  default: 'Release'
+- name: VstsFeed
+  type: string
+  default: ''
+- name: DoPackageSecurityCheck
+  type: boolean
+  default: false
+
+steps:  
+  #init
+  - template: ../Modules/init.yaml
+    parameters:
+      Projects: ${{ parameters.BuildProjects }}
+
+  #build
+  - template: ../Modules/build.yaml
+    parameters:
+      Projects: ${{ parameters.AppServices }}
+
+  #test
+  - template: ../Modules/test.yaml
+    parameters:
+      TestProjects: ${{ parameters.TestProjects }}
+
+  #quality
+  - template: ../Modules/quality.yaml
+    parameters:
+      DoPackageSecurityCheck: ${{ parameters.DoPackageSecurityCheck }}
