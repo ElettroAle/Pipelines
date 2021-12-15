@@ -5,3 +5,5 @@ parameters:
 steps:
 - ${{ each step in parameters.usersteps }}:
   - ${{ step }}
+  target: 
+    commands: restricted
