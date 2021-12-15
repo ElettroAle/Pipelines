@@ -1,5 +1,5 @@
 extends:
-  template: Test/baseTemplate.yml
+  template: baseTemplate.yaml
   parameters:
     usersteps:
     - script: echo This is my first step
