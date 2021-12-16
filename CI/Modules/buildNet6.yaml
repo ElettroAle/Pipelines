@@ -1,6 +1,23 @@
+parameters:
+- name: Projects
+  type: string
+  default: ''
+- name: BuildConfiguration
+  type: string
+  default: 'Release'
+
+steps:
 - task: UseDotNet@2
   displayName: 'Install .NET 6 SDK'
   inputs:
     packageType: 'sdk'
     version: '6.0.x'
     performMultiLevelLookup: true
+
+# I build the project
+- task: DotNetCoreCLI@2
+  displayName: '.Net Core CLI - Build Projects'
+  inputs:
+    projects: ${{ Parameters.Projects }}
+    arguments: '--configuration ${{ Parameters.BuildConfiguration }}'
+
