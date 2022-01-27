@@ -19,24 +19,23 @@ parameters:
 - name: DoPackageSecurityCheck
   type: boolean
   default: false
+- name: SonarProjectKey
+  type: string
 
-steps:  
-  #init
-  - template: ../Modules/init.yaml
-    parameters:
-      Projects: ${{ parameters.BuildProjects }}
 
-  #build
-  - template: ../Modules/build.yaml
-    parameters:
-      Projects: ${{ parameters.AppServices }}
-
-  #test
-  - template: ../Modules/test.yaml
-    parameters:
-      TestProjects: ${{ parameters.TestProjects }}
-
-  #quality
-  - template: ../Modules/quality.yaml
-    parameters:
-      DoPackageSecurityCheck: ${{ parameters.DoPackageSecurityCheck }}
+extends:  
+  template: ../Modules/quality.yaml
+  parameters:
+    DoPackageSecurityCheck: ${{ parameters.DoPackageSecurityCheck }}
+    ProjectKey: 'bulgaridigital_CatalogApp_CatalogApp_API'
+    Stack: 'MSBuild'
+    AfterPrepareSteps:
+      - template: ../Modules/init.yaml
+        parameters:
+          Projects: ${{ parameters.BuildProjects }}
+      - template: ../Modules/build.yaml
+        parameters:
+          Projects: ${{ parameters.AppServices }}
+      - template: ../Modules/test.yaml
+        parameters:
+          TestProjects: ${{ parameters.TestProjects }}
