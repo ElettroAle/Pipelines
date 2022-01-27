@@ -27,7 +27,7 @@ extends:
   template: ../Modules/quality.yaml
   parameters:
     DoPackageSecurityCheck: ${{ parameters.DoPackageSecurityCheck }}
-    ProjectKey: 'bulgaridigital_CatalogApp_CatalogApp_API'
+    ProjectKey: ${{ parameters.SonarProjectKey }}
     Stack: 'MSBuild'
     AfterPrepareSteps:
       - template: ../Modules/init.yaml
