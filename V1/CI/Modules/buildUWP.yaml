@@ -1,5 +1,5 @@
 parameters:
-- name: Solution: 
+- name: Solution 
   type: string
   default: '**/*.sln'
 - name: BuildPlatform 
