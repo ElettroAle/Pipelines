@@ -1,0 +1,24 @@
+parameters:
+- name: Solution: 
+  type: string
+  default: '**/*.sln'
+- name: BuildPlatform 
+  type: string
+  default: 'x86|x64|ARM'
+- name: BuildConfiguration
+  type: string
+  default: 'Release'
+
+steps:
+- task: NuGetToolInstaller@1
+
+- task: NuGetCommand@2
+  inputs:
+    restoreSolution: '${{ Parameter.Solution }}'
+
+- task: VSBuild@1
+  inputs:
+    platform: 'x86'
+    solution: '${{ Parameters.Solution }}'
+    configuration: '${{ Parameters.BuildConfiguration }}'
+    msbuildArgs: '/p:AppxBundlePlatforms="${{ Parameters.BuildPlatform }}" /p:AppxPackageDir="$(build.artifactStagingDirectory)\AppxPackages\\" /p:AppxBundle=Always /p:UapAppxPackageBuildMode=StoreUpload /p:AppxPackageSigningEnabled=false' 
