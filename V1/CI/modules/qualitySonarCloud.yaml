@@ -1,37 +1,30 @@
 parameters:
-- name: DoPackageSecurityCheck
-  type: boolean
-  default: true
-- name: ProjectKey
-  type: string
-- name: Stack
-  displayName: Stack technology
-  type: string
-  values:
-    - MSBuild
-    - Other
-    - CLI
-- name: PreAnalysisSteps
-  type: stepList
-  default: []
-- name: AfterPrepareSteps
-  type: stepList
-  default: []
-- name: PostAnalysisSteps
-  type: stepList
-  default: []
-- name: CodeRoot
-  type: string
-  default: ''
-
-steps:
+  - name: ProjectKey
+    type: string
+  - name: Stack
+    displayName: Stack technology
+    type: string
+    values:
+      - MSBuild
+      - Other
+      - CLI
+  - name: PreAnalysisSteps
+    type: stepList
+    default: []
+  - name: AfterPrepareSteps
+    type: stepList
+    default: []
+  - name: PostAnalysisSteps
+    type: stepList
+    default: []
+  - name: CodeRoot
+    type: string
+    default: ''
+  
+steps:  
   - ${{ each step in parameters.PreAnalysisSteps }}:
     - ${{ each pair in step }}:
         ${{ pair.key }}: ${{ pair.value }} 
-
-  - task: whitesource.ws-bolt.bolt.wss.WhiteSource Bolt@20
-    displayName: 'WhiteSource Bolt'
-    condition: eq('${{ parameters.DoPackageSecurityCheck }}', 'true')
 
   - ${{ if eq(parameters.Stack, 'MSBuild') }}:
     - task: SonarCloudPrepare@1
