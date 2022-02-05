@@ -14,7 +14,7 @@ steps:
 
 - task: NuGetCommand@2
   inputs:
-    restoreSolution: '${{ Parameter.Solution }}'
+    restoreSolution: '${{ Parameters.Solution }}'
 
 - task: VSBuild@1
   inputs:
