@@ -12,6 +12,10 @@ parameters:
 
 steps:
 
+- template: initDotNet.yaml
+  parameters:
+    Projects: ${{ Parameters.Projects }}
+    NugetConfigPath: ${{ Parameters.NugetConfigPath }}
 
 # I build the project
 - task: DotNetCoreCLI@2
