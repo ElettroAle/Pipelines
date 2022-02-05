@@ -1,12 +1,17 @@
 parameters:
 - name: Projects
+  displayName: .NET projects to build
   type: string
-  default: ''
+  default: "**/*.csproj"
 - name: BuildConfiguration
   type: string
   default: 'Release'
+- name: NugetConfigPath
+  type: string
+  default: 'nuget.config'
 
 steps:
+
 
 # I build the project
 - task: DotNetCoreCLI@2
