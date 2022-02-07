@@ -1,0 +1,14 @@
+parameters:
+- name: Projects
+  type: string
+- name: PublishJunitResults
+  type: boolean
+  default: false
+
+
+steps:
+- task: Maven@3
+  inputs:
+    mavenPomFile: ${{ Parameters.Projects }}
+    goals: 'clean package'
+    publishJUnitResults: ${{ Parameters.PublishJunitResults }}
