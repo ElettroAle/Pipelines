@@ -2,6 +2,9 @@ parameters:
 - name: Projects
   type: string
   default: ''
+- name: NugetConfigPath
+  type: string
+  default: 'nuget.config'
 - name: BuildConfiguration
   type: string
   default: 'Release'
@@ -14,10 +17,8 @@ steps:
     version: '6.0.x'
     performMultiLevelLookup: true
 
-# I build the project
-- task: DotNetCoreCLI@2
-  displayName: '.Net Core CLI - Build Projects'
-  inputs:
-    projects: ${{ Parameters.Projects }}
-    arguments: '--configuration ${{ Parameters.BuildConfiguration }}'
-
+- template: buildDotNet.yaml
+  parameters:
+    Projects: ${{ Parameters.Projects }}
+    NugetConfigPath: ${{ Parameters.NugetConfigPath }}
+    BuildConfiguration: ${{ Parameters.BuildConfiguration }}

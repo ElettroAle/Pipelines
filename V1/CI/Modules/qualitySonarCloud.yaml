@@ -1,0 +1,88 @@
+parameters:
+  - name: ProjectKey
+    type: string
+  - name: Stack
+    displayName: Stack technology
+    type: string
+    values:
+      - MSBuild
+      - Other
+      - CLI
+  - name: PreAnalysisSteps
+    type: stepList
+    default: []
+  - name: AfterPrepareSteps
+    type: stepList
+    default: []
+  - name: PostAnalysisSteps
+    type: stepList
+    default: []
+  - name: CodeRoot
+    type: string
+    default: ''
+  
+steps:  
+  - ${{ each step in parameters.PreAnalysisSteps }}:
+    - ${{ each pair in step }}:
+        ${{ pair.key }}: ${{ pair.value }} 
+
+  - ${{ if eq(parameters.Stack, 'MSBuild') }}:
+    - task: SonarCloudPrepare@1
+      displayName: SonarCloudPrepare - MSBuild analysis
+      inputs:
+        SonarCloud: 'SonarCloud'
+        organization: 'bulgaridigital'
+        scannerMode: '${{ Parameters.Stack }}'
+        projectKey: '${{ Parameters.ProjectKey }}'
+        projectName: '${{ Parameters.ProjectKey }}' 
+  - ${{ if eq(parameters.Stack, 'CLI') }}:
+    - bash: exit 1 # remove this bash script when the section inside the IF will be developed
+      displayName: This section is under development
+    - bash: exit 1
+      displayName: Check if project sources was specified
+      condition: eq('${{ parameters.CodeRoot }}', '')
+    - task: SonarCloudPrepare@1
+      displayName: 'SonarCloudPrepare - CLI analysis'
+      inputs:
+        SonarCloud: 'SonarCloud'
+        organization: bulgaridigital
+        scannerMode: CLI
+        configMode: file
+        cliProjectKey: '${{ Parameters.ProjectKey }}'
+        cliProjectName: '${{ Parameters.ProjectKey }}'
+        cliSources: '${{ Parameters.CodeRoot }}'
+    # WARNING: it works only on linux Agent
+    # WARNING: missing <insert_your_clean_build_command>
+    - bash: |
+          mkdir -p $HOME/.sonar
+          curl -sSLo $HOME/.sonar/build-wrapper-linux-x86.zip https://sonarcloud.io/static/cpp/build-wrapper-linux-x86.zip
+          unzip -o $HOME/.sonar/build-wrapper-linux-x86.zip -d $HOME/.sonar/
+      displayName: Download and install build wrapper
+    - bash: |
+        export PATH=$HOME/.sonar/build-wrapper-linux-x86:$PATH
+        build-wrapper-linux-x86-64 --out-dir build_wrapper_output_directory <insert_your_clean_build_command>
+      workingDirectory: .
+      displayName: Build in build-wrapper
+  - ${{ else }}:
+    - task: SonarCloudPrepare@1
+      displayName: SonarCloudPrepare - Other analysis
+      inputs:
+        SonarCloud: 'SonarCloud'
+        organization: 'bulgaridigital'
+        scannerMode: '${{ Parameters.Stack }}'
+        projectKey: '${{ Parameters.ProjectKey }}'
+        projectName: '${{ Parameters.ProjectKey }}' 
+
+  - ${{ each step in parameters.AfterPrepareSteps }}:
+    - ${{ each pair in step }}:
+        ${{ pair.key }}: ${{ pair.value }} 
+
+  - task: SonarCloudAnalyze@1
+
+  - task: SonarCloudPublish@1
+    inputs:
+      pollingTimeoutSec: '300'
+
+  - ${{ each step in parameters.PostAnalysisSteps }}:
+    - ${{ each pair in step }}:
+        ${{ pair.key }}: ${{ pair.value }} 

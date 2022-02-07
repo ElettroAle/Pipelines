@@ -1,0 +1,69 @@
+parameters:
+- name: ProjectDirectory
+  type: string
+- name: ProvisioningProfile
+  type: string
+- name: XcWorkspacePath
+  type: string
+- name: Scheme
+  type: string
+- name: Configuration
+  type: string  
+  default: Release
+- name: Sdk
+  type: string
+  default: iphoneos
+- name: XcodeVersion
+  type: string
+  default: default
+- name: UseXcpretty
+  type: boolean
+  default: true
+- name: CocoapodsVersion
+  type: string
+  default: ''
+
+  
+# this pipeline need a macOS agent
+steps:
+
+  - task: InstallAppleProvisioningProfile@1
+    displayName: 'Install an Apple provisioning profile'
+    inputs:
+      provProfileSecureFile: ${{ Parameters.ProvisioningProfile }}
+  - bash: |
+      echo "uninstalling all cocoapods versions"
+      sudo gem uninstall cocoapods --all
+      echo "installing cocoapods"
+      if[[ ${{ Parameters.CocoapodsVersion }} != '' ]]; then
+        sudo gem install cocoapods -v ${{ Parameters.CocoapodsVersion }}
+      else
+        sudo gem install cocoapods
+      fi
+      sudo gem install cocoapods
+    workingDirectory: ${{ Parameters.ProjectDirectory }}
+    displayName: Install cocoapods
+  - bash: |
+      { 
+        echo "Pod deintegrate..."
+        pod deintegrate
+        echo "Pod clean cache..."
+        pod cache clean --all
+        echo "Pod install..."
+        pod install --no-repo-update
+      } || {
+        echo "Pod first install..."
+        pod install --no-repo-update
+      }
+      
+    workingDirectory: ${{ Parameters.ProjectDirectory }}
+    displayName: Install Pods
+  - task: Xcode@5
+    inputs:
+      actions: 'clean build'
+      scheme: '${{ Parameters.Scheme }}'
+      sdk: '${{ Parameters.Sdk }}'
+      configuration: '${{ Parameters.Configuration }}'
+      xcWorkspacePath: '${{ Parameters.XcWorkspacePath }}'
+      xcodeVersion: '${{ Parameters.XcodeVersion }}' # Options: 8, 9, 10, 11, 12, default, specifyPath
+      useXcpretty: '${{ Parameters.UseXcpretty }}'
