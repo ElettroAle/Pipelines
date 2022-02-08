@@ -1,0 +1,13 @@
+parameters:
+- name: CleanBuildCommand
+  type: string
+
+steps:
+- pwsh: |
+    curl --create-dirs -sSLo $HOME\.sonar\build-wrapper-win-x86.zip ${{variables.BUILD_WRAPPER_DOWNLOAD_URL}}
+    unzip -o $HOME\.sonar\build-wrapper-win-x86.zip -d $HOME\.sonar\
+  displayName: Download and install build wrapper
+- pwsh: |
+    & "$HOME\.sonar\build-wrapper-win-x86\build-wrapper-win-x86-64.exe" --out-dir build_wrapper_output_directory ${{ Parameters.CleanBuildCommand }}
+  workingDirectory: .
+  displayName: Build in build-wrapper

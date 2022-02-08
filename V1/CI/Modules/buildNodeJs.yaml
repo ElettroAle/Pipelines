@@ -2,15 +2,18 @@ parameters:
 - name: ProjectsFolder
   type: string
   default: ''
-- name: verbose
+- name: Verbose
   type: boolean
   default: false
+- name: Version
+  type: string
+  default: '17.x' 
 
 steps:
 - task: NodeTool@0
-  displayName: 'Use Node 10.x'
+  displayName: 'Use Node ${{ Parameters.Version }}'
   inputs:
-    versionSpec: 10.x
+    versionSpec: '${{ Parameters.Version }}'
 - task: Npm@1
   displayName: 'npm angular cli'
   inputs:
@@ -30,5 +33,3 @@ steps:
     workingDir: ${{ Parameters.ProjectsFolder }}
     verbose: ${{ Parameters.verbose }}
     customCommand: 'run-script build'
-
-# SRC/Backoffice/FE

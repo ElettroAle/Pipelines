@@ -1,0 +1,15 @@
+parameters:
+- name: CleanBuildCommand
+  type: string
+
+steps:
+- bash: |
+    mkdir -p $HOME/.sonar
+    curl -sSLo $HOME/.sonar/build-wrapper-macosx-x86.zip ${{variables.BUILD_WRAPPER_DOWNLOAD_URL}}
+    unzip -o $HOME/.sonar/build-wrapper-macosx-x86.zip -d $HOME/.sonar/
+  displayName: Download and install build wrapper
+- bash: |
+    export PATH=$HOME/.sonar/build-wrapper-macosx-x86:$PATH
+    build-wrapper-macosx-x86 --out-dir build_wrapper_output_directory ${{ Parameters.CleanBuildCommand }}
+  workingDirectory: .
+  displayName: Build in build-wrapper

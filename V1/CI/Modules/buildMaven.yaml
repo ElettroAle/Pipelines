@@ -4,6 +4,8 @@ parameters:
 - name: PublishJunitResults
   type: boolean
   default: false
+- name: RunSonarQube
+  default: false
 
 
 steps:
@@ -12,3 +14,8 @@ steps:
     mavenPomFile: ${{ Parameters.Projects }}
     goals: 'clean package'
     publishJUnitResults: ${{ Parameters.PublishJunitResults }}
+    sonarQubeRunAnalysis: ${{ Parameters.RunSonarQube }}
+- powershell: |
+    Write-Output "##vso[task.setvariable variable=SkipSonarAnalyze;isOutput=true;]true"
+  name: MavenOutput
+  condition: eq('${{ Parameters.RunSonarQube }}', 'true')
