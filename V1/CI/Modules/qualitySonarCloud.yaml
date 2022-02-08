@@ -95,14 +95,14 @@ steps:
         organization: 'bulgaridigital'
         scannerMode: '${{ Parameters.Stack }}'
         projectKey: '${{ Parameters.ProjectKey }}'
-        projectName: '${{ Parameters.ProjectKey }}' 
+        projectName: '${{ Parameters.ProjectKey }}'
+        extraProperties: 'sonar.projectKey=${{ Parameters.ProjectKey }}'
 
   - ${{ each step in parameters.AfterPrepareSteps }}:
     - ${{ each pair in step }}:
         ${{ pair.key }}: ${{ pair.value }} 
 
   # skip Analyze if it using maven
-  
   - task: SonarCloudAnalyze@1
     condition: ne(variables['MavenOutput.SkipSonarAnalyze'], 'true')
 
