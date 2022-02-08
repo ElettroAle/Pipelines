@@ -34,8 +34,14 @@ steps:
   - bash: |
       echo "uninstalling all cocoapods versions"
       sudo gem uninstall cocoapods --all
+      
       echo "installing cocoapods"
-      if[[ ${{ Parameters.CocoapodsVersion }} != '' ]]; then
+
+      version=${{ Parameters.CocoapodsVersion }}
+      version="${version%\"}"
+      version="${version#\"}"
+
+      if [[ $version != '' ]]; then
         sudo gem install cocoapods -v ${{ Parameters.CocoapodsVersion }}
       else
         sudo gem install cocoapods
