@@ -12,7 +12,7 @@ parameters:
 
 steps:
 
-- template: initDotNet.yaml
+- template: ./initDotNet.yaml
   parameters:
     Projects: ${{ Parameters.Projects }}
     NugetConfigPath: ${{ Parameters.NugetConfigPath }}
