@@ -17,7 +17,7 @@ parameters:
 
 steps:  
   #init
-  - template: ../Modules/init.yaml
+  - template: ../Modules/initDotNet.yaml
     parameters:
       Projects: ${{ parameters.BuildProjects }}
 
