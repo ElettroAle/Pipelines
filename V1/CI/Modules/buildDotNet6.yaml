@@ -17,7 +17,7 @@ steps:
     version: '6.0.x'
     performMultiLevelLookup: true
 
-- template: ./buildDotNet.yaml
+- template: ./buildDotNetCore.yaml
   parameters:
     Projects: ${{ Parameters.Projects }}
     NugetConfigPath: ${{ Parameters.NugetConfigPath }}
