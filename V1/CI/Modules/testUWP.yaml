@@ -1,0 +1,32 @@
+parameters:
+- name: TestPlatform
+  type: string
+  default: 'x64'
+- name: BuildConfiguration
+  type: string
+  default: 'Release'
+
+steps:
+- task: VSTest@2
+  displayName: 'VSTest - testAssemblies'
+  inputs:
+    platform: '${{ Parameters.TestPlatform }}'
+    configuration: '$(BuildConfiguration)'
+    testSelector: 'testAssemblies' 
+    testAssemblyVer2: | # Required when testSelector == TestAssemblies
+      **\*.UnitTest.*.dll
+      **\*unittests.dll
+      **\*unittests.build.appxrecipe
+      !**\*TestAdapter.dll
+      !**\obj\** 
+    searchFolder: '$(Build.SourcesDirectory)/BatteryApp'
+    resultsFolder: '$(System.DefaultWorkingDirectory)\TestResults'
+    runInParallel: false
+    codeCoverageEnabled: true
+    rerunFailedTests: false
+    runTestsInIsolation: true
+    runOnlyImpactedTests: false
+        
+- task: PublishTestResults@2
+  displayName: 'Publish Test Results **/TEST-*.xml'
+  condition: always()

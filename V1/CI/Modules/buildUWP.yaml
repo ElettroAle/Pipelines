@@ -18,7 +18,7 @@ steps:
 
 - task: VSBuild@1
   inputs:
-    platform: 'x86'
+    platform: '${{ Parameters.BuildPlatform }}'
     solution: '${{ Parameters.Solution }}'
     configuration: '${{ Parameters.BuildConfiguration }}'
-    msbuildArgs: '/p:AppxBundlePlatforms="${{ Parameters.BuildPlatform }}" /p:AppxPackageDir="$(build.artifactStagingDirectory)\AppxPackages\\" /p:AppxBundle=Always /p:UapAppxPackageBuildMode=StoreUpload /p:AppxPackageSigningEnabled=false' 
+    msbuildArgs: '/p:AppxBundlePlatforms="${{ Parameters.BuildPlatform }}" /p:AppxPackageDir="$(build.artifactStagingDirectory)\AppxPackages\\" /p:AppxBundle=Always /p:UapAppxPackageBuildMode=StoreUpload /p:AppxPackageSigningEnabled=false'
