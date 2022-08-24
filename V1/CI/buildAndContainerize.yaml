@@ -17,12 +17,12 @@ parameters:
 
 steps:  
   #init
-  - template: ../Modules/initDotNet.yaml
+  - template: ./Modules/initDotNet.yaml
     parameters:
       Projects: ${{ parameters.BuildProjects }}
 
   #dockerImage
-  - template: ../Modules/dockerImage.yaml
+  - template: ./Modules/dockerImage.yaml
     parameters:
       DockerRegistryService: ${{ parameters.DockerRegistryService }}
       ImageRepository: ${{ parameters.ImageRepository }}
