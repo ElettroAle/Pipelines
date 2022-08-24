@@ -15,13 +15,9 @@ parameters:
   default: ''
 
 steps:  
-  #init
-  - template: ./Modules/initDotNet6.yaml
-    parameters:
-      Projects: ${{ parameters.BuildProjects }}
-
+  
   #build
-  - template: ./Modules/buildDotNetCore.yaml
+  - template: ./Modules/buildDotNet6.yaml
     parameters:
       Projects: ${{ parameters.Project }}
 
