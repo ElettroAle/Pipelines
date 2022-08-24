@@ -12,14 +12,14 @@ parameters:
 
 steps:  
   #init
-  - template: ../Modules/helmPackage.yaml
+  - template: ./Modules/helmPackage.yaml
     parameters:   
       ChartPath: '${{ parameters.chartPath }}'
       DestinationPath : $(Build.ArtifactStagingDirectory)
       Version: '${{ parameters.chartVersion }}'
 
   #dockerImage
-  - template: ../Modules/helmPush.yaml
+  - template: ./Modules/helmPush.yaml
     parameters:
       helmImageRegistryService: ${{ parameters.helmImageRegistryService }}
       imageRepository: ${{ parameters.imageRepository }}
