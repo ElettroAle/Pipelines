@@ -18,6 +18,8 @@ steps:
 
 - task: NuGetToolInstaller@1
   displayName: 'Install NuGet CLI'
+  inputs:
+    checkLatest: true
 
 # I restore the project
 - task: NuGetCommand@2
