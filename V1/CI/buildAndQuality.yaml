@@ -30,10 +30,7 @@ extends:
     ProjectKey: ${{ parameters.SonarProjectKey }}
     Stack: 'MSBuild'
     AfterPrepareSteps:
-      - template: ../Modules/init.yaml
-        parameters:
-          Projects: ${{ parameters.BuildProjects }}
-      - template: ../Modules/buildDotNetCore.yaml
+      - template: ../Modules/buildDotNet6.yaml
         parameters:
           Projects: ${{ parameters.AppServices }}
       - template: ../Modules/test.yaml
