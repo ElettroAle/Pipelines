@@ -7,8 +7,6 @@ parameters:
   default: 'Release'
 
 steps:
-
-# I publish the project
 - task: DotNetCoreCLI@2
   displayName: '.Net Core CLI - Publish Projects'
   inputs:
@@ -18,9 +16,11 @@ steps:
     arguments: '--configuration ${{ Parameters.BuildConfiguration }} --output $(build.artifactstagingdirectory)'
     zipAfterPublish: True
 
-# I publish the artifact
-- task: PublishBuildArtifacts@1
+- task: DotNetCoreCLI@2
   displayName: 'Artifacts - Publish Projects'
   inputs:
-    PathtoPublish: '$(build.artifactstagingdirectory)'
-  condition: succeededOrFailed()
+    command: publish
+    publishWebProjects: false
+    projects: ${{ Parameters.Projects }}
+    arguments: ' --output $(Build.ArtifactStagingDirectory)'
+    zipAfterPublish: True
