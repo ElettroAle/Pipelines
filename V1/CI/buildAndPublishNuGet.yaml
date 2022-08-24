@@ -16,17 +16,17 @@ parameters:
 
 steps:  
   #init
-  - template: ../Modules/init.yaml
+  - template: ./Modules/initDotNet.yaml
     parameters:
       Projects: ${{ parameters.BuildProjects }}
 
   #build
-  - template: ../Modules/buildDotNet6.yaml
+  - template: ./Modules/buildDotNet6.yaml
     parameters:
       Projects: ${{ parameters.Project }}
 
   #nuget
-  - template: ../Modules/nuget.yaml
+  - template: ./Modules/nuget.yaml
     parameters:
       Projects: ${{ parameters.Project }}
       VstsFeed: ${{ parameters.VstsFeed }}
