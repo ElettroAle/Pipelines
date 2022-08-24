@@ -33,7 +33,7 @@ extends:
       - template: ../Modules/init.yaml
         parameters:
           Projects: ${{ parameters.BuildProjects }}
-      - template: ../Modules/buildDotNet6.yaml
+      - template: ../Modules/buildDotNetCore.yaml
         parameters:
           Projects: ${{ parameters.AppServices }}
       - template: ../Modules/test.yaml
