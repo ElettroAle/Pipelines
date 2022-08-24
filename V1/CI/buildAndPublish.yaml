@@ -16,16 +16,16 @@ parameters:
 
 steps:  
   #init
-  - template: ../Modules/init.yaml
+  - template: ./Modules/init.yaml
     parameters:
       Projects: ${{ parameters.BuildProjects }}
 
   #build
-  - template: ../Modules/buildDotNet6.yaml
+  - template: ./Modules/buildDotNet6.yaml
     parameters:
       Projects: ${{ parameters.AppServices }}
 
   #publish
-  - template: ../Modules/publish.yaml
+  - template: ./Modules/publish.yaml
     parameters:
       Projects: ${{ parameters.AppServices }}
