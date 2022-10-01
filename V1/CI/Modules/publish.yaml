@@ -19,8 +19,9 @@ steps:
     zipAfterPublish: True
 
 # I publish the artifact
-- task: PublishBuildArtifacts@1
+- task: PublishPipelineArtifact@1
   displayName: 'Artifacts - Publish Projects'
   inputs:
-    PathtoPublish: '$(build.artifactstagingdirectory)'
+    targetPath: '$(Build.ArtifactStagingDirectory)' 
+    artifactName: 'drop'
   condition: succeededOrFailed()
