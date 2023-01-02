@@ -1,4 +1,4 @@
-# Introduction 
+# Azure DevOps Pipelines 
 This is repo has the goal to collect some Azure DevOps yaml modules & templates, with the goal of reducing code duplication and helping to fasten the buid process of your CI/CD pipelines
 
 # Getting Started
