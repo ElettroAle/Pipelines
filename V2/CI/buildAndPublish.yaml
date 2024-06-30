@@ -16,7 +16,7 @@ parameters:
 
 steps:  
   #build
-  - template: ./Modules/buildDotNet6.yaml
+  - template: ./Modules/buildDotNet8.yaml
     parameters:
       Projects: ${{ parameters.AppServices }}
 
