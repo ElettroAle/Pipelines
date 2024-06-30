@@ -1,0 +1,23 @@
+parameters:
+- name: Projects
+  type: string
+  default: ''
+- name: BuildConfiguration
+  type: string
+  default: 'Release'
+
+steps:
+- task: PowerShell@2
+  displayName: 'Publish Projects'
+  inputs:
+    targetType: 'inline'
+    script: |
+      mkdir $(Build.ArtifactStagingDirectory)/temp
+      dotnet publish ${{ Parameters.Projects }} --configuration ${{ Parameters.BuildConfiguration }} --output $(Build.ArtifactStagingDirectory)/temp
+      Compress-Archive $(Build.ArtifactStagingDirectory)/temp/* $(Build.ArtifactStagingDirectory)/drop.zip -Force
+      rm $(Build.ArtifactStagingDirectory)/temp -r
+
+- publish: '$(Build.ArtifactStagingDirectory)'
+  displayName: 'Publish Artifact'
+  artifact: $(Build.DefinitionName)
+  
