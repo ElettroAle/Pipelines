@@ -1,0 +1,31 @@
+parameters:
+- name: Projects
+  type: string
+  default: ''
+- name: NugetConfigPath
+  type: string
+  default: 'nuget.config'
+
+steps:
+
+# I install NuGet CLI because it is not present in the default VM
+- task: UseDotNet@2
+  displayName: 'Install .NET 6 SDK'
+  inputs:
+    packageType: 'sdk'
+    version: '8.0.x'
+    performMultiLevelLookup: true
+
+- task: NuGetToolInstaller@1
+  displayName: 'Install NuGet CLI'
+  inputs:
+    checkLatest: true
+
+# I restore the project
+- task: NuGetCommand@2
+  displayName: 'NuGet CLI - Restore'
+  inputs:
+    command: 'restore'
+    projects: ${{ Parameters.Projects }}
+    feedsToUse: 'config'
+    vstsFeed: ${{ Parameters.NugetConfigPath }}

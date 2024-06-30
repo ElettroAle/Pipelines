@@ -1,0 +1,26 @@
+parameters:
+- name: AppServices
+  type: string
+- name: BuildProjects
+  type: string
+  default: '**/*.csproj'
+- name: BuildPlatform
+  type: string
+  default: 'Any CPU'
+- name: BuildConfiguration
+  type: string
+  default: 'Release'
+- name: VstsFeed
+  type: string
+  default: ''
+
+steps:  
+  #build
+  - template: ./Modules/buildDotNet6.yaml
+    parameters:
+      Projects: ${{ parameters.AppServices }}
+
+  #publish
+  - template: ./Modules/publish.yaml
+    parameters:
+      Projects: ${{ parameters.AppServices }}
