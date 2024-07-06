@@ -10,7 +10,7 @@ steps:
 
 # I install NuGet CLI because it is not present in the default VM
 - task: UseDotNet@2
-  displayName: 'Install .NET 6 SDK'
+  displayName: 'Install .NET 8 SDK'
   inputs:
     packageType: 'sdk'
     version: '8.0.x'
