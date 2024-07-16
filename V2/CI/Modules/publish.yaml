@@ -7,17 +7,27 @@ parameters:
   default: 'Release'
 
 steps:
-- task: PowerShell@2
-  displayName: 'Publish Projects'
-  inputs:
-    targetType: 'inline'
-    script: |
-      mkdir $(Build.ArtifactStagingDirectory)/temp
-      dotnet publish ${{ Parameters.Projects }} --configuration ${{ Parameters.BuildConfiguration }} --output $(Build.ArtifactStagingDirectory)/temp
-      Compress-Archive $(Build.ArtifactStagingDirectory)/temp/* $(Build.ArtifactStagingDirectory)/drop.zip -Force
-      rm $(Build.ArtifactStagingDirectory)/temp -r
+# - task: PowerShell@2
+#   displayName: 'Publish Projects'
+#   inputs:
+#     targetType: 'inline'
+#     script: |
+#       mkdir $(Build.ArtifactStagingDirectory)/temp
+#       dotnet publish ${{ Parameters.Projects }} --configuration ${{ Parameters.BuildConfiguration }} --output $(Build.ArtifactStagingDirectory)/temp
+#       Compress-Archive $(Build.ArtifactStagingDirectory)/temp/* $(Build.ArtifactStagingDirectory)/drop.zip -Force
+#       rm $(Build.ArtifactStagingDirectory)/temp -r
 
-- publish: '$(Build.ArtifactStagingDirectory)'
-  displayName: 'Publish Artifact'
-  artifact: $(Build.DefinitionName)
-  
+# I build the project
+
+- task: DotNetCoreCLI@2
+  inputs:
+    command: publish
+    publishWebProjects: True
+    arguments: '--configuration ${{ Parameters.BuildConfiguration }} --output $(Build.ArtifactStagingDirectory)/temp'
+    zipAfterPublish: True
+
+# this code takes all the files in $(Build.ArtifactStagingDirectory) and uploads them as an artifact of your build.
+- task: PublishPipelineArtifact@1
+  inputs:
+    targetPath: '$(Build.ArtifactStagingDirectory)/temp' 
+    artifactName: 'drop.zip'
