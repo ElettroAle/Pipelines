@@ -22,7 +22,8 @@ steps:
 - task: DotNetCoreCLI@2
   inputs:
     command: publish
-    publishWebProjects: True
+    publishWebProjects: False
+    projects: ${{ Parameters.Projects }}
     arguments: '--configuration ${{ Parameters.BuildConfiguration }} --output $(Build.ArtifactStagingDirectory)/temp'
     zipAfterPublish: True
 
