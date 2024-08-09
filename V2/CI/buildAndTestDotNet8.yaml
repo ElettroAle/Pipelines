@@ -23,7 +23,7 @@ steps:
       BuildConfiguration: ${{ Parameters.BuildConfiguration }}
 
   #publish
-  - template: ../../V1/CI/Modules/test.yaml
+  - template: ./Modules/test.yaml
     parameters:
       TestProjects: ${{ parameters.TestProjects }}
       BuildConfiguration: ${{ Parameters.BuildConfiguration }}

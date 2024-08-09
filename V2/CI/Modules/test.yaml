@@ -1,0 +1,28 @@
+parameters:
+- name: TestProjects
+  type: string
+  default: '**/*[Uu]nit.csproj'
+- name: BuildConfiguration
+  type: string
+  default: 'Release'
+- name: PublishResults
+  type: boolean
+  default: true
+
+steps:
+
+# I run the Unit Tests
+- task: DotNetCoreCLI@2
+  displayName: '.Net Core CLI - Run Tests'
+  inputs:
+    command: test
+    projects: ${{ Parameters.TestProjects }}
+    arguments: '--configuration ${{ Parameters.BuildConfiguration }} /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:CoverletOutput=$(Build.SourcesDirectory)/TestResults/Coverage/'
+    publishTestResults: ${{ Parameters.PublishResults }}
+    
+- task: PublishCodeCoverageResults@1
+  displayName: 'Publish code coverage report'
+  inputs:
+    codeCoverageTool: 'Cobertura'
+    summaryFileLocation: '$(Build.SourcesDirectory)/**/coverage.cobertura.xml'
+    additionalCodeCoverageFiles: '$(Build.SourcesDirectory)/**/coverage.opencover.xml'
