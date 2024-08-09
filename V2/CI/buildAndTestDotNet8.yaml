@@ -1,0 +1,30 @@
+parameters:
+- name: BuildProjects
+  type: string
+  default: '**/*.csproj'
+- name: TestProjects
+  type: string
+  default: '**/*.UnitTest.*.csproj'
+- name: BuildPlatform
+  type: string
+  default: 'Any CPU'
+- name: BuildConfiguration
+  type: string
+  default: 'Release'
+- name: VstsFeed
+  type: string
+  default: ''
+
+steps:
+  #build
+  - template: ./Modules/buildDotNet8.yaml
+    parameters:
+      Projects: ${{ parameters.BuildProjects }}
+      BuildConfiguration: ${{ Parameters.BuildConfiguration }}
+
+  #publish
+  - template: ../../V1/CI/Modules/test.yaml
+    parameters:
+      TestProjects: ${{ parameters.TestProjects }}
+      BuildConfiguration: ${{ Parameters.BuildConfiguration }}
+

@@ -22,7 +22,9 @@ parameters:
 - name: SonarProjectKey
   type: string
 
-
+# need to review
+# missing quality template. Need to test SonarCloud + WhitesourceBolt
+# wrong template path
 extends:  
   template: ../Modules/quality.yaml
   parameters:
