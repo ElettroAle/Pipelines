@@ -1,0 +1,25 @@
+parameters:
+- name: Projects
+  displayName: .NET projects to build
+  type: string
+  default: "**/*.csproj"
+- name: BuildConfiguration
+  type: string
+  default: 'Release'
+- name: NugetConfigPath
+  type: string
+  default: 'nuget.config'
+
+steps:
+
+- template: ./initDotNet8.yaml
+  parameters:
+    Projects: ${{ Parameters.Projects }}
+    NugetConfigPath: ${{ Parameters.NugetConfigPath }}
+
+# I build the project
+- task: DotNetCoreCLI@2
+  displayName: '.Net Core CLI - Build Projects'
+  inputs:
+    projects: ${{ Parameters.Projects }}
+    arguments: '--configuration ${{ Parameters.BuildConfiguration }}'
