@@ -20,7 +20,7 @@ steps:
     arguments: '--configuration ${{ Parameters.BuildConfiguration }} /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:CoverletOutput=$(Build.SourcesDirectory)/TestResults/Coverage/'
     publishTestResults: ${{ Parameters.PublishResults }}
     
-- task: PublishCodeCoverageResults@1
+- task: PublishCodeCoverageResults@2
   displayName: 'Publish code coverage report'
   inputs:
     codeCoverageTool: 'Cobertura'
