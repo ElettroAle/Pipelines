@@ -17,12 +17,13 @@ steps:
   inputs:
     command: test
     projects: ${{ Parameters.TestProjects }}
-    arguments: '--configuration ${{ Parameters.BuildConfiguration }} /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:CoverletOutput=$(Build.SourcesDirectory)/TestResults/Coverage/'
+    #arguments: '--configuration ${{ Parameters.BuildConfiguration }}  /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:CoverletOutput=$(Build.SourcesDirectory)/TestResults/Coverage/'
+    arguments: '--configuration ${{ Parameters.BuildConfiguration }} --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura'
     publishTestResults: ${{ Parameters.PublishResults }}
-    
-- task: PublishCodeCoverageResults@2
+
+- task: PublishCodeCoverageResults@1
   displayName: 'Publish code coverage report'
   inputs:
     codeCoverageTool: 'Cobertura'
-    summaryFileLocation: '$(Build.SourcesDirectory)/**/coverage.cobertura.xml'
-    additionalCodeCoverageFiles: '$(Build.SourcesDirectory)/**/coverage.opencover.xml'
+    summaryFileLocation: '$(Agent.TempDirectory)/**/coverage.cobertura.xml'
+    additionalCodeCoverageFiles: '$(Agent.TempDirectory)/**/coverage.opencover.xml'
