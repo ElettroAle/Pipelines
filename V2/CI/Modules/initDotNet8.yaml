@@ -6,10 +6,8 @@ parameters:
   type: string
   default: 'nuget.config'
 
-pool:
-  vmImage: 'ubuntu-24.04'
-
 steps:
+
 # Install .NET SDK
 - task: UseDotNet@2
   displayName: 'Install .NET 8 SDK'
@@ -18,7 +16,6 @@ steps:
     version: '8.0.x'
     performMultiLevelLookup: true
 
-# Restore using dotnet CLI (no Mono or NuGet.exe required)
 - script: |
     dotnet restore ${{ parameters.Projects }} --configfile ${{ parameters.NugetConfigPath }}
   displayName: 'dotnet restore'
