@@ -4,7 +4,7 @@ parameters:
   default: ''
 - name: NugetConfigPath
   type: string
-  default: 'nuget.config'
+  default: ''
 
 steps:
 # Install .NET SDK (necessario per Ubuntu 24.04)
