@@ -7,7 +7,6 @@ parameters:
   default: ''
 
 steps:
-# Install .NET SDK (necessario per Ubuntu 24.04)
 - task: UseDotNet@2
   displayName: 'Install .NET 8 SDK'
   inputs:
@@ -15,16 +14,21 @@ steps:
     version: '8.0.x'
     performMultiLevelLookup: true
 
-# Autenticazione per feed privati
 - task: NuGetAuthenticate@1
-  displayName: 'Autenticazione NuGet'
+  displayName: 'NuGet Authenticate'
 
-# Restore con .NET CLI
-- task: DotNetCoreCLI@2
-  displayName: 'Restore .NET'
-  inputs:
-    command: 'restore'
-    projects: ${{ parameters.Projects }}
-    feedsToUse: 'config'
-    nugetConfigPath: ${{ parameters.NugetConfigPath }}
-    verbosityRestore: 'Normal'
+- ${{ if parameters.NugetConfigPath }}:
+  - task: DotNetCoreCLI@2
+    displayName: 'Restore .NET (con nuget.config)'
+    inputs:
+      command: 'restore'
+      projects: ${{ parameters.Projects }}
+      feedsToUse: 'config'
+      nugetConfigPath: ${{ parameters.NugetConfigPath }}
+
+- ${{ if not(parameters.NugetConfigPath) }}:
+  - task: DotNetCoreCLI@2
+    displayName: 'Restore .NET (senza nuget.config)'
+    inputs:
+      command: 'restore'
+      projects: ${{ parameters.Projects }}
