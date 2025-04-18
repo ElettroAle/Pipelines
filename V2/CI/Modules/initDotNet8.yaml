@@ -8,7 +8,7 @@ parameters:
 
 steps:
 
-# I install NuGet CLI because it is not present in the default VM
+# Install .NET SDK
 - task: UseDotNet@2
   displayName: 'Install .NET 8 SDK'
   inputs:
@@ -16,16 +16,23 @@ steps:
     version: '8.0.x'
     performMultiLevelLookup: true
 
-- task: NuGetToolInstaller@1
-  displayName: 'Install NuGet CLI'
-  inputs:
-    checkLatest: true
+# Install NuGet manually (for Ubuntu 24.04)
+- script: |
+    curl -L https://dist.nuget.org/win-x86-commandline/latest/nuget.exe -o nuget.exe
+    mkdir -p ~/.nuget
+    mv nuget.exe ~/.nuget/
+  displayName: 'Download NuGet CLI'
 
-# I restore the project
+# Add NuGet path to PATH
+- script: |
+    echo '##vso[task.prependpath]$(HOME)/.nuget'
+  displayName: 'Add NuGet CLI to PATH'
+
+# Run NuGet restore
 - task: NuGetCommand@2
   displayName: 'NuGet CLI - Restore'
   inputs:
     command: 'restore'
-    projects: ${{ Parameters.Projects }}
+    projects: ${{ parameters.Projects }}
     feedsToUse: 'config'
-    vstsFeed: ${{ Parameters.NugetConfigPath }}
+    nugetConfigPath: ${{ parameters.NugetConfigPath }}
