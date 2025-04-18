@@ -6,8 +6,10 @@ parameters:
   type: string
   default: 'nuget.config'
 
-steps:
+pool:
+  vmImage: 'ubuntu-24.04'
 
+steps:
 # Install .NET SDK
 - task: UseDotNet@2
   displayName: 'Install .NET 8 SDK'
@@ -16,23 +18,7 @@ steps:
     version: '8.0.x'
     performMultiLevelLookup: true
 
-# Install NuGet manually (for Ubuntu 24.04)
+# Restore using dotnet CLI (no Mono or NuGet.exe required)
 - script: |
-    curl -L https://dist.nuget.org/win-x86-commandline/latest/nuget.exe -o nuget.exe
-    mkdir -p ~/.nuget
-    mv nuget.exe ~/.nuget/
-  displayName: 'Download NuGet CLI'
-
-# Add NuGet path to PATH
-- script: |
-    echo '##vso[task.prependpath]$(HOME)/.nuget'
-  displayName: 'Add NuGet CLI to PATH'
-
-# Run NuGet restore
-- task: NuGetCommand@2
-  displayName: 'NuGet CLI - Restore'
-  inputs:
-    command: 'restore'
-    projects: ${{ parameters.Projects }}
-    feedsToUse: 'config'
-    nugetConfigPath: ${{ parameters.NugetConfigPath }}
+    dotnet restore ${{ parameters.Projects }} --configfile ${{ parameters.NugetConfigPath }}
+  displayName: 'dotnet restore'
