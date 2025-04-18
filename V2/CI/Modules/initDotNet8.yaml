@@ -1,26 +1,30 @@
 parameters:
 - name: Projects
   type: string
-  default: 'src/**/*.csproj'
-- name: FeedName
+  default: ''
+- name: NugetConfigPath
   type: string
-  default: '' # Metti il nome del feed Azure Artifacts se serve
+  default: 'nuget.config'
 
 steps:
+# Install .NET SDK (necessario per Ubuntu 24.04)
 - task: UseDotNet@2
   displayName: 'Install .NET 8 SDK'
   inputs:
     packageType: 'sdk'
     version: '8.0.x'
+    performMultiLevelLookup: true
 
+# Autenticazione per feed privati
 - task: NuGetAuthenticate@1
   displayName: 'Autenticazione NuGet'
 
+# Restore con .NET CLI
 - task: DotNetCoreCLI@2
   displayName: 'Restore .NET'
   inputs:
     command: 'restore'
     projects: ${{ parameters.Projects }}
-    # Se usi Azure Artifacts, decommenta le due righe sotto e imposta FeedName
-    feedsToUse: 'select'
-    vstsFeed: ${{ parameters.FeedName }}
+    feedsToUse: 'config'
+    nugetConfigPath: ${{ parameters.NugetConfigPath }}
+    verbosityRestore: 'Normal'
