@@ -8,7 +8,7 @@ parameters:
   default: 'Release'
 - name: NugetConfigPath
   type: string
-  default: 'nuget.config'
+  default: ''
 
 steps:
 

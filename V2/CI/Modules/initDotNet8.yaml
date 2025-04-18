@@ -28,7 +28,7 @@ steps:
 
 - ${{ if not(parameters.NugetConfigPath) }}:
   - task: DotNetCoreCLI@2
-    displayName: 'Restore .NET (senza nuget.config)'
+    displayName: 'Restore .NET (without nugetConfigPath)'
     inputs:
       command: 'restore'
       projects: ${{ parameters.Projects }}
