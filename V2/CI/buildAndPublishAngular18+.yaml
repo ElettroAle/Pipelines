@@ -1,0 +1,28 @@
+# --- UNTESTED! --- #
+parameters:
+- name: ProjectsFolder
+  type: string
+  default: 'src/my-angular-app' # Modifica con il path corretto
+- name: NodeVersion
+  type: string
+  default: '20.x'
+- name: BuildConfiguration
+  type: string
+  default: 'production'
+
+steps:
+  # Step 1: Build dell'applicazione Angular
+  - template: ./Modules/buildAngular.yaml
+    parameters:
+      ProjectsFolder: ${{ parameters.ProjectsFolder }}
+      NodeVersion: ${{ parameters.NodeVersion }}
+      BuildConfiguration: ${{ parameters.BuildConfiguration }}
+
+  # Step 2: Pubblicazione degli artefatti
+  - task: PublishPipelineArtifact@1
+    displayName: 'Pubblica artefatti Angular'
+    inputs:
+      # Il path di output predefinito per Angular è la cartella 'dist'
+      targetPath: '${{ parameters.ProjectsFolder }}/dist'
+      artifactName: 'StaticWebApp'
+      publishLocation: 'Container'

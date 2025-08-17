@@ -1,0 +1,43 @@
+# --- UNTESTED! --- #
+parameters:
+- name: ProjectsFolder
+  displayName: 'Cartella del progetto Angular'
+  type: string
+  default: ''
+- name: NodeVersion
+  displayName: 'Versione di Node.js'
+  type: string
+  default: '20.x' # Si consiglia una versione LTS recente
+- name: BuildConfiguration
+  displayName: 'Configurazione della build (es. production)'
+  type: string
+  default: 'production'
+- name: Verbose
+  displayName: 'Log dettagliati'
+  type: boolean
+  default: false
+
+steps:
+# Installa la versione di Node.js specificata
+- task: NodeTool@0
+  displayName: 'Usa Node.js ${{ parameters.NodeVersion }}'
+  inputs:
+    versionSpec: '${{ parameters.NodeVersion }}'
+
+# Installa le dipendenze del progetto definite nel package.json
+- task: Npm@1
+  displayName: 'npm install (dipendenze)'
+  inputs:
+    command: 'install'
+    workingDir: ${{ parameters.ProjectsFolder }}
+    verbose: ${{ parameters.Verbose }}
+
+# Esegue la build del progetto Angular
+- task: Npm@1
+  displayName: 'Build progetto Angular'
+  inputs:
+    command: 'custom'
+    workingDir: ${{ parameters.ProjectsFolder }}
+    verbose: ${{ parameters.Verbose }}
+    # Esegue lo script 'build' dal package.json passando la configurazione
+    customCommand: 'run build -- --configuration ${{ parameters.BuildConfiguration }}'
