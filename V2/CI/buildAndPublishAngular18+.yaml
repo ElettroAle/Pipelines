@@ -1,8 +1,7 @@
 # --- UNTESTED! --- #
 parameters:
-- name: ProjectsFolder
+- name: ProjectsFolder # example: 'src/my-angular-app' # Modifica con il path corretto
   type: string
-  default: 'src/my-angular-app' # Modifica con il path corretto
 - name: NodeVersion
   type: string
   default: '20.x'
