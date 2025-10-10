@@ -14,36 +14,22 @@ parameters:
   - name: appKind
     type: string
     default: 'webApp' # or 'functionApp'
-  - name: environmentName
-    type: string
-  - name: displayName
-    type: string
-    default: 'Download and Deploy'
   - name: packagePath
     type: string
     default: '**/*.zip'
 
-variables:
-  - group: Platform-CD-Dev
 
-jobs:
-  - deployment: DeployApp
-    displayName: ${{ parameters.displayName }}
-    environment: ${{ parameters.environmentName }}
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-            - template: Modules/downloadArtifact.yaml
-              parameters:
-                pipelineResource: ${{ parameters.pipelineResource }}
-                pipelineSource: ${{ parameters.pipelineSource }}
-                artifactName: ${{ parameters.artifactName }}
+steps:
+  - template: Modules/downloadArtifact.yaml
+    parameters:
+      pipelineResource: ${{ parameters.pipelineResource }}
+      pipelineSource: ${{ parameters.pipelineSource }}
+      artifactName: ${{ parameters.artifactName }}
 
-            - template: Modules/deployWebApp.yaml
-              parameters:
-                appKind: ${{ parameters.appKind }}
-                azureSubscription: ${{ parameters.azureSubscription }}
-                appName: ${{ parameters.appName }}
-                artifactName: ${{ parameters.artifactName }}
-                packagePath: ${{ parameters.packagePath }}
+  - template: Modules/deployWebApp.yaml
+    parameters:
+      appKind: ${{ parameters.appKind }}
+      azureSubscription: ${{ parameters.azureSubscription }}
+      appName: ${{ parameters.appName }}
+      artifactName: ${{ parameters.artifactName }}
+      packagePath: ${{ parameters.packagePath }}
