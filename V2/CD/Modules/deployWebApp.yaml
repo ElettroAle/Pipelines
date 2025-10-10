@@ -21,7 +21,7 @@ steps:
       azureSubscription: '${{ parameters.azureSubscription }}'
       appType: 'webApp'
       WebAppName: '${{ parameters.appName }}'
-      package: ${{ format('$(Pipeline.Workspace)/{0}/{1}/{2}', parameters.packageName, parameters.artifactName, pparameters.packagePath) }}
+      package: ${{ format('$(Pipeline.Workspace)/{0}/{1}/{2}', parameters.packageName, parameters.artifactName, parameters.packagePath) }}
       deploymentMethod: '${{ parameters.deploymentMethod }}'
 
 - ${{ if eq(parameters.appKind, 'functionApp') }}:
