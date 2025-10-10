@@ -1,0 +1,12 @@
+parameters:
+  - name: pipelineResource
+    type: string
+  - name: pipelineSource
+    type: string
+  - name: artifactName
+    type: string
+
+steps:
+  - download: ${{ parameters.pipelineResource }}
+    artifact: ${{ parameters.artifactName }}
+    displayName: 'Download ${{ parameters.artifactName }} from ${{ parameters.pipelineResource }}'

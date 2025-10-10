@@ -1,0 +1,35 @@
+parameters:
+  - name: appKind
+    type: string # allowed values: webApp | functionApp
+  - name: azureSubscription
+    type: string
+  - name: appName
+    type: string
+  - name: artifactName
+    type: string
+  - name: packagePath
+    type: string
+  - name: deploymentMethod
+    type: string
+    default: 'auto'
+
+steps:
+  - ${{ if eq(parameters.appKind, 'webApp') }}:
+    - task: AzureRmWebAppDeployment@5
+      displayName: 'Deploy web app: ${{ parameters.appName }}'
+      inputs:
+        azureSubscription: '${{ parameters.azureSubscription }}'
+        appType: 'webApp'
+        WebAppName: '${{ parameters.appName }}'
+        package: ${{ coalesce(parameters.packagePath, '$(Pipeline.Workspace)/CI/' + parameters.artifactName + '/' + parameters.appName) }}
+        deploymentMethod: '${{ parameters.deploymentMethod }}'
+
+  - ${{ if eq(parameters.appKind, 'functionApp') }}:
+    - task: AzureFunctionApp@2
+      displayName: 'Deploy function app: ${{ parameters.appName }}'
+      inputs:
+        azureSubscription: '${{ parameters.azureSubscription }}'
+        appType: 'functionApp'
+        appName: '${{ parameters.appName }}'
+        package: ${{ coalesce(parameters.packagePath, '$(Pipeline.Workspace)/CI/' + parameters.artifactName + '/' + parameters.appName) }}
+        deploymentMethod: '${{ parameters.deploymentMethod }}'
