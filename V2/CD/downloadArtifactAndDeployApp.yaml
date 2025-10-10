@@ -34,4 +34,4 @@ steps:
       appName: ${{ parameters.appName }}
       packageName: ${{ parameters.packageName }}
       artifactName: ${{ parameters.artifactName }}
-      packagePath: ${{ parameters.appPath }}
+      appPath: ${{ parameters.appPath }}
