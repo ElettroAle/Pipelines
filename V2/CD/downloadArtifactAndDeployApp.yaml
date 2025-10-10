@@ -3,8 +3,6 @@ parameters:
     type: string
   - name: pipelineSource
     type: string
-  - name: artifactName
-    type: string
   - name: azureSubscription
     type: string
   - name: appName
