@@ -16,7 +16,7 @@ parameters:
   - name: packageName
     type: string
     default: 'drop'
-  - name: packagePath
+  - name: appPath
     type: string
     default: '**/*.zip'
 
@@ -32,5 +32,6 @@ steps:
       appKind: ${{ parameters.appKind }}
       azureSubscription: ${{ parameters.azureSubscription }}
       appName: ${{ parameters.appName }}
+      packageName: ${{ parameters.packageName }}
       artifactName: ${{ parameters.artifactName }}
-      packagePath: ${{ parameters.packagePath }}
+      packagePath: ${{ parameters.appPath }}

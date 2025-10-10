@@ -5,9 +5,11 @@ parameters:
     type: string
   - name: appName
     type: string
+  - name: packageName
+    type: string
   - name: artifactName
     type: string
-  - name: packagePath
+  - name: appPath
     type: string
   - name: deploymentMethod
     type: string
@@ -21,7 +23,7 @@ steps:
       azureSubscription: '${{ parameters.azureSubscription }}'
       appType: 'webApp'
       WebAppName: '${{ parameters.appName }}'
-      package: ${{ format('$(Pipeline.Workspace)/{0}/{1}/{2}', parameters.packageName, parameters.artifactName, parameters.packagePath) }}
+      package: ${{ format('$(Pipeline.Workspace)/{0}/{1}/{2}', parameters.packageName, parameters.artifactName, parameters.appPath) }}
       deploymentMethod: '${{ parameters.deploymentMethod }}'
 
 - ${{ if eq(parameters.appKind, 'functionApp') }}:
@@ -31,5 +33,5 @@ steps:
       azureSubscription: '${{ parameters.azureSubscription }}'
       appType: 'functionApp'
       appName: '${{ parameters.appName }}'
-      package: ${{ format('$(Pipeline.Workspace)/{0}/{1}/{2}', parameters.packageName, parameters.artifactName, parameters.packagePath) }}
+      package: ${{ format('$(Pipeline.Workspace)/{0}/{1}/{2}', parameters.packageName, parameters.artifactName, parameters.appPath) }}
       deploymentMethod: '${{ parameters.deploymentMethod }}'
