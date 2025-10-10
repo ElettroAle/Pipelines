@@ -3,10 +3,10 @@ parameters:
     type: string
   - name: pipelineSource
     type: string
-  - name: artifactName
+  - name: packageName
     type: string
 
 steps:
   - download: ${{ parameters.pipelineResource }}
-    artifact: ${{ parameters.artifactName }}
+    artifact: ${{ parameters.packageName }}
     displayName: 'Download ${{ parameters.artifactName }} from ${{ parameters.pipelineResource }}'

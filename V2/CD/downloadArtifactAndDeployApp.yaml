@@ -14,6 +14,9 @@ parameters:
   - name: appKind
     type: string
     default: 'webApp' # or 'functionApp'
+  - name: packageName
+    type: string
+    default: 'drop'
   - name: packagePath
     type: string
     default: '**/*.zip'
@@ -23,7 +26,7 @@ steps:
     parameters:
       pipelineResource: ${{ parameters.pipelineResource }}
       pipelineSource: ${{ parameters.pipelineSource }}
-      artifactName: ${{ parameters.artifactName }}
+      packageName: ${{ parameters.packageName }}
 
   - template: Modules/deployWebApp.yaml
     parameters:
