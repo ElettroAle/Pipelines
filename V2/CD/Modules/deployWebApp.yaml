@@ -21,7 +21,7 @@ steps:
       azureSubscription: '${{ parameters.azureSubscription }}'
       appType: 'webApp'
       WebAppName: '${{ parameters.appName }}'
-      package: ${{ coalesce(parameters.packagePath, format('$(Pipeline.Workspace)/CI/{0}/{1}', parameters.artifactName, parameters.appName)) }}
+      package: ${{ format('$(Pipeline.Workspace)/{0}/{1}/{2}', parameters.packageName, parameters.artifactName, pparameters.packagePath) }}
       deploymentMethod: '${{ parameters.deploymentMethod }}'
 
 - ${{ if eq(parameters.appKind, 'functionApp') }}:
@@ -31,5 +31,5 @@ steps:
       azureSubscription: '${{ parameters.azureSubscription }}'
       appType: 'functionApp'
       appName: '${{ parameters.appName }}'
-      package: ${{ coalesce(parameters.packagePath, format('$(Pipeline.Workspace)/CI/{0}/{1}', parameters.artifactName, parameters.appName)) }}
+      package: ${{ format('$(Pipeline.Workspace)/{0}/{1}/{2}', parameters.packageName, parameters.artifactName, parameters.packagePath) }}
       deploymentMethod: '${{ parameters.deploymentMethod }}'
