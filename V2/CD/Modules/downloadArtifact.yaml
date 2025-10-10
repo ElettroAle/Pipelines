@@ -9,4 +9,4 @@ parameters:
 steps:
   - download: ${{ parameters.pipelineResource }}
     artifact: ${{ parameters.packageName }}
-    displayName: 'Download ${{ parameters.artifactName }} from ${{ parameters.pipelineResource }}'
+    displayName: 'Download ${{ parameters.packageName }} from ${{ parameters.pipelineResource }}'

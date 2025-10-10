@@ -6,7 +6,6 @@ parameters:
     type: string
   - name: artifactName
     type: string
-    default: 'drop'
   - name: azureSubscription
     type: string
   - name: appName
