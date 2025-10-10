@@ -1,7 +1,6 @@
 parameters:
   - name: pipelineResource
     type: string
-    default: 'CI'
   - name: pipelineSource
     type: string
   - name: artifactName
@@ -16,7 +15,7 @@ parameters:
   - name: packageName
     type: string
     default: 'drop'
-  - name: appPath
+  - name: artifactName
     type: string
     default: '**/*.zip'
 
@@ -34,4 +33,4 @@ steps:
       appName: ${{ parameters.appName }}
       packageName: ${{ parameters.packageName }}
       artifactName: ${{ parameters.artifactName }}
-      appPath: ${{ parameters.appPath }}
+      pipelineResource: ${{ parameters.pipelineResource }}
