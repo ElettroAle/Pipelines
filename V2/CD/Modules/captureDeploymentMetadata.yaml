@@ -1,0 +1,92 @@
+# ==============================================================================
+# Deployment Metadata Capture Template
+# ==============================================================================
+# This template captures and displays deployment metadata from CI pipeline artifacts
+# Usage: Call this template after deploying an application to track source commit info
+#
+# Parameters:
+#   - pipelineResourceAlias: The alias of the pipeline resource (e.g., 'CI')
+#   - environmentName: Display name of the environment (e.g., 'Development', 'Staging', 'Production')
+#   - appServiceName: (Optional) Name of the App Service deployed
+#
+parameters:
+  - name: pipelineResourceAlias
+    type: string
+    displayName: 'Pipeline resource alias (e.g., CI)'
+
+  - name: environmentName
+    type: string
+    displayName: 'Environment name for display (e.g., Development, Staging, Production)'
+
+  - name: appServiceName
+    type: string
+    default: ''
+    displayName: '(Optional) App Service name for display in summary'
+
+steps:
+  - task: PowerShell@2
+    displayName: 'Capture Deployment Metadata'
+    inputs:
+      targetType: 'inline'
+      pwsh: true
+      script: |
+        # Capture metadata from the pipeline resource
+        $sourceBranch = "$(resources.pipeline.${{ parameters.pipelineResourceAlias }}.sourceBranch)"
+        $sourceCommit = "$(resources.pipeline.${{ parameters.pipelineResourceAlias }}.sourceCommit)"
+        $ciRunId = "$(resources.pipeline.${{ parameters.pipelineResourceAlias }}.runID)"
+        $ciRunName = "$(resources.pipeline.${{ parameters.pipelineResourceAlias }}.runName)"
+
+        # Display information in logs
+        Write-Host ""
+        Write-Host "============================================================" -ForegroundColor Cyan
+        Write-Host "  DEPLOYMENT METADATA - ${{ parameters.environmentName }}" -ForegroundColor Cyan
+        Write-Host "============================================================" -ForegroundColor Cyan
+        Write-Host "Source Branch    : $sourceBranch" -ForegroundColor White
+        Write-Host "Source Commit    : $sourceCommit" -ForegroundColor White
+        Write-Host "CI Run ID        : $ciRunId" -ForegroundColor White
+        Write-Host "CI Run Name      : $ciRunName" -ForegroundColor White
+        Write-Host "Deployed At      : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor White
+        Write-Host "============================================================" -ForegroundColor Cyan
+        Write-Host ""
+
+        # Create short commit hash for display
+        $commitShort = if ($sourceCommit.Length -ge 7) { $sourceCommit.Substring(0, 7) } else { $sourceCommit }
+
+        # Build CI URL
+        $ciUrl = "$(System.CollectionUri)$(System.TeamProject)/_build/results?buildId=$ciRunId"
+
+        # Add build tag with commit SHA
+        Write-Host "##vso[build.addbuildtag]commit:$commitShort"
+        Write-Host "##vso[build.addbuildtag]env:${{ parameters.environmentName }}"
+
+        # Create deployment summary
+        $appServiceInfo = if ("${{ parameters.appServiceName }}" -ne "") { "- **App Service**: ``${{ parameters.appServiceName }}``" } else { "" }
+
+        $summary = @"
+        ## 🚀 Deployment Summary - ${{ parameters.environmentName }}
+
+        ### 📦 Artifact Information
+        - **Source Commit**: ``$sourceCommit``
+        - **Short Hash**: ``$commitShort``
+        - **Source Branch**: ``$sourceBranch``
+        - **CI Build**: [Run #$ciRunId - $ciRunName]($ciUrl)
+
+        ### 🎯 Deployment Details
+        $appServiceInfo
+        - **Environment**: ${{ parameters.environmentName }}
+        - **Deployed At**: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
+        - **CD Pipeline Run**: [#$(Build.BuildNumber)]($(System.CollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId))
+
+        ---
+        *Deployment metadata captured automatically*
+        "@
+
+        Write-Host "##vso[task.uploadsummary]$summary"
+
+  - task: PowerShell@2
+    displayName: 'Log Deployment Success'
+    inputs:
+      targetType: 'inline'
+      pwsh: true
+      script: |
+        Write-Host "✅ Deployment metadata captured successfully" -ForegroundColor Green
