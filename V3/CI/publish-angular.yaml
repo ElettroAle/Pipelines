@@ -1,0 +1,77 @@
+# ── CI: Publish Angular (agnostico) ───────────────────────────────────────────
+#
+# Template di Build e Publish per progetti Angular, agnostico rispetto al workflow Git.
+# Non include versionamento semantico né tagging Git.
+#
+# Può essere precursore di GitFlow/publish-angular.yaml, che aggiunge
+# Set-Versioning, tagging Git e branch-conditional variable groups.
+#
+# Parametri
+# ─────────
+#   projectName       → nome del repo (usato per checkout path e artifact naming)
+#   targetEnvironment → ambiente target (es. development, staging, production)
+#   buildConfiguration → configurazione Angular (es. development, staging, production)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: projectName
+    type: string
+    default: '$(Build.Repository.Name)'
+
+  - name: targetEnvironment
+    type: string
+    default: 'Development'
+
+  - name: buildConfiguration
+    type: string
+    default: 'development'
+
+variables:
+  - name: nodeVersion
+    value: '22.x'
+  - name: outputDirectory
+    value: '$(Build.ArtifactStagingDirectory)/publish'
+  - name: targetEnvironment
+    value: '${{ parameters.targetEnvironment }}'
+
+stages:
+  - template: ./Modules/publish.yaml
+    parameters:
+      projectName: ${{ parameters.projectName }}
+      artifactName: '${{ parameters.projectName }}-${{ parameters.targetEnvironment }}'
+      buildSteps:
+        - task: NodeTool@0
+          displayName: 'Install Node.js'
+          inputs:
+            versionSpec: $(nodeVersion)
+
+        - script: npm ci
+          displayName: 'Install Dependencies'
+          workingDirectory: $(Build.SourcesDirectory)
+
+        - script: npx ng build --configuration=${{ parameters.buildConfiguration }}
+          displayName: 'Angular Build'
+          workingDirectory: $(Build.SourcesDirectory)
+
+      publishSteps:
+        - task: NodeTool@0
+          displayName: 'Install Node.js'
+          inputs:
+            versionSpec: $(nodeVersion)
+
+        - script: npm ci
+          displayName: 'Install Dependencies'
+          workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}
+
+        - script: npx ng build --configuration=${{ parameters.buildConfiguration }}
+          displayName: 'Angular Build'
+          workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}
+
+        - script: |
+            mkdir -p '$(outputDirectory)'
+            REAL_OUTPUT=$(find dist -name "index.html" -exec dirname {} \; | head -n 1)
+            echo "Copia dei file da $REAL_OUTPUT a $(outputDirectory)"
+            cp -r $REAL_OUTPUT/. '$(outputDirectory)/'
+          displayName: 'Copy dist to Artifact Staging'
+          workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}

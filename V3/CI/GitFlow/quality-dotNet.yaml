@@ -1,0 +1,68 @@
+# ── CI: Quality DotNet (GitFlow) ──────────────────────────────────────────────
+#
+# Template di Quality gate per progetti .NET con governance GitFlow.
+#
+# Rispetto alla versione agnostica (CI/quality-dotNet.yaml), aggiunge:
+#   - Validazione titolo PR (Conventional Commits / SemVer) verso branch protetti
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: projectName
+    type: string
+    default: '$(Build.Repository.Name)'
+
+variables:
+  - name: dotnetVersion
+    value: '10.0.x'
+  - name: buildConfiguration
+    value: 'Release'
+  - name: buildProjects
+    value: '**/*.csproj'
+  - name: testProjects
+    value: '**/*.UnitTest*.csproj'
+  - group: "common-quality"
+
+stages:
+  - template: ./Modules/quality.yaml
+    parameters:
+      projectName: ${{ parameters.projectName }}
+      buildAndTestSteps:
+        - task: UseDotNet@2
+          displayName: 'Install .NET SDK'
+          inputs:
+            version: $(dotnetVersion)
+
+        - task: DotNetCoreCLI@2
+          displayName: 'Check NuGet Vulnerabilities'
+          inputs:
+            command: 'custom'
+            custom: 'list'
+            arguments: 'package --vulnerable --include-transitive'
+
+        - task: DotNetCoreCLI@2
+          displayName: 'Restore'
+          inputs:
+            command: 'restore'
+            projects: '$(buildProjects)'
+
+        - task: DotNetCoreCLI@2
+          displayName: 'Build'
+          inputs:
+            command: 'build'
+            projects: '$(buildProjects)'
+            arguments: '--configuration $(buildConfiguration) --no-restore'
+
+        - task: DotNetCoreCLI@2
+          displayName: 'Test'
+          inputs:
+            command: 'test'
+            projects: '$(testProjects)'
+            arguments: '--configuration $(buildConfiguration) --no-build --no-restore --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura'
+
+        - task: PublishCodeCoverageResults@2
+          displayName: 'Publish Code Coverage'
+          inputs:
+            codeCoverageTool: 'Cobertura'
+            summaryFileLocation: '$(Agent.TempDirectory)/**/coverage.cobertura.xml'
+            additionalCodeCoverageFiles: '$(Agent.TempDirectory)/**/coverage.opencover.xml'

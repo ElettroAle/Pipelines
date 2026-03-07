@@ -1,0 +1,69 @@
+# ── CI Module: Quality (GitFlow) ──────────────────────────────────────────────
+#
+# Template riusabile per la Quality gate con governance GitFlow.
+#
+# Rispetto alla versione agnostica (CI/Modules/quality.yaml), aggiunge:
+#   - Job ValidatePRTitle: verifica Conventional Commits / SemVer sulle PR
+#     verso branch protetti (main, staging + eventuali additional)
+#
+# I passi tech-specific (build, test, coverage) vengono iniettati
+# tramite il parametro `buildAndTestSteps`.
+#
+# Parametri
+# ─────────
+#   projectName        → nome del repo applicativo (default: nome del repo ADO)
+#   buildAndTestSteps  → stepList iniettata nel job BuildAndTest dopo Gitleaks
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: projectName
+    type: string
+    default: '$(Build.Repository.Name)'
+
+  - name: buildAndTestSteps
+    type: stepList
+    default: []
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+stages:
+  - stage: Quality
+    displayName: 'Quality Checks'
+    jobs:
+
+      - job: ValidatePRTitle
+        displayName: 'Validate SemVer Title'
+        condition: eq(variables['Build.Reason'], 'PullRequest')
+        steps:
+          - checkout: self
+            path: s/${{ parameters.projectName }}
+            fetchDepth: 10
+
+          - checkout: git://Demetra/DPS.Demetra.Infrastructure
+            path: s/DPS.Demetra.Infrastructure
+
+          - task: PowerShell@2
+            displayName: 'Verify SemVer in PR Commits'
+            inputs:
+              filePath: '$(Build.SourcesDirectory)/DPS.Demetra.Infrastructure/pipelines/V3/CI/Scripts/Verify-SemVer.ps1'
+              workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
+              pwsh: true
+            env:
+              TARGET_BRANCH: $(System.PullRequest.TargetBranch)
+              ADDITIONAL_TAG_BRANCHES: $(additionalRequiredTaggingBranches)
+
+      - job: BuildAndTest
+        displayName: 'Build, Test and Security'
+        pool:
+          vmImage: 'ubuntu-latest'
+        condition: succeeded()
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - script: |
+              docker run -v $(Build.SourcesDirectory):/path zricethezav/gitleaks:latest detect --source="/path" --exit-code 1 --verbose
+            displayName: 'Gitleaks (Secret Scanning)'
+
+          - ${{ parameters.buildAndTestSteps }}
