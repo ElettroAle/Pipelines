@@ -45,9 +45,11 @@ def extract_template_refs(file_path: Path) -> list[str]:
         print(f"  [WARN] Cannot read {file_path}: {e}")
         return refs
 
-    # Cerca pattern: 'template: path/to/file.yaml' con indentazione variabile
-    # Il valore può essere su stessa riga o su riga successiva con indentazione
-    pattern = re.compile(r"^\s*template\s*:\s*(.+)$", re.MULTILINE)
+    # Cerca pattern: 'template: path/to/file.yaml' con indentazione variabile.
+    # Gestisce sia:
+    #   - template: path/file.yaml       (list item)
+    #     template: path/file.yaml       (mapping key)
+    pattern = re.compile(r"^\s*-?\s*template\s*:\s*(.+)$", re.MULTILINE)
     for match in pattern.finditer(content):
         ref = match.group(1).strip().strip("'\"")
         # Rimuovi parametri inline tipo @alias o ?params

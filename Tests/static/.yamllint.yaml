@@ -20,10 +20,12 @@ rules:
     allowed-values: ['true', 'false', 'on', 'off', 'yes', 'no']
     check-keys: false
 
-  # Indentazione: 2 spazi (standard ADO)
+  # Indentazione: 2 spazi (standard ADO).
+  # indent-sequences: whatever perché i blocchi condizionali ADO (${{ if }})
+  # producono sequenze con indentazione non standard ma valida per ADO.
   indentation:
     spaces: 2
-    indent-sequences: true
+    indent-sequences: whatever
     check-multi-line-strings: false
 
   # Nessun trailing space
@@ -40,3 +42,15 @@ rules:
   brackets:
     min-spaces-inside: 0
     max-spaces-inside: 1
+
+  # Allineamento con spazi multipli dopo ':' è usato in alcuni file Terraform
+  # per leggibilità (es. artifact:   '$(NAME)'). Non è un errore funzionale.
+  colons:
+    max-spaces-before: 0
+    max-spaces-after: -1
+
+  # I file creati/editati su Windows hanno line endings CRLF.
+  # ADO non fa differenza, quindi accettiamo entrambi.
+  # Disabilitato perché i file creati/editati su Windows hanno CRLF.
+  # ADO non fa differenza tra LF e CRLF per i template.
+  new-lines: disable
