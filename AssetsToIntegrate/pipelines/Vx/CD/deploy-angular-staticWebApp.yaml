@@ -1,0 +1,67 @@
+parameters:
+  - name: projectName
+    displayName: 'Nome progetto (es. DPS.Demetra.FrontEnd)'
+    type: string
+
+  - name: targetEnvironment
+    displayName: 'Ambiente ADO'
+    type: string
+
+  - name: swaDeploymentToken
+    displayName: 'Token di deployment Azure Static Web Apps'
+    type: string
+
+  - name: ciPipelineResourceAlias
+    displayName: 'Alias del pipeline resource dichiarato nel raccordo'
+    type: string
+    default: ci_fe
+
+stages:
+  - stage: Deploy
+    displayName: 'Deploy su ${{ parameters.targetEnvironment }}'
+    jobs:
+      - deployment: DeployStaticWebApp
+        displayName: 'Deploy FE — ${{ parameters.projectName }}'
+        environment: '${{ parameters.targetEnvironment }}'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+
+                # ── 1. Sopprime l'auto-download degli artifact ───────────────
+                - download: none
+
+                # ── 2. Scarica i Pipeline Artifacts dalla CI ─────────────────
+                # DownloadPipelineArtifact senza artifactName crea drop/<nome-versione>/.
+                # Lo step successivo appiattisce il contenuto direttamente in drop/.
+                - task: DownloadPipelineArtifact@2
+                  displayName: 'Scarica artifact nella working directory'
+                  inputs:
+                    buildType: 'specific'
+                    project: '$(System.TeamProjectId)'
+                    definition: '$(resources.pipeline.${{ parameters.ciPipelineResourceAlias }}.pipelineID)'
+                    buildVersionToDownload: 'latestFromBranch'
+                    branchName: '$(Build.SourceBranch)'
+                    targetPath: '$(Build.SourcesDirectory)/drop'
+
+                # ── 2b. Flatten ──────────────────────────────────────────────
+                # Porta i file da drop/<nome-versione>/ direttamente in drop/
+                # in modo che il task SWA trovi index.html in app_location: 'drop'.
+                - bash: |
+                    SUBDIR=$(find "$(Build.SourcesDirectory)/drop" -mindepth 1 -maxdepth 1 -type d | head -1)
+                    if [ -n "$SUBDIR" ]; then
+                      echo "Flatten: $SUBDIR -> drop/"
+                      cp -r "$SUBDIR"/. "$(Build.SourcesDirectory)/drop/"
+                      rm -rf "$SUBDIR"
+                    fi
+                  displayName: 'Flatten artifact directory'
+
+                # ── 3. Deploy su Azure Static Web Apps ───────────────────────
+                - task: AzureStaticWebApp@0
+                  displayName: 'Deploy su Static Web App'
+                  inputs:
+                    app_location: 'drop'
+                    output_location: ''
+                    skip_app_build: true
+                  env:
+                    azure_static_web_apps_api_token: '${{ parameters.swaDeploymentToken }}'

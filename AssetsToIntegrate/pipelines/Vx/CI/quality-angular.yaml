@@ -1,0 +1,37 @@
+parameters:
+  - name: projectName
+    type: string
+    default: '$(Build.Repository.Name)'
+
+variables:
+  - name: nodeVersion
+    value: '22.x'
+  - group: "common-quality"
+
+stages:
+  - template: modules/quality.yaml
+    parameters:
+      projectName: ${{ parameters.projectName }}
+      buildAndTestSteps:
+        - task: NodeTool@0
+          displayName: 'Install Node.js'
+          inputs:
+            versionSpec: $(nodeVersion)
+
+        - script: npm ci
+          displayName: 'Install Dependencies'
+          workingDirectory: $(Build.SourcesDirectory)
+
+        - script: npx ng build
+          displayName: 'Angular Build (compile check)'
+          workingDirectory: $(Build.SourcesDirectory)
+
+        # Future test steps (placeholder):
+        # - script: npx ng test --watch=false --code-coverage
+        #   displayName: 'Unit Tests'
+        #   workingDirectory: $(Build.SourcesDirectory)
+        # - task: PublishCodeCoverageResults@2
+        #   displayName: 'Publish Code Coverage'
+        #   inputs:
+        #     codeCoverageTool: 'Cobertura'
+        #     summaryFileLocation: 'coverage/demetra/cobertura-coverage.xml'

@@ -1,0 +1,89 @@
+# ── CD Template: Deploy Backend App Service ───────────────────────────────────
+#
+# Template condiviso (DPS.Demetra.Infrastructure). Agnostico rispetto a trigger
+# e branch — tutta la configurazione di trigger/resource va nel file di raccordo
+# del repo applicativo che lo estende con `extends`.
+#
+# Vincolo ADO: il file di raccordo deve definire un pipeline resource con alias
+# "ci_be", perché questo template lo referenzia in DownloadPipelineArtifact.
+#
+# Parametri richiesti
+# ───────────────────
+#   projectName              → nome del progetto (display name del job)
+#   azureServiceConnection   → nome della service connection ARM in Azure DevOps
+#   targetEnvironment        → nome dell'ambiente ADO (Development | Staging | Production)
+#   webAppName               → nome completo dell'App Service (es. app-demetra-be-int)
+#   ciPipelineResourceAlias  → alias del pipeline resource dichiarato nel raccordo
+#                              (default: ci_be — cambia solo se usi un alias diverso)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: projectName
+    displayName: 'Nome progetto (es. DPS.Demetra.BackEnd)'
+    type: string
+
+  - name: azureServiceConnection
+    displayName: 'Nome della service connection ARM in Azure DevOps'
+    type: string
+
+  - name: targetEnvironment
+    displayName: 'Ambiente ADO'
+    type: string
+
+  - name: webAppName
+    displayName: 'Nome completo App Service'
+    type: string
+
+  - name: ciPipelineResourceAlias
+    displayName: 'Alias del pipeline resource dichiarato nel raccordo'
+    type: string
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+stages:
+  - stage: Deploy
+    displayName: 'Deploy su ${{ parameters.targetEnvironment }}'
+    jobs:
+      - deployment: DeployWebApp
+        displayName: 'Deploy BE — ${{ parameters.webAppName }}'
+        environment: '${{ parameters.targetEnvironment }}'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+
+                # ── 1. Sopprime l'auto-download degli artifact ───────────────
+                # I deployment job scaricano automaticamente i Pipeline Artifacts
+                # di tutti i pipeline resource dichiarati (tra cui ci_be).
+                # Lo supprimiamo per gestire path e branch-filter esplicitamente.
+                - download: none
+
+                # ── 2. Scarica i Pipeline Artifacts dalla CI ─────────────────
+                # buildVersionToDownload: latestFromBranch → prende l'ultimo run
+                # green sul branch che ha triggerato questa pipeline.
+                # Il nome dell'artifact è dinamico, quindi scarichiamo tutto e
+                # usiamo il pattern glob nel passo di deploy.
+                - task: DownloadPipelineArtifact@2
+                  displayName: 'Scarica artifact dalla CI'
+                  inputs:
+                    buildType: 'specific'
+                    project: '$(System.TeamProjectId)'
+                    definition: '$(resources.pipeline.${{ parameters.ciPipelineResourceAlias }}.pipelineID)'
+                    buildVersionToDownload: 'latestFromBranch'
+                    branchName: '$(Build.SourceBranch)'
+                    downloadPath: '$(Pipeline.Workspace)/${{ parameters.ciPipelineResourceAlias }}'
+
+                # ── 2. Deploy su Azure App Service (Windows) ─────────────────
+                # L'App Service è definito in azure/env/int/main.tf come:
+                #   azurerm_windows_web_app "backend" → name = "app-demetra-be-<env>"
+                # La CI produce un .zip (zipAfterPublish: true); il task lo carica
+                # direttamente sull'endpoint SCM tramite Zip Deploy.
+                - task: AzureWebApp@1
+                  displayName: 'Deploy su App Service'
+                  inputs:
+                    azureSubscription: '${{ parameters.azureServiceConnection }}'
+                    appType: 'webApp'
+                    appName: '${{ parameters.webAppName }}'
+                    package: '$(Pipeline.Workspace)/${{ parameters.ciPipelineResourceAlias }}/**/*.zip'
+                    deploymentMethod: 'zipDeploy'

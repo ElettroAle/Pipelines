@@ -1,0 +1,89 @@
+parameters:
+  - name: projectName
+    type: string
+    default: '$(Build.Repository.Name)'
+
+variables:
+  - name: publishProject
+    value: '${{ parameters.projectName }}/${{ parameters.projectName }}.csproj'
+  - name: outputDirectory
+    value: '$(Build.ArtifactStagingDirectory)/publish'
+  - name: dotnetVersion
+    value: '10.0.x'
+  - name: buildConfiguration
+    value: 'Release'
+  - name: targetRuntime
+    value: 'win-x64'
+  - name: selfContained
+    value: 'true'
+
+  - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/dev') }}:
+    - group: "development"
+    - name: requireTag
+      value: 'false'
+
+  - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/staging') }}:
+    - group: "staging"
+    - name: requireTag
+      value: 'true'
+
+  - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/main') }}:
+    - group: "production"
+    - name: requireTag
+      value: 'true'
+
+  - ${{ if and(ne(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.SourceBranch'], 'refs/heads/dev'), ne(variables['Build.SourceBranch'], 'refs/heads/staging')) }}:
+    - group: "development"  
+    - name: requireTag
+      value: 'true'
+    - name: targetEnvironment
+      value: 'Development'
+
+stages:
+  - template: modules/publish.yaml
+    parameters:
+      projectName: ${{ parameters.projectName }}
+      buildSteps:
+        - task: UseDotNet@2
+          inputs:
+            version: $(dotnetVersion)
+
+        - task: DotNetCoreCLI@2
+          displayName: 'DotNet Build'
+          inputs:
+            command: 'build'
+            projects: '$(publishProject)'
+            arguments: '--configuration $(buildConfiguration)'
+
+      # outputDirectory = $(Build.ArtifactStagingDirectory)/publish (contratto con il modulo)
+      publishSteps:
+        - task: FileTransform@2
+          displayName: 'JSON Variable Substitution'
+          inputs:
+            folderPath: '$(Build.SourcesDirectory)/${{ parameters.projectName }}/${{ parameters.projectName }}'
+            jsonTargetFiles: '**/appsettings.$(targetEnvironment).json'
+
+        - task: DotNetCoreCLI@2
+          displayName: 'DotNet Publish'
+          inputs:
+            command: 'publish'
+            projects: '$(publishProject)'
+            arguments: >
+              --configuration $(buildConfiguration)
+              /p:RuntimeIdentifier=$(targetRuntime)
+              /p:SelfContained=$(selfContained)
+              /p:EnvironmentName=$(targetEnvironment)
+              /p:Version=$(currentTag)
+              /p:AssemblyVersion=$(currentTag)
+              /p:FileVersion=$(currentTag)
+              /p:InformationalVersion="$(currentTag)-$(gitHash)"
+              --output $(outputDirectory)
+            modifyOutputPath: false
+            zipAfterPublish: true
+
+        - script: |
+            if grep -q "__ENVIRONMENT_REQUIRED__" $(outputDirectory)/web.config; then
+              echo "##[error]XDT Transformation failed."
+              exit 1
+            fi
+          displayName: 'Verify XDT'

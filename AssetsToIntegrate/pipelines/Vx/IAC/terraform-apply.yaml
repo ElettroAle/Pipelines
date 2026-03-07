@@ -1,0 +1,114 @@
+# ── Terraform Apply Pipeline ───────────────────────────────────────────────────
+#
+# Purpose: run terraform init + plan + apply on merge to main.
+#          The Pull Request merge (with approval and validation build) is the
+#          control gate — no additional manual approval is needed here.
+#
+# Trigger: push (merge) on main.
+#
+# Prerequisites
+# ─────────────
+# 1. Marketplace extension: ms-devlabs.custom-terraform-tasks
+#    (TerraformInstaller@1 and TerraformTaskV4@4)
+#
+# 2. tfbackend file in the repo: azure/env/int/int.tfbackend
+#    (no sensitive data — already versioned in the repository)
+#
+# 3. Variable Group with the variable:
+#    azureServiceConnection → name of the ARM service connection in Azure DevOps
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - azure/env/**
+      - pipelines/V1/IAC/**
+
+pr: none  # Do not run on PRs (that is handled by terraform-plan.yaml)
+
+parameters:
+  - name: environment
+    displayName: 'Target environment'
+    type: string
+    default: 'int'
+    values:
+      - int
+
+variables:
+  - group: terraform-common   # Variable Group in Pipelines → Library (contains: azureServiceConnection)
+  - name: TF_DIR
+    value: '$(System.DefaultWorkingDirectory)/azure/env/${{ parameters.environment }}'
+  - name: TF_VARS_FILE
+    value: '${{ parameters.environment }}.tfvars'
+  - name: TF_BACKEND_FILE
+    value: '${{ parameters.environment }}.tfbackend'
+  - name: TF_PLAN_ARTIFACT
+    value: 'tfplan-${{ parameters.environment }}'
+
+stages:
+  - stage: Apply
+    displayName: 'Terraform Init, Plan & Apply'
+    jobs:
+      - job: TerraformApply
+        displayName: 'Init, Plan & Apply'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+
+          - task: TerraformInstaller@1
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: 'latest'
+
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(TF_DIR)'
+              backendType: 'azurerm'
+              backendServiceArm: '$(azureServiceConnection)'
+              commandOptions: '-backend-config="$(TF_DIR)/$(TF_BACKEND_FILE)" -reconfigure'
+
+          # TERRAFORM_PLAN_HAS_CHANGES is automatically set by the task:
+          #   true  → there are changes → apply will be executed
+          #   false → no changes        → apply skipped
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Plan'
+            name: plan
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              workingDirectory: '$(TF_DIR)'
+              environmentServiceNameAzureRM: '$(azureServiceConnection)'
+              commandOptions: >-
+                -var-file="$(TF_VARS_FILE)"
+                -out="$(Build.ArtifactStagingDirectory)/tfplan.binary"
+                -detailed-exitcode
+                -no-color
+              publishPlanResults: 'Terraform Plan — ${{ parameters.environment }}'
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Plan artifact'
+            condition: succeeded()
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)'
+              artifact:   '$(TF_PLAN_ARTIFACT)'
+              publishLocation: 'pipeline'
+
+          # Uses the binary file produced by the plan → deterministic apply
+          # Skipped if the plan detected no changes
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Apply'
+            condition: and(succeeded(), eq(variables['TERRAFORM_PLAN_HAS_CHANGES'], 'true'))
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              workingDirectory: '$(TF_DIR)'
+              environmentServiceNameAzureRM: '$(azureServiceConnection)'
+              commandOptions: '-auto-approve "$(Build.ArtifactStagingDirectory)/tfplan.binary"'

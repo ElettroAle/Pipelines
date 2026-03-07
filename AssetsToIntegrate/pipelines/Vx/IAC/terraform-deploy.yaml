@@ -1,0 +1,222 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  ⚠  TO BE TESTED / DO NOT USE IN PRODUCTION                                ║
+# ║                                                                              ║
+# ║  This file has been superseded by two separate pipelines:                   ║
+# ║    • terraform-plan.yaml  → build validation on Pull Requests               ║
+# ║    • terraform-apply.yaml → runs automatically on merge to main             ║
+# ║                                                                              ║
+# ║  WARNING: the TF_DIR path references "azure/environments/<env>" which does  ║
+# ║  not match the actual repo structure ("azure/env/<env>").                   ║
+# ║  Fix before running.                                                         ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+# ── Terraform IaC Pipeline ─────────────────────────────────────────────────────
+#
+# Flow:  Init + Plan  ──▶  [Manual Approval]  ──▶  Apply
+#
+# Prerequisites
+# ─────────────
+# 1. Marketplace extension: ms-devlabs.custom-terraform-tasks
+#    (provides the TerraformInstaller@1 task)
+#
+# 2. Secure File in the Azure DevOps Library:
+#    Upload the <env>.tfbackend file (e.g. int.tfbackend) as a Secure File.
+#    The file is excluded from git (contains the storage account connection string).
+#
+# 3. Azure DevOps Environment for manual approval:
+#    Create an Environment named "terraform-int" (or the corresponding name
+#    for the target environment) and add an Approval check with the desired approvers
+#    (Pipelines → Environments → <env> → Approvals and checks).
+#
+# 4. Service connection to Azure (optional but recommended):
+#    If you don't use the agent credentials, configure a service connection
+#    of type "Azure Resource Manager" and set the ARM_* variables below.
+#
+# Pipeline variables (set in the library or as pipeline variables):
+#   ARM_CLIENT_ID       – Service Principal client id
+#   ARM_CLIENT_SECRET   – Service Principal client secret (secret)
+#   ARM_TENANT_ID       – Azure tenant id
+#   ARM_SUBSCRIPTION_ID – Azure subscription id
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+trigger: none   # Manual execution or called from another pipeline
+
+parameters:
+  - name: environment
+    displayName: 'Target environment'
+    type: string
+    default: 'int'
+    values:
+      - int
+
+variables:
+  - name: TF_DIR
+    value: '$(System.DefaultWorkingDirectory)/azure/environments/${{ parameters.environment }}'
+  - name: TF_VARS_FILE
+    value: '${{ parameters.environment }}.tfvars'
+  - name: TF_BACKEND_SECURE_FILE
+    value: '${{ parameters.environment }}.tfbackend'
+  - name: TF_PLAN_ARTIFACT
+    value: 'tfplan-${{ parameters.environment }}'
+
+# ── Stage 1: Init + Plan ───────────────────────────────────────────────────────
+stages:
+  - stage: Plan
+    displayName: '1 · Terraform Init & Plan'
+    jobs:
+      - job: TerraformPlan
+        displayName: 'Init & Plan'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+
+          - task: TerraformInstaller@1
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: 'latest'
+
+          # The .tfbackend file is saved as a Secure File in the Library
+          - task: DownloadSecureFile@1
+            name: tfBackend
+            displayName: 'Download backend config (Secure File)'
+            inputs:
+              secureFile: '$(TF_BACKEND_SECURE_FILE)'
+
+          - script: |
+              set -euo pipefail
+              terraform init \
+                -backend-config="$(tfBackend.secureFilePath)" \
+                -reconfigure
+            displayName: 'Terraform Init'
+            workingDirectory: '$(TF_DIR)'
+            env:
+              ARM_CLIENT_ID:       $(ARM_CLIENT_ID)
+              ARM_CLIENT_SECRET:   $(ARM_CLIENT_SECRET)
+              ARM_TENANT_ID:       $(ARM_TENANT_ID)
+              ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
+
+          # -detailed-exitcode:
+          #   exit 0 → no changes
+          #   exit 1 → error (the pipeline fails)
+          #   exit 2 → changes present
+          - script: |
+              set -euo pipefail
+
+              terraform plan \
+                -var-file="$(TF_VARS_FILE)" \
+                -out="$(Build.ArtifactStagingDirectory)/tfplan.binary" \
+                -detailed-exitcode \
+                -no-color \
+                2>&1 | tee "$(Build.ArtifactStagingDirectory)/plan.txt"
+
+              PLAN_EXIT=${PIPESTATUS[0]}
+
+              if [ "$PLAN_EXIT" -eq 1 ]; then
+                echo "##[error]terraform plan returned an error (exit code 1)."
+                exit 1
+              fi
+
+              if [ "$PLAN_EXIT" -eq 0 ]; then
+                echo "##[warning]No changes detected by the plan."
+              fi
+
+              echo "##vso[task.setvariable variable=PLAN_EXIT_CODE;isOutput=true]$PLAN_EXIT"
+            displayName: 'Terraform Plan'
+            name: plan
+            workingDirectory: '$(TF_DIR)'
+            env:
+              ARM_CLIENT_ID:       $(ARM_CLIENT_ID)
+              ARM_CLIENT_SECRET:   $(ARM_CLIENT_SECRET)
+              ARM_TENANT_ID:       $(ARM_TENANT_ID)
+              ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
+
+          # Prints the plan output in the log (always visible, even if plan has
+          # already written to stdout — useful if the log is archived separately)
+          - script: |
+              echo "════════════════════════ TERRAFORM PLAN OUTPUT ════════════════════════"
+              cat "$(Build.ArtifactStagingDirectory)/plan.txt"
+              echo "════════════════════════════════════════════════════════════════════════"
+            displayName: 'Show Plan output'
+            condition: always()
+
+          # Publish tfplan.binary and plan.txt as pipeline artifacts
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Plan artifact'
+            condition: succeeded()
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)'
+              artifact: '$(TF_PLAN_ARTIFACT)'
+              publishLocation: 'pipeline'
+
+# ── Stage 2: Apply (gated by manual approval on the Environment) ─────────────
+  - stage: Apply
+    displayName: '2 · Terraform Apply'
+    dependsOn: Plan
+    condition: succeeded()
+    jobs:
+      - deployment: TerraformApply
+        displayName: 'Apply'
+        pool:
+          vmImage: 'ubuntu-latest'
+        # Manual approval is configured on the Environment in Azure DevOps.
+        # Pipelines → Environments → terraform-${{ parameters.environment }}
+        # → Approvals and checks → Approvals
+        environment: 'terraform-${{ parameters.environment }}'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: TerraformInstaller@1
+                  displayName: 'Install Terraform'
+                  inputs:
+                    terraformVersion: 'latest'
+
+                - task: DownloadSecureFile@1
+                  name: tfBackend
+                  displayName: 'Download backend config (Secure File)'
+                  inputs:
+                    secureFile: '$(TF_BACKEND_SECURE_FILE)'
+
+                # Download the artifact produced by the Plan stage
+                - task: DownloadPipelineArtifact@2
+                  displayName: 'Download Plan artifact'
+                  inputs:
+                    artifact: '$(TF_PLAN_ARTIFACT)'
+                    path: '$(Pipeline.Workspace)/tfplan'
+
+                # Summary of the approved plan in the apply log
+                - script: |
+                    echo "════════════════════════ APPROVED PLAN ═════════════════════════"
+                    cat "$(Pipeline.Workspace)/tfplan/plan.txt"
+                    echo "════════════════════════════════════════════════════════════════"
+                  displayName: 'Show approved Plan'
+
+                - script: |
+                    set -euo pipefail
+                    terraform init \
+                      -backend-config="$(tfBackend.secureFilePath)" \
+                      -reconfigure
+                  displayName: 'Terraform Init'
+                  workingDirectory: '$(TF_DIR)'
+                  env:
+                    ARM_CLIENT_ID:       $(ARM_CLIENT_ID)
+                    ARM_CLIENT_SECRET:   $(ARM_CLIENT_SECRET)
+                    ARM_TENANT_ID:       $(ARM_TENANT_ID)
+                    ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
+
+                - script: |
+                    set -euo pipefail
+                    terraform apply \
+                      -auto-approve \
+                      "$(Pipeline.Workspace)/tfplan/tfplan.binary"
+                  displayName: 'Terraform Apply'
+                  workingDirectory: '$(TF_DIR)'
+                  env:
+                    ARM_CLIENT_ID:       $(ARM_CLIENT_ID)
+                    ARM_CLIENT_SECRET:   $(ARM_CLIENT_SECRET)
+                    ARM_TENANT_ID:       $(ARM_TENANT_ID)
+                    ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
