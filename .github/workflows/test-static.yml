@@ -1,0 +1,42 @@
+name: Static Analysis
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "V3/**"
+      - "Tests/static/**"
+      - ".github/workflows/test-static.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "V3/**"
+      - "Tests/static/**"
+
+jobs:
+  static-analysis:
+    name: YAML Lint + Reference + Parameter Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: Tests/static/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r Tests/static/requirements.txt
+
+      - name: YAML Lint (V3/)
+        run: yamllint -c Tests/static/.yamllint.yaml V3/
+
+      - name: Check template references
+        run: python Tests/static/check-references.py
+
+      - name: Check parameter contracts
+        run: python Tests/static/check-parameters.py

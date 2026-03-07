@@ -1,0 +1,42 @@
+---
+extends: default
+
+rules:
+  # ADO templates usano spesso linee lunghe (versionArgs, script inline)
+  line-length:
+    max: 250
+    level: warning
+
+  # Permetti documenti multipli nello stesso file
+  document-start:
+    present: false
+
+  # Permetti commenti senza spazio se sono separatori (# ===)
+  comments:
+    min-spaces-from-content: 1
+
+  # ADO usa chiavi con caratteri speciali nei valori (es. $(...))
+  truthy:
+    allowed-values: ['true', 'false', 'on', 'off', 'yes', 'no']
+    check-keys: false
+
+  # Indentazione: 2 spazi (standard ADO)
+  indentation:
+    spaces: 2
+    indent-sequences: true
+    check-multi-line-strings: false
+
+  # Nessun trailing space
+  trailing-spaces: enable
+
+  # No tab
+  key-duplicates: enable
+
+  # Braces/brackets: permetti stile flow per oggetti semplici
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 1

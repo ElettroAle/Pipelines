@@ -1,0 +1,55 @@
+name: Script Unit Tests (Pester)
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "V3/CI/Scripts/**"
+      - "Tests/scripts/**"
+      - "Tests/fixtures/**"
+      - ".github/workflows/test-scripts.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "V3/CI/Scripts/**"
+      - "Tests/scripts/**"
+
+jobs:
+  pester:
+    name: Pester — Set-Versioning + Verify-SemVer
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure git identity (necessario per i test che creano commit)
+        run: |
+          git config --global user.email "pester@ci.local"
+          git config --global user.name "Pester CI"
+
+      - name: Install Pester 5
+        shell: pwsh
+        run: |
+          Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck -Scope CurrentUser
+
+      - name: Run Pester tests
+        shell: pwsh
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = "Tests/scripts/"
+          $config.Output.Verbosity = "Detailed"
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = "pester-results.xml"
+          $config.TestResult.OutputFormat = "JUnitXml"
+          $config.Run.Exit = $true   # exit 1 se almeno un test fallisce
+
+          Invoke-Pester -Configuration $config
+
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Pester Results
+          path: pester-results.xml
+          reporter: java-junit
