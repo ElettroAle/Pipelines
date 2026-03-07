@@ -1,0 +1,13 @@
+update readme
+aggiornamento dipendenze npm
+chore: aggiorna versione Node
+refactor: rinomina variabile interna
+docs: aggiorna documentazione parametri
+style: formattazione codice
+test: aggiunge unit test
+ci: modifica workflow GitHub Actions
+hotfix: patch critica produzione
+merge branch 'feature/xyz' into main
+WIP: lavori in corso
+Corregge bug nel calcolo SemVer
+FEAT: nuova funzionalità (uppercase non valido)

@@ -1,0 +1,10 @@
+fix: correggi calcolo versione patch
+feat: aggiungi supporto Angular 19
+feat!: rimuovi parametro deprecato targetRuntime
+fix: gestisci caso nessun tag git trovato
+feat: aggiunge pipeline TrunkFlow per Angular
+fix: corregge path relativo in deploy-angular-staticWebApp
+feat!: BREAKING CHANGE cambia struttura parametri dotnet-publish
+feat: aggiunge step quality per Angular
+fix: corregge indentazione YAML in terraform-apply
+feat: aggiunge supporto .NET 12
