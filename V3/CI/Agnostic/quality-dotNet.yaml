@@ -1,9 +1,10 @@
-# ── CI GitFlow: Quality DotNet ─────────────────────────────────────────────────
+# ── CI Agnostic: Quality DotNet ────────────────────────────────────────────────
 #
-# Template di Quality gate per progetti .NET con governance GitFlow.
+# Template di Quality gate per progetti .NET, agnostico rispetto al workflow Git.
+# Non include validazione SemVer né versionamento.
 #
-# Rispetto alla versione agnostica (CI/Agnostic/quality-dotNet.yaml), aggiunge:
-#   - Validazione titolo PR (Conventional Commits / SemVer) verso branch protetti
+# Può essere precursore di GitFlow/quality-dotNet.yaml, che aggiunge
+# la validazione del titolo PR (Conventional Commits).
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -24,8 +25,7 @@ variables:
   - group: "common-quality"
 
 stages:
-  - template: ./Modules/quality.yaml
+  - template: ../Common/quality.yaml
     parameters:
-      projectName: ${{ parameters.projectName }}
       buildAndTestSteps:
         - template: ../Common/Steps/dotnet-quality.yaml

@@ -49,46 +49,10 @@ stages:
     parameters:
       projectName: ${{ parameters.projectName }}
       buildSteps:
-        - task: UseDotNet@2
-          displayName: 'Install .NET SDK'
-          inputs:
-            version: $(dotnetVersion)
-
-        - task: DotNetCoreCLI@2
-          displayName: 'DotNet Build'
-          inputs:
-            command: 'build'
-            projects: '$(publishProject)'
-            arguments: '--configuration $(buildConfiguration)'
+        - template: ../Common/Steps/dotnet-build.yaml
 
       publishSteps:
-        - task: FileTransform@2
-          displayName: 'JSON Variable Substitution'
-          inputs:
-            folderPath: '$(Build.SourcesDirectory)/${{ parameters.projectName }}/${{ parameters.projectName }}'
-            jsonTargetFiles: '**/appsettings.$(targetEnvironment).json'
-
-        - task: DotNetCoreCLI@2
-          displayName: 'DotNet Publish'
-          inputs:
-            command: 'publish'
-            projects: '$(publishProject)'
-            arguments: >
-              --configuration $(buildConfiguration)
-              /p:RuntimeIdentifier=$(targetRuntime)
-              /p:SelfContained=$(selfContained)
-              /p:EnvironmentName=$(targetEnvironment)
-              /p:Version=$(currentTag)
-              /p:AssemblyVersion=$(currentTag)
-              /p:FileVersion=$(currentTag)
-              /p:InformationalVersion="$(currentTag)-$(gitHash)"
-              --output $(outputDirectory)
-            modifyOutputPath: false
-            zipAfterPublish: true
-
-        - script: |
-            if grep -q "__ENVIRONMENT_REQUIRED__" $(outputDirectory)/web.config; then
-              echo "##[error]XDT Transformation failed."
-              exit 1
-            fi
-          displayName: 'Verify XDT'
+        - template: ../Common/Steps/dotnet-publish.yaml
+          parameters:
+            projectName: ${{ parameters.projectName }}
+            versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(currentTag) /p:FileVersion=$(currentTag) /p:InformationalVersion="$(currentTag)-$(gitHash)"'

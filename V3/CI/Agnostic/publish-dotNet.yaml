@@ -1,0 +1,53 @@
+# ── CI Agnostic: Publish DotNet ────────────────────────────────────────────────
+#
+# Template di Build e Publish per progetti .NET, agnostico rispetto al workflow Git.
+# Non include versionamento semantico né tagging Git.
+#
+# Può essere precursore di GitFlow/publish-dotNet.yaml, che aggiunge
+# Set-Versioning, tagging Git e branch-conditional variable groups.
+#
+# Parametri
+# ─────────
+#   projectName       → nome del repo (usato per checkout path e artifact naming)
+#   targetEnvironment → ambiente target (es. Development, Staging, Production)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: projectName
+    type: string
+    default: '$(Build.Repository.Name)'
+
+  - name: targetEnvironment
+    type: string
+    default: 'Development'
+
+variables:
+  - name: publishProject
+    value: '${{ parameters.projectName }}/${{ parameters.projectName }}.csproj'
+  - name: outputDirectory
+    value: '$(Build.ArtifactStagingDirectory)/publish'
+  - name: dotnetVersion
+    value: '10.0.x'
+  - name: buildConfiguration
+    value: 'Release'
+  - name: targetRuntime
+    value: 'win-x64'
+  - name: selfContained
+    value: 'true'
+  - name: targetEnvironment
+    value: '${{ parameters.targetEnvironment }}'
+
+stages:
+  - template: ../Common/publish.yaml
+    parameters:
+      projectName: ${{ parameters.projectName }}
+      artifactName: '${{ parameters.projectName }}-${{ parameters.targetEnvironment }}'
+      buildSteps:
+        - template: ../Common/Steps/dotnet-build.yaml
+
+      publishSteps:
+        - template: ../Common/Steps/dotnet-publish.yaml
+          parameters:
+            projectName: ${{ parameters.projectName }}
+            targetEnvironment: '${{ parameters.targetEnvironment }}'

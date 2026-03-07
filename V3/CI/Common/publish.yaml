@@ -1,6 +1,6 @@
-# ── CI Module: Publish (agnostico) ────────────────────────────────────────────
+# ── CI Common: Publish (agnostico) ────────────────────────────────────────────
 #
-# Template riusabile per Build e Publish, agnostico rispetto al workflow Git.
+# Orchestratore riusabile per Build e Publish, agnostico rispetto al workflow Git.
 #
 # Differenze rispetto a GitFlow/Modules/publish.yaml:
 #   - Nessun Set-Versioning (nessun tag Git, nessun calcolo SemVer)

@@ -1,0 +1,45 @@
+# ── CI Step: DotNet Build ──────────────────────────────────────────────────────
+#
+# Step template condiviso per la fase di build di progetti .NET.
+#
+# Riusato da:
+#   CI/Agnostic/publish-dotNet.yaml
+#   CI/GitFlow/publish-dotNet.yaml
+#   CI/TrunkFlow/publish-dotNet.yaml
+#   CD/TrunkFlow/promote-azure-appService.yaml
+#
+# Parametri
+# ─────────
+#   dotnetVersion      → versione SDK .NET      (default: variabile $(dotnetVersion))
+#   publishProject     → path del .csproj        (default: variabile $(publishProject))
+#   buildConfiguration → configurazione build    (default: variabile $(buildConfiguration))
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: dotnetVersion
+    type: string
+    default: '$(dotnetVersion)'
+
+  - name: publishProject
+    type: string
+    default: '$(publishProject)'
+
+  - name: buildConfiguration
+    type: string
+    default: '$(buildConfiguration)'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: UseDotNet@2
+    displayName: 'Install .NET SDK'
+    inputs:
+      version: ${{ parameters.dotnetVersion }}
+
+  - task: DotNetCoreCLI@2
+    displayName: 'DotNet Build'
+    inputs:
+      command: 'build'
+      projects: '${{ parameters.publishProject }}'
+      arguments: '--configuration ${{ parameters.buildConfiguration }}'

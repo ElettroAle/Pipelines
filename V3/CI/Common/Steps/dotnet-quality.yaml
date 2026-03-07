@@ -1,0 +1,76 @@
+# ── CI Step: DotNet Quality ────────────────────────────────────────────────────
+#
+# Step template condiviso per la fase di quality gate di progetti .NET.
+# Contiene: NuGet vulnerability check, Restore, Build, Test, Code Coverage.
+#
+# Riusato da:
+#   CI/Agnostic/quality-dotNet.yaml
+#   CI/GitFlow/quality-dotNet.yaml
+#
+# Parametri
+# ─────────
+#   dotnetVersion      → versione SDK .NET      (default: variabile $(dotnetVersion))
+#   buildConfiguration → configurazione build    (default: variabile $(buildConfiguration))
+#   buildProjects      → glob pattern .csproj    (default: variabile $(buildProjects))
+#   testProjects       → glob pattern test proj  (default: variabile $(testProjects))
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: dotnetVersion
+    type: string
+    default: '$(dotnetVersion)'
+
+  - name: buildConfiguration
+    type: string
+    default: '$(buildConfiguration)'
+
+  - name: buildProjects
+    type: string
+    default: '$(buildProjects)'
+
+  - name: testProjects
+    type: string
+    default: '$(testProjects)'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: UseDotNet@2
+    displayName: 'Install .NET SDK'
+    inputs:
+      version: ${{ parameters.dotnetVersion }}
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Check NuGet Vulnerabilities'
+    inputs:
+      command: 'custom'
+      custom: 'list'
+      arguments: 'package --vulnerable --include-transitive'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Restore'
+    inputs:
+      command: 'restore'
+      projects: '${{ parameters.buildProjects }}'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Build'
+    inputs:
+      command: 'build'
+      projects: '${{ parameters.buildProjects }}'
+      arguments: '--configuration ${{ parameters.buildConfiguration }} --no-restore'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Test'
+    inputs:
+      command: 'test'
+      projects: '${{ parameters.testProjects }}'
+      arguments: '--configuration ${{ parameters.buildConfiguration }} --no-build --no-restore --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura'
+
+  - task: PublishCodeCoverageResults@2
+    displayName: 'Publish Code Coverage'
+    inputs:
+      codeCoverageTool: 'Cobertura'
+      summaryFileLocation: '$(Agent.TempDirectory)/**/coverage.cobertura.xml'
+      additionalCodeCoverageFiles: '$(Agent.TempDirectory)/**/coverage.opencover.xml'

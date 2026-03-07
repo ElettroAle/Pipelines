@@ -1,9 +1,10 @@
-# ── CI GitFlow: Quality Angular ────────────────────────────────────────────────
+# ── CI Agnostic: Quality Angular ───────────────────────────────────────────────
 #
-# Template di Quality gate per progetti Angular con governance GitFlow.
+# Template di Quality gate per progetti Angular, agnostico rispetto al workflow Git.
+# Non include validazione SemVer né versionamento.
 #
-# Rispetto alla versione agnostica (CI/Agnostic/quality-angular.yaml), aggiunge:
-#   - Validazione titolo PR (Conventional Commits / SemVer) verso branch protetti
+# Può essere precursore di GitFlow/quality-angular.yaml, che aggiunge
+# la validazione del titolo PR (Conventional Commits).
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -18,8 +19,7 @@ variables:
   - group: "common-quality"
 
 stages:
-  - template: ./Modules/quality.yaml
+  - template: ../Common/quality.yaml
     parameters:
-      projectName: ${{ parameters.projectName }}
       buildAndTestSteps:
         - template: ../Common/Steps/angular-quality.yaml

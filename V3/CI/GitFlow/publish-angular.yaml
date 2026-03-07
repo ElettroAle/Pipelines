@@ -1,8 +1,8 @@
-# ── CI: Publish Angular (GitFlow) ─────────────────────────────────────────────
+# ── CI GitFlow: Publish Angular ────────────────────────────────────────────────
 #
 # Template di Build e Publish per progetti Angular con governance GitFlow.
 #
-# Rispetto alla versione agnostica (CI/publish-angular.yaml), aggiunge:
+# Rispetto alla versione agnostica (CI/Agnostic/publish-angular.yaml), aggiunge:
 #   - Set-Versioning: calcolo SemVer da commit e tagging Git
 #   - Branch-conditional variable groups (dev/staging/main/feature)
 #
@@ -54,37 +54,9 @@ stages:
     parameters:
       projectName: ${{ parameters.projectName }}
       buildSteps:
-        - task: NodeTool@0
-          displayName: 'Install Node.js'
-          inputs:
-            versionSpec: $(nodeVersion)
-
-        - script: npm ci
-          displayName: 'Install Dependencies'
-          workingDirectory: $(Build.SourcesDirectory)
-
-        - script: npx ng build --configuration=$(buildConfiguration)
-          displayName: 'Angular Build'
-          workingDirectory: $(Build.SourcesDirectory)
+        - template: ../Common/Steps/angular-build.yaml
 
       publishSteps:
-        - task: NodeTool@0
-          displayName: 'Install Node.js'
-          inputs:
-            versionSpec: $(nodeVersion)
-
-        - script: npm ci
-          displayName: 'Install Dependencies'
-          workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}
-
-        - script: npx ng build --configuration=$(buildConfiguration)
-          displayName: 'Angular Build'
-          workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}
-
-        - script: |
-            mkdir -p '$(outputDirectory)'
-            REAL_OUTPUT=$(find dist -name "index.html" -exec dirname {} \; | head -n 1)
-            echo "Copia dei file da $REAL_OUTPUT a $(outputDirectory)"
-            cp -r $REAL_OUTPUT/. '$(outputDirectory)/'
-          displayName: 'Copy dist to Artifact Staging'
-          workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}
+        - template: ../Common/Steps/angular-publish.yaml
+          parameters:
+            projectName: ${{ parameters.projectName }}

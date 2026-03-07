@@ -1,6 +1,6 @@
-# ── CI Module: Quality (agnostico) ────────────────────────────────────────────
+# ── CI Common: Quality (agnostico) ────────────────────────────────────────────
 #
-# Template riusabile per la Quality gate, agnostico rispetto al workflow Git.
+# Orchestratore riusabile per la Quality gate, agnostico rispetto al workflow Git.
 #
 # Differenze rispetto a GitFlow/Modules/quality.yaml:
 #   - Nessuna validazione del titolo PR (Conventional Commits / SemVer)
