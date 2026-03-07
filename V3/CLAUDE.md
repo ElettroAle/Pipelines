@@ -92,6 +92,46 @@ Gli orchestratori (`GitFlow/Modules/`, `TrunkFlow/Modules/`) **non referenziano 
 
 ---
 
+## Test prima di ogni PR
+
+Prima di aprire una PR esegui sempre i due livelli di test dalla root del repo.
+
+### Livello 1 — Static Analysis (Python)
+
+```bash
+pip install -r Tests/static/requirements.txt
+yamllint -c Tests/static/.yamllint.yaml V3/
+python Tests/static/check-references.py
+python Tests/static/check-parameters.py
+```
+
+Cosa intercetta:
+- YAML malformato, tab, trailing spaces
+- `template: path/che/non/esiste.yaml`
+- Parametri passati a un template che non li dichiara (typo, rename)
+
+### Livello 2 — Script Unit Tests (Pester)
+
+Eseguire solo se hai modificato `CI/Scripts/`:
+
+```powershell
+Invoke-Pester Tests/scripts/ -Output Detailed
+```
+
+I test usano un **bare repo locale** come fake remote, quindi non richiedono accesso di rete.
+
+### Quando eseguire cosa
+
+| Hai modificato | Esegui |
+|---|---|
+| Qualsiasi file in `V3/` | Livello 1 |
+| `CI/Scripts/Set-Versioning.ps1` | Livello 1 + Livello 2 (`Set-Versioning.Tests.ps1`) |
+| `CI/Scripts/Verify-SemVer.ps1` | Livello 1 + Livello 2 (`Verify-SemVer.Tests.ps1`) |
+
+I workflow GitHub Actions replicano questi stessi check automaticamente su ogni push.
+
+---
+
 ## Aggiungere uno Step Template
 
 1. Creare il file in `CI/Common/Steps/{tech}-{azione}.yaml`.
@@ -99,6 +139,7 @@ Gli orchestratori (`GitFlow/Modules/`, `TrunkFlow/Modules/`) **non referenziano 
 3. Documentare il parametro nel header del file con la sezione `# Riusato da:`.
 4. Aggiornare tutti gli entry point che ne hanno bisogno per referenziarlo.
 5. Aggiornare il `README.md` con la tabella parametri.
+6. Verificare che `python Tests/static/check-references.py` e `check-parameters.py` passino senza errori.
 
 ---
 

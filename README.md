@@ -160,6 +160,43 @@ extends:
 
 ---
 
+## Test Suite
+
+La libreria include una suite di test a 2 livelli che gira su GitHub Actions senza richiedere Azure DevOps.
+
+| Livello | Tool | Cosa verifica |
+|---|---|---|
+| 1 — Static Analysis | Python (`yamllint`, script custom) | Sintassi YAML, riferimenti a template esistenti, contratti parametri |
+| 2 — Script Unit Tests | PowerShell Pester 5 | Logica di `Set-Versioning.ps1` e `Verify-SemVer.ps1` |
+
+### Esecuzione locale
+
+```bash
+# Livello 1 — da root del repo
+pip install -r Tests/static/requirements.txt
+yamllint -c Tests/static/.yamllint.yaml V3/
+python Tests/static/check-references.py
+python Tests/static/check-parameters.py
+```
+
+```powershell
+# Livello 2 — da root del repo
+Invoke-Pester Tests/scripts/ -Output Detailed
+```
+
+### GitHub Actions
+
+I workflow si attivano automaticamente su ogni push e su ogni PR verso `main`, **solo se i file modificati ricadono nei path monitorati**:
+
+| Workflow | Trigger (path) |
+|---|---|
+| `test-static.yml` | `V3/**`, `Tests/static/**` |
+| `test-scripts.yml` | `V3/CI/Scripts/**`, `Tests/scripts/**` |
+
+Documentazione completa: [`Tests/README.md`](Tests/README.md)
+
+---
+
 ## Script condivisi (V3)
 
 | Script | Scopo |
