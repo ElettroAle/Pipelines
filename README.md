@@ -1,20 +1,180 @@
-# CI/CD Pipeline Modules for Azure DevOps 
-This repo has the goal to collect some yaml modules & templates for Azure DevOps, with the goal of reducing code duplication and helping to fasten the buid process of your CI/CD pipelines.
+# Azure DevOps Pipeline Templates
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+Raccolta di template YAML riusabili per Azure DevOps. L'obiettivo è ridurre la
+duplicazione nei file di pipeline dei repository applicativi, esponendo moduli
+componibili e utility di alto livello pronte all'uso.
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+---
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+## Struttura del repository
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+```
+Pipelines/
+├── V1/   ← Prima generazione (legacy, non modificare)
+├── V2/   ← Seconda generazione (legacy, non modificare)
+└── V3/   ← Versione corrente
+    ├── CI/
+    │   ├── Scripts/                    Powershell condivisi (SemVer, versioning)
+    │   ├── Modules/                    Moduli atomici agnostici (stages/jobs)
+    │   ├── quality-dotNet.yaml         Quality gate agnostica — .NET
+    │   ├── quality-angular.yaml        Quality gate agnostica — Angular
+    │   ├── publish-dotNet.yaml         Build & Publish agnostico — .NET
+    │   ├── publish-angular.yaml        Build & Publish agnostico — Angular
+    │   └── GitFlow/
+    │       ├── Modules/                Moduli atomici con governance GitFlow
+    │       ├── quality-dotNet.yaml     Quality gate GitFlow — .NET
+    │       ├── quality-angular.yaml    Quality gate GitFlow — Angular
+    │       ├── publish-dotNet.yaml     Build & Publish GitFlow — .NET
+    │       └── publish-angular.yaml    Build & Publish GitFlow — Angular
+    ├── CD/
+    │   ├── deploy-azure-appService.yaml
+    │   └── deploy-angular-staticWebApp.yaml
+    └── IAC/
+        ├── terraform-plan.yaml         Build validation su PR
+        ├── terraform-apply.yaml        Apply automatico su merge a main
+        └── terraform-deploy.yaml       ⚠ Deprecato — usa plan + apply separati
+```
+
+---
+
+## Versioni
+
+### V1 — Prima generazione (legacy)
+
+Template monolitici per build, test e publish su .NET 6/8, Maven, Node.js, UWP,
+Xcode. Include moduli per Docker, Helm e NuGet.
+
+**Non estendere.** Mantenuto solo per retrocompatibilità con pipeline esistenti.
+
+---
+
+### V2 — Seconda generazione (legacy)
+
+Refactoring di V1 con supporto a .NET 8/10 e Angular 18+. Introduce la
+separazione tra `buildAndTest` e `buildAndPublish`.
+
+**Non estendere.** Mantenuto solo per retrocompatibilità con pipeline esistenti.
+
+---
+
+### V3 — Versione corrente
+
+Architettura a tre livelli con due famiglie di template CI distinte.
+
+#### Livelli
+
+| Livello | Cartella | Scopo |
+|---|---|---|
+| 0 — Atomico | `CI/Modules/`, `CI/GitFlow/Modules/` | Singoli stages/jobs, non usati direttamente dai repo |
+| 1 — Utility | `CI/*.yaml`, `CI/GitFlow/*.yaml` | Template pronti all'uso, referenziati dai repo applicativi |
+
+#### Famiglie CI
+
+**Agnostica** (`CI/`) — usabile con qualsiasi Git workflow (trunk-based, feature
+branch, ecc.). Non include validazione SemVer né tagging Git.
+
+**GitFlow** (`CI/GitFlow/`) — estende la logica agnostica aggiungendo:
+- Validazione titolo PR su branch protetti (`main`, `staging`) tramite Conventional Commits
+- Calcolo automatico della versione SemVer da commit history e tagging Git
+- Branch-conditional variable groups (`dev` → development, `staging` → staging, `main` → production)
+
+I template agnostici sono i **precursori** concettuali di quelli GitFlow: entrambi
+sono standalone e indipendenti, entrambi referenziano gli stessi moduli atomici.
+
+---
+
+## Come usare i template
+
+I template V3 vanno referenziati dal repository applicativo tramite `extends:`.
+
+### Esempio — Quality gate GitFlow su .NET
+
+```yaml
+# Nel repo applicativo: azure-pipelines-ci.yaml
+trigger:
+  branches:
+    include: [ dev, staging, main, feature/* ]
+
+pr:
+  branches:
+    include: [ dev, staging, main ]
+
+resources:
+  repositories:
+    - repository: infra
+      type: git
+      name: Demetra/DPS.Demetra.Infrastructure
+
+extends:
+  template: pipelines/V3/CI/GitFlow/quality-dotNet.yaml@infra
+  parameters:
+    projectName: 'MyApp'
+```
+
+### Esempio — Publish agnostico su Angular
+
+```yaml
+# Nel repo applicativo: azure-pipelines-ci.yaml
+trigger:
+  branches:
+    include: [ main ]
+
+resources:
+  repositories:
+    - repository: infra
+      type: git
+      name: Demetra/DPS.Demetra.Infrastructure
+
+extends:
+  template: pipelines/V3/CI/publish-angular.yaml@infra
+  parameters:
+    projectName: 'MyAngularApp'
+    targetEnvironment: 'Production'
+    buildConfiguration: 'production'
+```
+
+### Esempio — Deploy su App Service
+
+```yaml
+# Nel repo applicativo: azure-pipelines-cd.yaml
+resources:
+  repositories:
+    - repository: infra
+      type: git
+      name: Demetra/DPS.Demetra.Infrastructure
+  pipelines:
+    - pipeline: ci_be
+      source: 'MyApp - CI'
+      trigger:
+        branches: [ main ]
+
+extends:
+  template: pipelines/V3/CD/deploy-azure-appService.yaml@infra
+  parameters:
+    projectName: 'MyApp'
+    azureServiceConnection: 'my-azure-sc'
+    targetEnvironment: 'Production'
+    webAppName: 'app-myapp-be-prod'
+    ciPipelineResourceAlias: 'ci_be'
+```
+
+---
+
+## Script condivisi (V3)
+
+| Script | Scopo |
+|---|---|
+| `CI/Scripts/Verify-SemVer.ps1` | Verifica che l'ultimo commit rispetti Conventional Commits verso branch protetti |
+| `CI/Scripts/Set-Versioning.ps1` | Calcola la versione SemVer da commit history, crea il tag Git e setta le variabili ADO (`currentTag`, `gitHash`, `computedArtifactName`) |
+
+---
+
+## Variable Groups richiesti (V3 GitFlow)
+
+| Group | Usato da | Variabili attese |
+|---|---|---|
+| `common-quality` | quality-* | (libero — configurazione comune quality) |
+| `development` | publish-* (branch `dev`) | `targetEnvironment` |
+| `staging` | publish-* (branch `staging`) | `targetEnvironment` |
+| `production` | publish-* (branch `main`) | `targetEnvironment` |
+| `terraform-common` | IAC/terraform-* | `azureServiceConnection` |
