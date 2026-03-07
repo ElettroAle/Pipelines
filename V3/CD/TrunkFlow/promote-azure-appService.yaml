@@ -1,0 +1,152 @@
+# ── CD: Promote TrunkFlow → Azure App Service ─────────────────────────────────
+#
+# Template di Promote per progetti .NET su Azure App Service (Windows)
+# con governance TrunkFlow.
+#
+# Flusso
+# ──────
+#   StagingPromotion → Verify-SemVer → Set-Versioning → Build → Publish (versionato)
+#                   → Upload artifact staging → Deploy staging
+#   ProdPromotion   → Download artifact staging → Deploy production (no rebuild)
+#
+# Utilizzo nel repo applicativo
+# ─────────────────────────────
+#   Il file di raccordo nel repo applicativo deve:
+#     1. Definire trigger: none (il promote è sempre manuale)
+#     2. Includere questo template con `template:`
+#     3. Passare i parametri obbligatori
+#
+#   Esempio raccordo (nel repo applicativo):
+#
+#     trigger: none
+#     pr: none
+#
+#     resources:
+#       repositories:
+#         - repository: infrastructure
+#           type: git
+#           name: Demetra/DPS.Demetra.Infrastructure
+#
+#     extends:
+#       template: pipelines/V3/CD/TrunkFlow/promote-azure-appService.yaml@infrastructure
+#       parameters:
+#         projectName: 'DPS.Demetra.BackEnd'
+#         azureServiceConnection: 'sc-arm-demetra'
+#         stagingWebAppName: 'app-demetra-be-staging'
+#         prodWebAppName: 'app-demetra-be-prod'
+#
+# Parametri richiesti
+# ───────────────────
+#   projectName            → nome del repo (checkout path e artifact naming)
+#   azureServiceConnection → nome della service connection ARM in Azure DevOps
+#   stagingWebAppName      → nome completo Azure App Service di staging
+#   prodWebAppName         → nome completo Azure App Service di production
+#
+# Parametri opzionali
+# ───────────────────
+#   stagingEnvironment     → nome ADO environment per staging (default: 'Staging')
+#   prodEnvironment        → nome ADO environment per production (default: 'Production')
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: projectName
+    displayName: 'Nome progetto (es. DPS.Demetra.BackEnd)'
+    type: string
+    default: '$(Build.Repository.Name)'
+
+  - name: azureServiceConnection
+    displayName: 'Nome della service connection ARM in Azure DevOps'
+    type: string
+
+  - name: stagingWebAppName
+    displayName: 'Nome completo App Service di staging'
+    type: string
+
+  - name: prodWebAppName
+    displayName: 'Nome completo App Service di production'
+    type: string
+
+  - name: stagingEnvironment
+    displayName: 'Nome ADO environment per staging'
+    type: string
+    default: 'Staging'
+
+  - name: prodEnvironment
+    displayName: 'Nome ADO environment per production'
+    type: string
+    default: 'Production'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+variables:
+  - name: publishProject
+    value: '${{ parameters.projectName }}/${{ parameters.projectName }}.csproj'
+  - name: outputDirectory
+    value: '$(Build.ArtifactStagingDirectory)/publish'
+  - name: dotnetVersion
+    value: '10.0.x'
+  - name: buildConfiguration
+    value: 'Release'
+  - name: targetRuntime
+    value: 'win-x64'
+  - name: selfContained
+    value: 'true'
+  - group: "staging"
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+stages:
+  - template: ./Modules/promote.yaml
+    parameters:
+      projectName: ${{ parameters.projectName }}
+      azureServiceConnection: ${{ parameters.azureServiceConnection }}
+      stagingWebAppName: ${{ parameters.stagingWebAppName }}
+      prodWebAppName: ${{ parameters.prodWebAppName }}
+      stagingEnvironment: ${{ parameters.stagingEnvironment }}
+      prodEnvironment: ${{ parameters.prodEnvironment }}
+
+      buildSteps:
+        - task: UseDotNet@2
+          displayName: 'Install .NET SDK'
+          inputs:
+            version: $(dotnetVersion)
+
+        - task: DotNetCoreCLI@2
+          displayName: 'DotNet Build'
+          inputs:
+            command: 'build'
+            projects: '$(publishProject)'
+            arguments: '--configuration $(buildConfiguration)'
+
+      publishSteps:
+        - task: FileTransform@2
+          displayName: 'JSON Variable Substitution'
+          inputs:
+            folderPath: '$(Build.SourcesDirectory)/${{ parameters.projectName }}/${{ parameters.projectName }}'
+            jsonTargetFiles: '**/appsettings.${{ parameters.stagingEnvironment }}.json'
+
+        - task: DotNetCoreCLI@2
+          displayName: 'DotNet Publish'
+          inputs:
+            command: 'publish'
+            projects: '$(publishProject)'
+            arguments: >
+              --configuration $(buildConfiguration)
+              /p:RuntimeIdentifier=$(targetRuntime)
+              /p:SelfContained=$(selfContained)
+              /p:EnvironmentName=${{ parameters.stagingEnvironment }}
+              /p:Version=$(currentTag)
+              /p:AssemblyVersion=$(currentTag)
+              /p:FileVersion=$(currentTag)
+              /p:InformationalVersion="$(currentTag)-$(gitHash)"
+              --output $(outputDirectory)
+            modifyOutputPath: false
+            zipAfterPublish: true
+
+        - script: |
+            if grep -q "__ENVIRONMENT_REQUIRED__" $(outputDirectory)/web.config; then
+              echo "##[error]XDT Transformation failed."
+              exit 1
+            fi
+          displayName: 'Verify XDT'
