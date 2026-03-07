@@ -1,0 +1,29 @@
+# ── Preview test pipeline: quality-dotNet (GitFlow) ───────────────────────────
+#
+# Usato con: az pipelines run --preview
+#
+# Scopo: verificare che il template V3/CI/GitFlow/quality-dotNet.yaml si espanda
+# correttamente senza errori di sintassi ADO, variabili non risolte o parametri
+# obbligatori mancanti.
+#
+# Prerequisiti:
+#   - Pipeline registrata in ADO: "Pipelines - Preview quality-dotNet"
+#   - Il repo ADO deve avere accesso al repo infra via resource alias 'self'
+#
+# Esecuzione:
+#   az pipelines run --name "Pipelines - Preview quality-dotNet" --preview
+# ──────────────────────────────────────────────────────────────────────────────
+
+trigger: none
+pr: none
+
+resources:
+  repositories:
+    - repository: self
+      type: git
+      name: Demetra/DPS.Demetra.Infrastructure
+
+extends:
+  template: V3/CI/GitFlow/quality-dotNet.yaml@self
+  parameters:
+    projectName: 'PreviewTest'

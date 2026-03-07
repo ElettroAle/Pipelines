@@ -322,3 +322,46 @@ Describe "Verify-SemVer — ADDITIONAL_TAG_BRANCHES" {
         $result.ExitCode | Should -Be 0
     }
 }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SUITE 4: Data-driven da fixtures/valid-commits.txt e invalid-commits.txt
+# ─────────────────────────────────────────────────────────────────────────────
+
+Describe "Verify-SemVer — Fixture: commit validi su main" {
+
+    BeforeDiscovery {
+        $lines = Get-Content "$PSScriptRoot/../fixtures/valid-commits.txt" -ErrorAction Stop
+        $script:ValidCases = $lines |
+            Where-Object { $_ -match '\S' } |
+            ForEach-Object { @{ Msg = $_.Trim() } }
+    }
+
+    It "PASS su main: '<Msg>'" -TestCases $script:ValidCases {
+        param([string]$Msg)
+        $repo = New-TempGitRepo -CommitMessage $Msg
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+    }
+}
+
+Describe "Verify-SemVer — Fixture: commit non validi su main" {
+
+    BeforeDiscovery {
+        $lines = Get-Content "$PSScriptRoot/../fixtures/invalid-commits.txt" -ErrorAction Stop
+        $script:InvalidCases = $lines |
+            Where-Object { $_ -match '\S' } |
+            ForEach-Object { @{ Msg = $_.Trim() } }
+    }
+
+    It "FAIL su main: '<Msg>'" -TestCases $script:InvalidCases {
+        param([string]$Msg)
+        $repo = New-TempGitRepo -CommitMessage $Msg
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 1
+    }
+}

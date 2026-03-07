@@ -13,13 +13,16 @@ Tests/
 │   ├── .yamllint.yaml          # Config yamllint
 │   ├── requirements.txt        # Dipendenze Python
 │   ├── check-references.py     # Verifica che ogni template: esista su disco
-│   └── check-parameters.py     # Verifica contratti parametri tra template
+│   └── check-parameters.py     # Verifica contratti parametri (unknown + required)
 ├── scripts/                    # Livello 2: unit test PowerShell (Pester)
 │   ├── Set-Versioning.Tests.ps1
 │   └── Verify-SemVer.Tests.ps1
-└── fixtures/
-    ├── valid-commits.txt       # Messaggi commit validi (Conventional Commits)
-    └── invalid-commits.txt     # Messaggi commit non validi
+├── fixtures/
+│   ├── valid-commits.txt       # Messaggi commit validi — usati da Verify-SemVer.Tests
+│   └── invalid-commits.txt     # Messaggi commit non validi — usati da Verify-SemVer.Tests
+└── preview/                    # Livello 3: pipeline ADO per az pipelines run --preview
+    ├── quality-dotNet.yaml
+    └── publish-dotNet.yaml
 ```
 
 ---
@@ -105,6 +108,7 @@ I workflow si attivano automaticamente su ogni PR verso `main` e su ogni push.
 |---|---|---|
 | Static Analysis | `.github/workflows/test-static.yml` | modifiche in `V3/**` o `Tests/static/**` |
 | Script Unit Tests | `.github/workflows/test-scripts.yml` | modifiche in `V3/CI/Scripts/**` o `Tests/scripts/**` |
+| Template Expansion Preview | `.github/workflows/test-preview.yml` | `workflow_dispatch` (da abilitare, vedi Livello 3) |
 
 I risultati Pester vengono pubblicati come report JUnit nella tab "Checks" di GitHub.
 
@@ -112,12 +116,46 @@ I risultati Pester vengono pubblicati come report JUnit nella tab "Checks" di Gi
 
 ## Livello 3 — Template Expansion Preview (richiede Azure DevOps)
 
-> Da configurare separatamente in Azure DevOps.
-
 Usa `az pipelines run --preview` per espandere i template fully-resolved senza eseguirli.
-I file di test pipeline ADO sono in `Tests/preview/` (da creare quando si configura ADO).
-
-Questo livello cattura errori che la static analysis non può vedere:
+Cattura errori che la static analysis non può vedere:
 - Variabili ADO non risolte a runtime
 - Condizioni `${{ if }}` con parametri mancanti
 - Step template con parametri obbligatori non soddisfatti dalla pipeline host
+
+I file di test pipeline ADO sono in `Tests/preview/`.
+
+### Setup (una tantum)
+
+**1. Registrare le pipeline in Azure DevOps**
+
+Creare due pipeline in ADO puntando ai file di questo repo:
+
+| Nome pipeline ADO | File |
+|---|---|
+| `Pipelines - Preview quality-dotNet` | `Tests/preview/quality-dotNet.yaml` |
+| `Pipelines - Preview publish-dotNet` | `Tests/preview/publish-dotNet.yaml` |
+
+**2. Aggiungere secret e variabili in GitHub**
+
+In `Settings → Secrets and variables → Actions`:
+
+| Tipo | Nome | Valore |
+|---|---|---|
+| Secret | `AZURE_DEVOPS_PAT` | PAT con scope *Build (Read & Execute)* |
+| Variable | `AZURE_DEVOPS_ORG` | `https://dev.azure.com/NomeOrg` |
+| Variable | `AZURE_DEVOPS_PROJECT` | Nome progetto ADO |
+
+**3. Abilitare il workflow**
+
+Aprire `.github/workflows/test-preview.yml` e decommentare il blocco `push` / `pull_request`.
+
+### Esecuzione manuale
+
+```bash
+# Prerequisito: az CLI + estensione devops installati localmente
+export AZURE_DEVOPS_EXT_PAT=<il_tuo_pat>
+az devops configure --defaults organization=https://dev.azure.com/NomeOrg project=NomeProgetto
+
+az pipelines run --name "Pipelines - Preview quality-dotNet" --preview
+az pipelines run --name "Pipelines - Preview publish-dotNet" --preview
+```

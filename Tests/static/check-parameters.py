@@ -3,14 +3,14 @@
 check-parameters.py
 
 Verifica i contratti parametri tra file YAML nella libreria V3:
-per ogni coppia (template: X, parameters: {...}), controlla che tutti
-i nomi di parametro passati esistano nella definizione del template X.
+per ogni coppia (template: X, parameters: {...}), controlla che:
+  1. Tutti i nomi di parametro PASSATI esistano nella definizione di X (nessun typo)
+  2. Tutti i parametri OBBLIGATORI di X (senza 'default:') siano passati dal caller
 
 Regole:
 - Scansiona solo V3/ (V1, V2, Test, Tests esclusi)
 - Ignora riferimenti con '@repoAlias' (template da repo esterni)
-- I parametri passati devono essere un sottoinsieme di quelli definiti in X
-- Exit 1 se almeno un parametro sconosciuto viene passato
+- Exit 1 se almeno un errore viene rilevato
 """
 
 import sys
@@ -30,33 +30,58 @@ def read_file(path: Path) -> str | None:
         return None
 
 
-def extract_defined_params(content: str) -> set[str]:
+def extract_defined_params(content: str) -> tuple[set[str], set[str]]:
     """
-    Estrae i nomi dei parametri definiti nella sezione top-level 'parameters:'
-    di un template (la lista di definizioni, non i blocchi parameters passati).
+    Estrae i parametri dalla sezione top-level 'parameters:' di un template.
 
-    Cerca il pattern:
-        parameters:
-          - name: nomeparam
+    Ritorna (all_params, required_params):
+    - all_params     : tutti i nomi definiti
+    - required_params: nomi privi di 'default:' nel loro blocco (parametri obbligatori)
     """
-    names = set()
-    # Cerca 'parameters:' seguito da righe '  - name: xxx'
+    all_params: set[str] = set()
+    required_params: set[str] = set()
+
     in_params = False
+    current_name: str | None = None
+    has_default = False
+
     for line in content.splitlines():
         stripped = line.strip()
+
         if re.match(r"^parameters\s*:", stripped):
             in_params = True
             continue
+
         if in_params:
-            # Fine del blocco parameters (altra chiave top-level o fine file)
+            # Fine blocco parameters: chiave top-level senza indentazione
             if stripped and not stripped.startswith("-") and not stripped.startswith("#"):
                 if not line.startswith(" ") and not line.startswith("\t"):
+                    if current_name is not None:
+                        all_params.add(current_name)
+                        if not has_default:
+                            required_params.add(current_name)
                     in_params = False
                     continue
+
             m = re.match(r"-\s*name\s*:\s*(\S+)", stripped)
             if m:
-                names.add(m.group(1).strip("'\""))
-    return names
+                # Salva il parametro precedente
+                if current_name is not None:
+                    all_params.add(current_name)
+                    if not has_default:
+                        required_params.add(current_name)
+                current_name = m.group(1).strip("'\"")
+                has_default = False
+            elif current_name and re.match(r"default\s*:", stripped):
+                has_default = True
+
+    # Ultimo parametro del file
+    if in_params and current_name is not None:
+        all_params.add(current_name)
+        if not has_default:
+            required_params.add(current_name)
+
+    return all_params, required_params
 
 
 def find_template_calls(content: str) -> list[dict]:
@@ -161,7 +186,8 @@ def main():
     print(f"Controllo contratti parametri in {len(yaml_files)} file YAML...\n")
 
     # Cache dei parametri definiti per evitare di rileggere lo stesso file
-    defined_params_cache: dict[Path, set[str]] = {}
+    # Valore: (all_params, required_params)
+    defined_params_cache: dict[Path, tuple[set[str], set[str]]] = {}
 
     for yaml_file in yaml_files:
         content = read_file(yaml_file)
@@ -187,22 +213,33 @@ def main():
                     continue
                 defined_params_cache[resolved] = extract_defined_params(target_content)
 
-            defined = defined_params_cache[resolved]
-            if not defined:
-                # Il template non ha parametri definiti, skip (es. orchestratori con stepList)
+            all_defined, required = defined_params_cache[resolved]
+            if not all_defined:
+                # Il template non ha parametri definiti, skip
                 continue
 
-            # Verifica: i parametri passati devono essere ⊆ parametri definiti
             passed = set(call["params"])
-            unknown = passed - defined
+            rel_source = yaml_file.relative_to(repo_root)
+            rel_target = resolved.relative_to(repo_root)
+
+            # Check 1: parametri passati ⊆ definiti (nessun typo / param rinominato)
+            unknown = passed - all_defined
             if unknown:
-                rel_source = yaml_file.relative_to(repo_root)
-                rel_target = resolved.relative_to(repo_root)
                 errors.append(
                     f"  {rel_source}:{call['line_no']}\n"
                     f"    template: {ref}\n"
                     f"    Parametri sconosciuti: {sorted(unknown)}\n"
-                    f"    Parametri accettati da {rel_target.name}: {sorted(defined)}"
+                    f"    Parametri accettati da {rel_target.name}: {sorted(all_defined)}"
+                )
+
+            # Check 2: parametri obbligatori (senza default) devono essere passati
+            missing_required = required - passed
+            if missing_required:
+                errors.append(
+                    f"  {rel_source}:{call['line_no']}\n"
+                    f"    template: {ref}\n"
+                    f"    Parametri obbligatori non passati: {sorted(missing_required)}\n"
+                    f"    (parametri senza 'default:' in {rel_target.name})"
                 )
 
     print(f"Chiamate template con parametri controllate: {checked_calls}")
@@ -215,7 +252,7 @@ def main():
             print()
         sys.exit(1)
     else:
-        print(f"[PASS] Tutti i contratti parametri sono validi.")
+        print("[PASS] Tutti i contratti parametri sono validi (nessun param sconosciuto, nessun required mancante).")
         sys.exit(0)
 
 
