@@ -1,0 +1,62 @@
+# ── CI GitFlow: Publish Angular ────────────────────────────────────────────────
+#
+# Template di Build e Publish per progetti Angular con governance GitFlow.
+#
+# Rispetto alla versione agnostica (CI/Agnostic/publish-angular.yaml), aggiunge:
+#   - Set-Versioning: calcolo SemVer da commit e tagging Git
+#   - Branch-conditional variable groups (dev/staging/main/feature)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: projectName
+    type: string
+    default: '$(Build.Repository.Name)'
+
+variables:
+  - name: nodeVersion
+    value: '22.x'
+  - name: outputDirectory
+    value: '$(Build.ArtifactStagingDirectory)/publish'
+
+  - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/dev') }}:
+    - group: "development"
+    - name: requireTag
+      value: 'false'
+    - name: buildConfiguration
+      value: 'development'
+
+  - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/staging') }}:
+    - group: "staging"
+    - name: requireTag
+      value: 'true'
+    - name: buildConfiguration
+      value: 'staging'
+
+  - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/main') }}:
+    - group: "production"
+    - name: requireTag
+      value: 'true'
+    - name: buildConfiguration
+      value: 'production'
+
+  - ${{ if and(ne(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.SourceBranch'], 'refs/heads/dev'), ne(variables['Build.SourceBranch'], 'refs/heads/staging')) }}:
+    - group: "development"
+    - name: requireTag
+      value: 'true'
+    - name: buildConfiguration
+      value: 'development'
+    - name: targetEnvironment
+      value: 'Development'
+
+stages:
+  - template: ./Modules/publish.yaml
+    parameters:
+      projectName: ${{ parameters.projectName }}
+      buildSteps:
+        - template: ../Common/Steps/angular-build.yaml
+
+      publishSteps:
+        - template: ../Common/Steps/angular-publish.yaml
+          parameters:
+            projectName: ${{ parameters.projectName }}

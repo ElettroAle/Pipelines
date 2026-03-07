@@ -1,0 +1,31 @@
+# ── CI Agnostic: Quality DotNet ────────────────────────────────────────────────
+#
+# Template di Quality gate per progetti .NET, agnostico rispetto al workflow Git.
+# Non include validazione SemVer né versionamento.
+#
+# Può essere precursore di GitFlow/quality-dotNet.yaml, che aggiunge
+# la validazione del titolo PR (Conventional Commits).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: projectName
+    type: string
+    default: '$(Build.Repository.Name)'
+
+variables:
+  - name: dotnetVersion
+    value: '10.0.x'
+  - name: buildConfiguration
+    value: 'Release'
+  - name: buildProjects
+    value: '**/*.csproj'
+  - name: testProjects
+    value: '**/*.UnitTest*.csproj'
+  - group: "common-quality"
+
+stages:
+  - template: ../Common/quality.yaml
+    parameters:
+      buildAndTestSteps:
+        - template: ../Common/Steps/dotnet-quality.yaml

@@ -1,0 +1,79 @@
+# ── CI Common: Publish (agnostico) ────────────────────────────────────────────
+#
+# Orchestratore riusabile per Build e Publish, agnostico rispetto al workflow Git.
+#
+# Differenze rispetto a GitFlow/Modules/publish.yaml:
+#   - Nessun Set-Versioning (nessun tag Git, nessun calcolo SemVer)
+#   - Nessuna branch-conditional logic
+#   - Il nome dell'artifact è un parametro esplicito anziché calcolato
+#
+# Contratto con il caller
+# ───────────────────────
+#   I `publishSteps` devono scrivere l'output in $(Build.ArtifactStagingDirectory)/publish
+#   perché PublishPipelineArtifact@1 legge da quel path fisso.
+#
+# Parametri
+# ─────────
+#   projectName    → nome del repo applicativo (default: nome del repo ADO)
+#   artifactName   → nome dell'artifact pubblicato (default: 'drop')
+#   buildSteps     → stepList iniettata nel job Compile dopo il checkout
+#   publishSteps   → stepList iniettata nel job PublishArtifact
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: projectName
+    type: string
+    default: '$(Build.Repository.Name)'
+
+  - name: artifactName
+    type: string
+    default: 'drop'
+
+  - name: buildSteps
+    type: stepList
+    default: []
+
+  - name: publishSteps
+    type: stepList
+    default: []
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+stages:
+  - stage: Build
+    displayName: 'Automated Build'
+    jobs:
+      - job: Compile
+        displayName: 'Restore and Build'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+            path: s/${{ parameters.projectName }}
+
+          - ${{ parameters.buildSteps }}
+
+  - stage: Publish
+    displayName: 'Publish Artifact'
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - deployment: PublishArtifact
+        displayName: 'Publish'
+        environment: '$(targetEnvironment)'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                  path: s/${{ parameters.projectName }}
+
+                - ${{ parameters.publishSteps }}
+
+                - task: PublishPipelineArtifact@1
+                  displayName: 'Upload Artifact'
+                  inputs:
+                    targetPath: '$(Build.ArtifactStagingDirectory)/publish'
+                    artifact: '${{ parameters.artifactName }}'
+                    publishLocation: 'pipeline'

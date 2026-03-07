@@ -1,0 +1,94 @@
+# ── CI Module: Publish (GitFlow) ──────────────────────────────────────────────
+#
+# Template riusabile per Build e Publish con governance GitFlow.
+#
+# Rispetto alla versione agnostica (CI/Modules/publish.yaml), aggiunge:
+#   - Set-Versioning: calcolo SemVer da commit history e tagging Git
+#   - Branch-conditional logic (requireTag, targetEnvironment) gestita dai caller
+#   - Il nome dell'artifact è calcolato dallo script (computedArtifactName)
+#
+# Contratto con il caller
+# ───────────────────────
+#   I `publishSteps` devono scrivere l'output in $(Build.ArtifactStagingDirectory)/publish
+#   perché PublishPipelineArtifact@1 legge da quel path fisso.
+#
+# Variabili attese (settate dal caller tramite variable groups / branch conditions):
+#   targetEnvironment  → nome ambiente (Development, Staging, Production)
+#   requireTag         → 'true' se il branch richiede tagging SemVer
+#
+# Parametri
+# ─────────
+#   projectName    → nome del repo applicativo (default: nome del repo ADO)
+#   buildSteps     → stepList iniettata nel job Compile dopo il checkout
+#   publishSteps   → stepList iniettata nel job PublishArtifact dopo Set-Versioning
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: projectName
+    type: string
+    default: '$(Build.Repository.Name)'
+
+  - name: buildSteps
+    type: stepList
+    default: []
+
+  - name: publishSteps
+    type: stepList
+    default: []
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+stages:
+  - stage: Build
+    displayName: 'Automated Build'
+    jobs:
+      - job: Compile
+        displayName: 'Restore and Build'
+        steps:
+          - checkout: self
+            path: s/${{ parameters.projectName }}
+
+          - ${{ parameters.buildSteps }}
+
+  - stage: Publish
+    displayName: 'Publish and Tagging'
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - deployment: PublishArtifact
+        displayName: 'Release Promotion'
+        environment: '$(targetEnvironment)'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                  path: s/${{ parameters.projectName }}
+                  fetchDepth: 0
+                  persistCredentials: true
+                  fetchTags: true
+
+                - checkout: infrastructure
+                  path: s/infrastructure
+
+                - task: PowerShell@2
+                  displayName: 'Conditional Versioning and Tagging'
+                  inputs:
+                    filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Set-Versioning.ps1'
+                    workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
+                    pwsh: true
+                  env:
+                    TARGET_ENV: $(targetEnvironment)
+                    REQUIRE_TAG: $(requireTag)
+                    BUILD_ID: $(Build.BuildId)
+                    PROJECT_NAME: ${{ parameters.projectName }}
+
+                - ${{ parameters.publishSteps }}
+
+                - task: PublishPipelineArtifact@1
+                  displayName: 'Final Artifact Upload'
+                  inputs:
+                    targetPath: '$(Build.ArtifactStagingDirectory)/publish'
+                    artifact: '$(computedArtifactName)'
+                    publishLocation: 'pipeline'

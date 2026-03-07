@@ -1,0 +1,42 @@
+# ── CI Common: Quality (agnostico) ────────────────────────────────────────────
+#
+# Orchestratore riusabile per la Quality gate, agnostico rispetto al workflow Git.
+#
+# Differenze rispetto a GitFlow/Modules/quality.yaml:
+#   - Nessuna validazione del titolo PR (Conventional Commits / SemVer)
+#   - Nessun versionamento
+#
+# I passi tech-specific (build, test, coverage) vengono iniettati
+# tramite il parametro `buildAndTestSteps`.
+#
+# Parametri
+# ─────────
+#   buildAndTestSteps  → stepList iniettata nel job BuildAndTest dopo Gitleaks
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: buildAndTestSteps
+    type: stepList
+    default: []
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+stages:
+  - stage: Quality
+    displayName: 'Quality Checks'
+    jobs:
+
+      - job: BuildAndTest
+        displayName: 'Build, Test and Security'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - script: |
+              docker run -v $(Build.SourcesDirectory):/path zricethezav/gitleaks:latest detect --source="/path" --exit-code 1 --verbose
+            displayName: 'Gitleaks (Secret Scanning)'
+
+          - ${{ parameters.buildAndTestSteps }}

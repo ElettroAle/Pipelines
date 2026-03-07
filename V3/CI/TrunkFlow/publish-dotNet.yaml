@@ -1,0 +1,58 @@
+# ── CI: Publish DotNet (TrunkFlow) ────────────────────────────────────────────
+#
+# Template CI per progetti .NET con governance TrunkFlow.
+#
+# Rispetto alla versione GitFlow (CI/GitFlow/publish-dotNet.yaml):
+#   - Nessun variable group branch-conditional: TrunkFlow gira sempre su main
+#   - Set-Versioning è chiamato con REQUIRE_TAG=false → versione pre-release
+#     embedded nel binario, senza creare tag Git
+#   - Nessun tagging nella CI: il tag SemVer viene apposto dalla CD promote
+#
+# Flusso
+# ──────
+#   Stage Build      → Restore e Compile
+#   Stage PublishDev → Set-Versioning (no tag) → FileTransform → Publish → Upload
+#
+# Il file di raccordo nel repo applicativo estende questo template e dichiara
+# il trigger (es. push su main).
+#
+# Parametri
+# ─────────
+#   projectName → nome del repo (usato per checkout path e artifact naming)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: projectName
+    type: string
+    default: '$(Build.Repository.Name)'
+
+variables:
+  - name: publishProject
+    value: '${{ parameters.projectName }}/${{ parameters.projectName }}.csproj'
+  - name: outputDirectory
+    value: '$(Build.ArtifactStagingDirectory)/publish'
+  - name: dotnetVersion
+    value: '10.0.x'
+  - name: buildConfiguration
+    value: 'Release'
+  - name: targetRuntime
+    value: 'win-x64'
+  - name: selfContained
+    value: 'true'
+  - name: targetEnvironment
+    value: 'Development'
+  - group: "development"
+
+stages:
+  - template: ./Modules/publish.yaml
+    parameters:
+      projectName: ${{ parameters.projectName }}
+      buildSteps:
+        - template: ../Common/Steps/dotnet-build.yaml
+
+      publishSteps:
+        - template: ../Common/Steps/dotnet-publish.yaml
+          parameters:
+            projectName: ${{ parameters.projectName }}
+            versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(currentTag) /p:FileVersion=$(currentTag) /p:InformationalVersion="$(currentTag)-$(gitHash)"'

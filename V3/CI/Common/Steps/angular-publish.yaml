@@ -1,0 +1,57 @@
+# ── CI Step: Angular Publish ───────────────────────────────────────────────────
+#
+# Step template condiviso per la fase di publish di progetti Angular.
+# Contiene: installazione Node.js, npm ci, ng build, copia dist in artifact staging.
+#
+# Riusato da:
+#   CI/Agnostic/publish-angular.yaml
+#   CI/GitFlow/publish-angular.yaml
+#
+# Parametri
+# ─────────
+#   projectName        → nome repo (per workingDirectory e path output)
+#   nodeVersion        → versione Node.js        (default: variabile $(nodeVersion))
+#   outputDirectory    → path output artifact    (default: variabile $(outputDirectory))
+#   buildConfiguration → configurazione Angular  (default: variabile $(buildConfiguration))
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: projectName
+    type: string
+
+  - name: nodeVersion
+    type: string
+    default: '$(nodeVersion)'
+
+  - name: outputDirectory
+    type: string
+    default: '$(outputDirectory)'
+
+  - name: buildConfiguration
+    type: string
+    default: '$(buildConfiguration)'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: NodeTool@0
+    displayName: 'Install Node.js'
+    inputs:
+      versionSpec: ${{ parameters.nodeVersion }}
+
+  - script: npm ci
+    displayName: 'Install Dependencies'
+    workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}
+
+  - script: npx ng build --configuration=${{ parameters.buildConfiguration }}
+    displayName: 'Angular Build'
+    workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}
+
+  - script: |
+      mkdir -p '${{ parameters.outputDirectory }}'
+      REAL_OUTPUT=$(find dist -name "index.html" -exec dirname {} \; | head -n 1)
+      echo "Copia dei file da $REAL_OUTPUT a ${{ parameters.outputDirectory }}"
+      cp -r $REAL_OUTPUT/. '${{ parameters.outputDirectory }}/'
+    displayName: 'Copy dist to Artifact Staging'
+    workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}

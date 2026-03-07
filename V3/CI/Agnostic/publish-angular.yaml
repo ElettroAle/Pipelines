@@ -1,0 +1,52 @@
+# ── CI Agnostic: Publish Angular ───────────────────────────────────────────────
+#
+# Template di Build e Publish per progetti Angular, agnostico rispetto al workflow Git.
+# Non include versionamento semantico né tagging Git.
+#
+# Può essere precursore di GitFlow/publish-angular.yaml, che aggiunge
+# Set-Versioning, tagging Git e branch-conditional variable groups.
+#
+# Parametri
+# ─────────
+#   projectName        → nome del repo (usato per checkout path e artifact naming)
+#   targetEnvironment  → ambiente target (es. development, staging, production)
+#   buildConfiguration → configurazione Angular (es. development, staging, production)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: projectName
+    type: string
+    default: '$(Build.Repository.Name)'
+
+  - name: targetEnvironment
+    type: string
+    default: 'Development'
+
+  - name: buildConfiguration
+    type: string
+    default: 'development'
+
+variables:
+  - name: nodeVersion
+    value: '22.x'
+  - name: outputDirectory
+    value: '$(Build.ArtifactStagingDirectory)/publish'
+  - name: targetEnvironment
+    value: '${{ parameters.targetEnvironment }}'
+
+stages:
+  - template: ../Common/publish.yaml
+    parameters:
+      projectName: ${{ parameters.projectName }}
+      artifactName: '${{ parameters.projectName }}-${{ parameters.targetEnvironment }}'
+      buildSteps:
+        - template: ../Common/Steps/angular-build.yaml
+          parameters:
+            buildConfiguration: '${{ parameters.buildConfiguration }}'
+
+      publishSteps:
+        - template: ../Common/Steps/angular-publish.yaml
+          parameters:
+            projectName: ${{ parameters.projectName }}
+            buildConfiguration: '${{ parameters.buildConfiguration }}'

@@ -1,0 +1,117 @@
+# ── CD: Promote TrunkFlow → Azure App Service ─────────────────────────────────
+#
+# Template di Promote per progetti .NET su Azure App Service (Windows)
+# con governance TrunkFlow.
+#
+# Flusso
+# ──────
+#   StagingPromotion → Verify-SemVer → Set-Versioning → Build → Publish (versionato)
+#                   → Upload artifact staging → Deploy staging
+#   ProdPromotion   → Download artifact staging → Deploy production (no rebuild)
+#
+# Utilizzo nel repo applicativo
+# ─────────────────────────────
+#   Il file di raccordo nel repo applicativo deve:
+#     1. Definire trigger: none (il promote è sempre manuale)
+#     2. Includere questo template con `template:`
+#     3. Passare i parametri obbligatori
+#
+#   Esempio raccordo (nel repo applicativo):
+#
+#     trigger: none
+#     pr: none
+#
+#     resources:
+#       repositories:
+#         - repository: infrastructure
+#           type: git
+#           name: MyOrg/Infrastructure
+#
+#     extends:
+#       template: pipelines/V3/CD/TrunkFlow/promote-azure-appService.yaml@infrastructure
+#       parameters:
+#         projectName: 'MyApp.BackEnd'
+#         azureServiceConnection: 'sc-arm-myapp'
+#         stagingWebAppName: 'app-myapp-be-staging'
+#         prodWebAppName: 'app-myapp-be-prod'
+#
+# Parametri richiesti
+# ───────────────────
+#   projectName            → nome del repo (checkout path e artifact naming)
+#   azureServiceConnection → nome della service connection ARM in Azure DevOps
+#   stagingWebAppName      → nome completo Azure App Service di staging
+#   prodWebAppName         → nome completo Azure App Service di production
+#
+# Parametri opzionali
+# ───────────────────
+#   stagingEnvironment     → nome ADO environment per staging (default: 'Staging')
+#   prodEnvironment        → nome ADO environment per production (default: 'Production')
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: projectName
+    displayName: 'Nome progetto'
+    type: string
+    default: '$(Build.Repository.Name)'
+
+  - name: azureServiceConnection
+    displayName: 'Nome della service connection ARM in Azure DevOps'
+    type: string
+
+  - name: stagingWebAppName
+    displayName: 'Nome completo App Service di staging'
+    type: string
+
+  - name: prodWebAppName
+    displayName: 'Nome completo App Service di production'
+    type: string
+
+  - name: stagingEnvironment
+    displayName: 'Nome ADO environment per staging'
+    type: string
+    default: 'Staging'
+
+  - name: prodEnvironment
+    displayName: 'Nome ADO environment per production'
+    type: string
+    default: 'Production'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+variables:
+  - name: publishProject
+    value: '${{ parameters.projectName }}/${{ parameters.projectName }}.csproj'
+  - name: outputDirectory
+    value: '$(Build.ArtifactStagingDirectory)/publish'
+  - name: dotnetVersion
+    value: '10.0.x'
+  - name: buildConfiguration
+    value: 'Release'
+  - name: targetRuntime
+    value: 'win-x64'
+  - name: selfContained
+    value: 'true'
+  - group: "staging"
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+stages:
+  - template: ./Modules/promote.yaml
+    parameters:
+      projectName: ${{ parameters.projectName }}
+      azureServiceConnection: ${{ parameters.azureServiceConnection }}
+      stagingWebAppName: ${{ parameters.stagingWebAppName }}
+      prodWebAppName: ${{ parameters.prodWebAppName }}
+      stagingEnvironment: ${{ parameters.stagingEnvironment }}
+      prodEnvironment: ${{ parameters.prodEnvironment }}
+
+      buildSteps:
+        - template: ../../CI/Common/Steps/dotnet-build.yaml
+
+      publishSteps:
+        - template: ../../CI/Common/Steps/dotnet-publish.yaml
+          parameters:
+            projectName: ${{ parameters.projectName }}
+            targetEnvironment: '${{ parameters.stagingEnvironment }}'
+            versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(currentTag) /p:FileVersion=$(currentTag) /p:InformationalVersion="$(currentTag)-$(gitHash)"'

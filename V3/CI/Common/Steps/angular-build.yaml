@@ -1,0 +1,45 @@
+# ── CI Step: Angular Build ─────────────────────────────────────────────────────
+#
+# Step template condiviso per la fase di build di progetti Angular.
+# Contiene: installazione Node.js, npm ci, ng build.
+#
+# Riusato da:
+#   CI/Agnostic/publish-angular.yaml
+#   CI/GitFlow/publish-angular.yaml
+#
+# Parametri
+# ─────────
+#   nodeVersion        → versione Node.js        (default: variabile $(nodeVersion))
+#   workingDirectory   → directory di lavoro     (default: $(Build.SourcesDirectory))
+#   buildConfiguration → configurazione Angular  (default: variabile $(buildConfiguration))
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: nodeVersion
+    type: string
+    default: '$(nodeVersion)'
+
+  - name: workingDirectory
+    type: string
+    default: '$(Build.SourcesDirectory)'
+
+  - name: buildConfiguration
+    type: string
+    default: '$(buildConfiguration)'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: NodeTool@0
+    displayName: 'Install Node.js'
+    inputs:
+      versionSpec: ${{ parameters.nodeVersion }}
+
+  - script: npm ci
+    displayName: 'Install Dependencies'
+    workingDirectory: ${{ parameters.workingDirectory }}
+
+  - script: npx ng build --configuration=${{ parameters.buildConfiguration }}
+    displayName: 'Angular Build'
+    workingDirectory: ${{ parameters.workingDirectory }}
