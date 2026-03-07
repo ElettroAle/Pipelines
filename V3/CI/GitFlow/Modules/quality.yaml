@@ -2,7 +2,7 @@
 #
 # Template riusabile per la Quality gate con governance GitFlow.
 #
-# Rispetto alla versione agnostica (CI/Modules/quality.yaml), aggiunge:
+# Rispetto alla versione agnostica (CI/Common/quality.yaml), aggiunge:
 #   - Job ValidatePRTitle: verifica Conventional Commits / SemVer sulle PR
 #     verso branch protetti (main, staging + eventuali additional)
 #
@@ -40,13 +40,13 @@ stages:
             path: s/${{ parameters.projectName }}
             fetchDepth: 10
 
-          - checkout: git://Demetra/DPS.Demetra.Infrastructure
-            path: s/DPS.Demetra.Infrastructure
+          - checkout: infrastructure
+            path: s/infrastructure
 
           - task: PowerShell@2
             displayName: 'Verify SemVer in PR Commits'
             inputs:
-              filePath: '$(Build.SourcesDirectory)/DPS.Demetra.Infrastructure/pipelines/V3/CI/Scripts/Verify-SemVer.ps1'
+              filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Verify-SemVer.ps1'
               workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
               pwsh: true
             env:

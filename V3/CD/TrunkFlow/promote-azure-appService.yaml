@@ -25,15 +25,15 @@
 #       repositories:
 #         - repository: infrastructure
 #           type: git
-#           name: Demetra/DPS.Demetra.Infrastructure
+#           name: MyOrg/Infrastructure
 #
 #     extends:
 #       template: pipelines/V3/CD/TrunkFlow/promote-azure-appService.yaml@infrastructure
 #       parameters:
-#         projectName: 'DPS.Demetra.BackEnd'
-#         azureServiceConnection: 'sc-arm-demetra'
-#         stagingWebAppName: 'app-demetra-be-staging'
-#         prodWebAppName: 'app-demetra-be-prod'
+#         projectName: 'MyApp.BackEnd'
+#         azureServiceConnection: 'sc-arm-myapp'
+#         stagingWebAppName: 'app-myapp-be-staging'
+#         prodWebAppName: 'app-myapp-be-prod'
 #
 # Parametri richiesti
 # ───────────────────
@@ -51,7 +51,7 @@
 
 parameters:
   - name: projectName
-    displayName: 'Nome progetto (es. DPS.Demetra.BackEnd)'
+    displayName: 'Nome progetto'
     type: string
     default: '$(Build.Repository.Name)'
 

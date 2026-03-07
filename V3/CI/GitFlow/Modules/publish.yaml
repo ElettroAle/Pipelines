@@ -69,13 +69,13 @@ stages:
                   persistCredentials: true
                   fetchTags: true
 
-                - checkout: git://Demetra/DPS.Demetra.Infrastructure
-                  path: s/DPS.Demetra.Infrastructure
+                - checkout: infrastructure
+                  path: s/infrastructure
 
                 - task: PowerShell@2
                   displayName: 'Conditional Versioning and Tagging'
                   inputs:
-                    filePath: '$(Build.SourcesDirectory)/DPS.Demetra.Infrastructure/pipelines/V3/CI/Scripts/Set-Versioning.ps1'
+                    filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Set-Versioning.ps1'
                     workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
                     pwsh: true
                   env:

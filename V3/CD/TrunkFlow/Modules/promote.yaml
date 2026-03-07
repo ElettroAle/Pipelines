@@ -99,8 +99,8 @@ stages:
                   persistCredentials: true
                   fetchTags: true
 
-                - checkout: git://Demetra/DPS.Demetra.Infrastructure
-                  path: s/DPS.Demetra.Infrastructure
+                - checkout: infrastructure
+                  path: s/infrastructure
 
                 # ── 2. Verifica Conventional Commits ────────────────────────
                 # Valida che i commit dal tag precedente rispettino il formato
@@ -108,7 +108,7 @@ stages:
                 - task: PowerShell@2
                   displayName: 'Verify SemVer Commits'
                   inputs:
-                    filePath: '$(Build.SourcesDirectory)/DPS.Demetra.Infrastructure/pipelines/V3/CI/Scripts/Verify-SemVer.ps1'
+                    filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Verify-SemVer.ps1'
                     workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
                     pwsh: true
                   env:
@@ -124,7 +124,7 @@ stages:
                 - task: PowerShell@2
                   displayName: 'Set Versioning and Tagging'
                   inputs:
-                    filePath: '$(Build.SourcesDirectory)/DPS.Demetra.Infrastructure/pipelines/V3/CI/Scripts/Set-Versioning.ps1'
+                    filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Set-Versioning.ps1'
                     workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
                     pwsh: true
                   env:

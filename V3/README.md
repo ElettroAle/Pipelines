@@ -1,4 +1,4 @@
-# Pipeline V3 — Demetra Infrastructure
+# Pipeline V3
 
 Libreria di template Azure DevOps YAML per CI e CD, progettata per essere **riusabile**, **manutenibile** e **scalabile** su più workflow Git e stack tecnologici.
 
@@ -157,12 +157,12 @@ resources:
   repositories:
     - repository: infrastructure
       type: git
-      name: Demetra/DPS.Demetra.Infrastructure
+      name: MyOrg/Infrastructure
 
 extends:
   template: pipelines/V3/CI/GitFlow/publish-dotNet.yaml@infrastructure
   parameters:
-    projectName: 'DPS.Demetra.BackEnd'
+    projectName: 'MyApp.BackEnd'
 ```
 
 ### Esempio — CD TrunkFlow Promote
@@ -176,15 +176,15 @@ resources:
   repositories:
     - repository: infrastructure
       type: git
-      name: Demetra/DPS.Demetra.Infrastructure
+      name: MyOrg/Infrastructure
 
 extends:
   template: pipelines/V3/CD/TrunkFlow/promote-azure-appService.yaml@infrastructure
   parameters:
-    projectName: 'DPS.Demetra.BackEnd'
-    azureServiceConnection: 'sc-arm-demetra'
-    stagingWebAppName: 'app-demetra-be-staging'
-    prodWebAppName: 'app-demetra-be-prod'
+    projectName: 'MyApp.BackEnd'
+    azureServiceConnection: 'sc-arm-myapp'
+    stagingWebAppName: 'app-myapp-be-staging'
+    prodWebAppName: 'app-myapp-be-prod'
 ```
 
 ---

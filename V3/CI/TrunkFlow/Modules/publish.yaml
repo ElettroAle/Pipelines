@@ -75,8 +75,8 @@ stages:
                   fetchDepth: 0
                   fetchTags: true
 
-                - checkout: git://Demetra/DPS.Demetra.Infrastructure
-                  path: s/DPS.Demetra.Infrastructure
+                - checkout: infrastructure
+                  path: s/infrastructure
 
                 # ── Dev Versioning ─────────────────────────────────────────
                 # REQUIRE_TAG=false → nessun tag Git creato.
@@ -85,7 +85,7 @@ stages:
                 - task: PowerShell@2
                   displayName: 'Dev Versioning (no tag)'
                   inputs:
-                    filePath: '$(Build.SourcesDirectory)/DPS.Demetra.Infrastructure/pipelines/V3/CI/Scripts/Set-Versioning.ps1'
+                    filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Set-Versioning.ps1'
                     workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
                     pwsh: true
                   env:

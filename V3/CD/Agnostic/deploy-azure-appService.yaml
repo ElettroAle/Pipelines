@@ -1,7 +1,7 @@
 # ── CD Template: Deploy Backend App Service ───────────────────────────────────
 #
-# Template condiviso (DPS.Demetra.Infrastructure). Agnostico rispetto a trigger
-# e branch — tutta la configurazione di trigger/resource va nel file di raccordo
+# Template condiviso. Agnostico rispetto a trigger e branch —
+# tutta la configurazione di trigger/resource va nel file di raccordo
 # del repo applicativo che lo estende con `extends`.
 #
 # Vincolo ADO: il file di raccordo deve definire un pipeline resource con alias
@@ -20,7 +20,7 @@
 
 parameters:
   - name: projectName
-    displayName: 'Nome progetto (es. DPS.Demetra.BackEnd)'
+    displayName: 'Nome progetto'
     type: string
 
   - name: azureServiceConnection
