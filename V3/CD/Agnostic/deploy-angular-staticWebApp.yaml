@@ -1,6 +1,42 @@
+# ── CD: Deploy Agnostic — Angular → Azure Static Web Apps ─────────────────────
+#
+# Entry point di CD Deploy per progetti Angular su Azure Static Web Apps.
+# Agnostico rispetto a trigger e branch — tutta la configurazione di
+# trigger/resource va nel file di raccordo del repo applicativo.
+#
+# Vincolo ADO: il file di raccordo deve definire un pipeline resource
+# con l'alias passato in `ciPipelineResourceAlias` (default: ci_fe).
+#
+# Flusso
+# ──────
+#   Stage Deploy (deployment → approval via ADO environment)
+#     1. Sopprime auto-download artifact
+#     2. Scarica il Pipeline Artifact dalla CI in drop/ (latestFromBranch)
+#     3. Flatten: porta i file da drop/<versione>/ direttamente in drop/
+#     4. staticWebApp-deploy: deploy tramite token SWA
+#
+# Nota sul flatten
+# ────────────────
+#   DownloadPipelineArtifact senza artifactName crea drop/<nome-versione>/.
+#   Il task AzureStaticWebApp@0 richiede index.html in app_location (drop/).
+#   Lo step 3 appiattisce la struttura prima del deploy.
+#
+# Parametri richiesti
+# ───────────────────
+#   projectName              → nome del progetto (display name del job)
+#   targetEnvironment        → nome dell'ambiente ADO (Development | Staging | Production)
+#   swaDeploymentToken       → token di deployment Azure Static Web Apps
+#
+# Parametri opzionali
+# ───────────────────
+#   ciPipelineResourceAlias  → alias del pipeline resource dichiarato nel raccordo
+#                              (default: 'ci_fe')
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
 parameters:
   - name: projectName
-    displayName: 'Nome progetto (es. DPS.Demetra.FrontEnd)'
+    displayName: 'Nome progetto (es. MyApp.FrontEnd)'
     type: string
 
   - name: targetEnvironment
@@ -14,7 +50,9 @@ parameters:
   - name: ciPipelineResourceAlias
     displayName: 'Alias del pipeline resource dichiarato nel raccordo'
     type: string
-    default: ci_fe
+    default: 'ci_fe'
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 stages:
   - stage: Deploy
@@ -32,8 +70,6 @@ stages:
                 - download: none
 
                 # ── 2. Scarica i Pipeline Artifacts dalla CI ─────────────────
-                # DownloadPipelineArtifact senza artifactName crea drop/<nome-versione>/.
-                # Lo step successivo appiattisce il contenuto direttamente in drop/.
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Scarica artifact nella working directory'
                   inputs:
@@ -44,9 +80,9 @@ stages:
                     branchName: '$(Build.SourceBranch)'
                     targetPath: '$(Build.SourcesDirectory)/drop'
 
-                # ── 2b. Flatten ──────────────────────────────────────────────
+                # ── 3. Flatten artifact directory ────────────────────────────
                 # Porta i file da drop/<nome-versione>/ direttamente in drop/
-                # in modo che il task SWA trovi index.html in app_location: 'drop'.
+                # in modo che il task SWA trovi index.html in app_location.
                 - bash: |
                     SUBDIR=$(find "$(Build.SourcesDirectory)/drop" -mindepth 1 -maxdepth 1 -type d | head -1)
                     if [ -n "$SUBDIR" ]; then
@@ -56,12 +92,8 @@ stages:
                     fi
                   displayName: 'Flatten artifact directory'
 
-                # ── 3. Deploy su Azure Static Web Apps ───────────────────────
-                - task: AzureStaticWebApp@0
-                  displayName: 'Deploy su Static Web App'
-                  inputs:
-                    app_location: 'drop'
-                    output_location: ''
-                    skip_app_build: true
-                  env:
-                    azure_static_web_apps_api_token: '${{ parameters.swaDeploymentToken }}'
+                # ── 4. Deploy su Azure Static Web Apps ───────────────────────
+                - template: ../Common/Steps/staticWebApp-deploy.yaml
+                  parameters:
+                    swaDeploymentToken: '${{ parameters.swaDeploymentToken }}'
+                    appLocation: '$(Build.SourcesDirectory)/drop'

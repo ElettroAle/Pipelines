@@ -1,0 +1,40 @@
+# ── CD Step: Deploy su Azure App Service ──────────────────────────────────────
+#
+# Step template atomico per il deploy di un pacchetto .zip su Azure App Service
+# (Windows) tramite Zip Deploy.
+#
+# Riusato da:
+#   CD/Agnostic/deploy-azure-appService.yaml
+#   CD/TrunkFlow/promote-dotNet-appService.yaml  (stagingDeploySteps / prodDeploySteps)
+#
+# Parametri
+# ─────────
+#   azureServiceConnection → nome service connection ARM in Azure DevOps
+#   webAppName             → nome completo App Service (es. app-myapp-be-staging)
+#   packagePath            → glob path del .zip da deployare
+#                            (default: variabile $(packagePath))
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: azureServiceConnection
+    type: string
+
+  - name: webAppName
+    type: string
+
+  - name: packagePath
+    type: string
+    default: '$(packagePath)'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: AzureWebApp@1
+    displayName: 'Deploy su App Service — ${{ parameters.webAppName }}'
+    inputs:
+      azureSubscription: '${{ parameters.azureServiceConnection }}'
+      appType: 'webApp'
+      appName: '${{ parameters.webAppName }}'
+      package: '${{ parameters.packagePath }}'
+      deploymentMethod: 'zipDeploy'

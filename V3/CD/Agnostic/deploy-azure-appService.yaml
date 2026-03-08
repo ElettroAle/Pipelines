@@ -1,20 +1,31 @@
-# ── CD Template: Deploy Backend App Service ───────────────────────────────────
+# ── CD: Deploy Agnostic — .NET → Azure App Service ────────────────────────────
 #
-# Template condiviso. Agnostico rispetto a trigger e branch —
-# tutta la configurazione di trigger/resource va nel file di raccordo
-# del repo applicativo che lo estende con `extends`.
+# Entry point di CD Deploy per progetti .NET su Azure App Service (Windows).
+# Agnostico rispetto a trigger e branch — tutta la configurazione di
+# trigger/resource va nel file di raccordo del repo applicativo.
 #
-# Vincolo ADO: il file di raccordo deve definire un pipeline resource con alias
-# "ci_be", perché questo template lo referenzia in DownloadPipelineArtifact.
+# Vincolo ADO: il file di raccordo deve definire un pipeline resource
+# con l'alias passato in `ciPipelineResourceAlias` (default: ci_be),
+# perché questo template lo referenzia in DownloadPipelineArtifact.
+#
+# Flusso
+# ──────
+#   Stage Deploy (deployment → approval via ADO environment)
+#     1. Sopprime auto-download artifact
+#     2. Scarica il Pipeline Artifact dalla CI (latestFromBranch)
+#     3. appService-deploy: zipDeploy sull'App Service di destinazione
 #
 # Parametri richiesti
 # ───────────────────
 #   projectName              → nome del progetto (display name del job)
 #   azureServiceConnection   → nome della service connection ARM in Azure DevOps
 #   targetEnvironment        → nome dell'ambiente ADO (Development | Staging | Production)
-#   webAppName               → nome completo dell'App Service (es. app-demetra-be-int)
+#   webAppName               → nome completo dell'App Service (es. app-myapp-be-int)
+#
+# Parametri opzionali
+# ───────────────────
 #   ciPipelineResourceAlias  → alias del pipeline resource dichiarato nel raccordo
-#                              (default: ci_be — cambia solo se usi un alias diverso)
+#                              (default: 'ci_be')
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -38,6 +49,7 @@ parameters:
   - name: ciPipelineResourceAlias
     displayName: 'Alias del pipeline resource dichiarato nel raccordo'
     type: string
+    default: 'ci_be'
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -62,8 +74,8 @@ stages:
                 # ── 2. Scarica i Pipeline Artifacts dalla CI ─────────────────
                 # buildVersionToDownload: latestFromBranch → prende l'ultimo run
                 # green sul branch che ha triggerato questa pipeline.
-                # Il nome dell'artifact è dinamico, quindi scarichiamo tutto e
-                # usiamo il pattern glob nel passo di deploy.
+                # Il nome dell'artifact è dinamico: scarichiamo tutto e
+                # usiamo il pattern glob nello step di deploy.
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Scarica artifact dalla CI'
                   inputs:
@@ -74,16 +86,9 @@ stages:
                     branchName: '$(Build.SourceBranch)'
                     downloadPath: '$(Pipeline.Workspace)/${{ parameters.ciPipelineResourceAlias }}'
 
-                # ── 2. Deploy su Azure App Service (Windows) ─────────────────
-                # L'App Service è definito in azure/env/int/main.tf come:
-                #   azurerm_windows_web_app "backend" → name = "app-demetra-be-<env>"
-                # La CI produce un .zip (zipAfterPublish: true); il task lo carica
-                # direttamente sull'endpoint SCM tramite Zip Deploy.
-                - task: AzureWebApp@1
-                  displayName: 'Deploy su App Service'
-                  inputs:
-                    azureSubscription: '${{ parameters.azureServiceConnection }}'
-                    appType: 'webApp'
-                    appName: '${{ parameters.webAppName }}'
-                    package: '$(Pipeline.Workspace)/${{ parameters.ciPipelineResourceAlias }}/**/*.zip'
-                    deploymentMethod: 'zipDeploy'
+                # ── 3. Deploy su Azure App Service ───────────────────────────
+                - template: ../Common/Steps/appService-deploy.yaml
+                  parameters:
+                    azureServiceConnection: '${{ parameters.azureServiceConnection }}'
+                    webAppName: '${{ parameters.webAppName }}'
+                    packagePath: '$(Pipeline.Workspace)/${{ parameters.ciPipelineResourceAlias }}/**/*.zip'

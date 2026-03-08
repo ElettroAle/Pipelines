@@ -1,9 +1,8 @@
 # ── CD Module: Promote (TrunkFlow) ────────────────────────────────────────────
 #
-# Template di CD Promote per progetti .NET con governance TrunkFlow.
-#
-# Gestisce la promozione dall'artifact di sviluppo fino a Production,
-# passando per uno stage di Staging con rebuild versionato.
+# Orchestratore di CD Promote per governance TrunkFlow.
+# Agnostico rispetto alla tecnologia di build e di hosting: compilazione,
+# publish e deploy sono interamente iniettati dai caller tramite stepList.
 #
 # Flusso
 # ──────
@@ -11,36 +10,43 @@
 #     1. Checkout sorgente + infrastruttura
 #     2. Verify-SemVer: valida Conventional Commits dal tag precedente a HEAD
 #     3. Set-Versioning: calcola la nuova SemVer, crea il tag Git, espone $(currentTag)
-#     4. buildSteps  (inject: DotNet Build)
-#     5. publishSteps (inject: DotNet Publish con /p:Version=$(currentTag))
+#     4. buildSteps  (inject: compilazione)
+#     5. publishSteps (inject: publish con /p:Version=$(currentTag))
 #     6. Upload artifact di staging: {projectName}-staging-{semver}
-#     7. Deploy su Azure App Service staging
+#     7. stagingDeploySteps (inject: deploy sulla piattaforma di hosting scelta)
 #
 #   Stage ProdPromotion (deployment → approval via ADO environment)
 #     1. Download artifact di staging dalla run corrente (nessun rebuild)
-#     2. Deploy su Azure App Service production
+#     2. prodDeploySteps (inject: deploy sulla piattaforma di hosting scelta)
 #
 # Contratto con il caller
 # ───────────────────────
 #   I `publishSteps` devono:
 #     - scrivere il .zip in $(Build.ArtifactStagingDirectory)/publish
 #     - usare $(currentTag) per /p:Version (esposto da Set-Versioning)
+#   I `stagingDeploySteps` devono leggere da:
+#     - $(Build.ArtifactStagingDirectory)/publish/**/*.zip
+#   I `prodDeploySteps` devono leggere da:
+#     - $(Pipeline.Workspace)/staging/**/*.zip
 #   Solo il binario di staging è condiviso con prod: l'appsettings prod
-#   deve provenire da Azure App Service Application Settings.
+#   deve provenire da Azure App Service Application Settings (o equivalente).
 #
 # Parametri richiesti
 # ───────────────────
-#   projectName            → nome del repo (checkout path e artifact naming)
-#   azureServiceConnection → nome della service connection ARM in Azure DevOps
-#   stagingWebAppName      → nome completo Azure App Service di staging
-#   prodWebAppName         → nome completo Azure App Service di production
-#   buildSteps             → stepList: compile del progetto
-#   publishSteps           → stepList: dotnet publish + XDT verify
+#   projectName         → nome del repo (checkout path e artifact naming)
+#   buildSteps          → stepList: compilazione del progetto             [REQUIRED]
+#   publishSteps        → stepList: publish con versione embedded          [REQUIRED]
+#
+# Parametri opzionali ma raccomandati
+# ────────────────────────────────────
+#   stagingDeploySteps  → stepList: deploy sull'ambiente di staging
+#   prodDeploySteps     → stepList: deploy sull'ambiente di production
+#                         (omettere solo per testare il versioning senza deploy)
 #
 # Parametri opzionali
 # ───────────────────
-#   stagingEnvironment     → nome ADO environment per staging (default: 'Staging')
-#   prodEnvironment        → nome ADO environment per production (default: 'Production')
+#   stagingEnvironment  → nome ADO environment per staging (default: 'Staging')
+#   prodEnvironment     → nome ADO environment per production (default: 'Production')
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -48,15 +54,6 @@ parameters:
   - name: projectName
     type: string
     default: '$(Build.Repository.Name)'
-
-  - name: azureServiceConnection
-    type: string
-
-  - name: stagingWebAppName
-    type: string
-
-  - name: prodWebAppName
-    type: string
 
   - name: stagingEnvironment
     type: string
@@ -68,9 +65,15 @@ parameters:
 
   - name: buildSteps
     type: stepList
-    default: []
 
   - name: publishSteps
+    type: stepList
+
+  - name: stagingDeploySteps
+    type: stepList
+    default: []
+
+  - name: prodDeploySteps
     type: stepList
     default: []
 
@@ -85,7 +88,7 @@ stages:
     displayName: 'Promote to Staging'
     jobs:
       - deployment: PromoteToStaging
-        displayName: 'Build, Version and Deploy — ${{ parameters.stagingWebAppName }}'
+        displayName: 'Build, Version and Deploy — Staging'
         environment: '${{ parameters.stagingEnvironment }}'
         strategy:
           runOnce:
@@ -147,15 +150,8 @@ stages:
                     artifact: '$(computedArtifactName)'
                     publishLocation: 'pipeline'
 
-                # ── 7. Deploy su App Service staging ────────────────────────
-                - task: AzureWebApp@1
-                  displayName: 'Deploy su App Service Staging'
-                  inputs:
-                    azureSubscription: '${{ parameters.azureServiceConnection }}'
-                    appType: 'webApp'
-                    appName: '${{ parameters.stagingWebAppName }}'
-                    package: '$(Build.ArtifactStagingDirectory)/publish/**/*.zip'
-                    deploymentMethod: 'zipDeploy'
+                # ── 7. Deploy (tecnologia iniettata dal caller) ──────────────
+                - ${{ parameters.stagingDeploySteps }}
 
   # ── Stage 2: Promozione a Production ────────────────────────────────────────
   # Approval: configurata sull'ADO environment '${{ parameters.prodEnvironment }}'.
@@ -167,7 +163,7 @@ stages:
     condition: succeeded()
     jobs:
       - deployment: PromoteToProd
-        displayName: 'Deploy — ${{ parameters.prodWebAppName }}'
+        displayName: 'Deploy — Production'
         environment: '${{ parameters.prodEnvironment }}'
         strategy:
           runOnce:
@@ -187,12 +183,5 @@ stages:
                     buildType: 'current'
                     downloadPath: '$(Pipeline.Workspace)/staging'
 
-                # ── 3. Deploy su App Service production ─────────────────────
-                - task: AzureWebApp@1
-                  displayName: 'Deploy su App Service Production'
-                  inputs:
-                    azureSubscription: '${{ parameters.azureServiceConnection }}'
-                    appType: 'webApp'
-                    appName: '${{ parameters.prodWebAppName }}'
-                    package: '$(Pipeline.Workspace)/staging/**/*.zip'
-                    deploymentMethod: 'zipDeploy'
+                # ── 3. Deploy (tecnologia iniettata dal caller) ──────────────
+                - ${{ parameters.prodDeploySteps }}
