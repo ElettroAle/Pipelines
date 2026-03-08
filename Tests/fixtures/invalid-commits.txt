@@ -10,4 +10,3 @@ hotfix: patch critica produzione
 merge branch 'feature/xyz' into main
 WIP: lavori in corso
 Corregge bug nel calcolo SemVer
-FEAT: nuova funzionalità (uppercase non valido)

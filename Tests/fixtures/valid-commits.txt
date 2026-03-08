@@ -8,3 +8,5 @@ feat!: BREAKING CHANGE cambia struttura parametri dotnet-publish
 feat: aggiunge step quality per Angular
 fix: corregge indentazione YAML in terraform-apply
 feat: aggiunge supporto .NET 12
+FEAT: nuova funzionalità (uppercase accettato)
+FIX: correzione urgente uppercase

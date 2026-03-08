@@ -1,0 +1,70 @@
+name: Template Expansion Preview (ADO)
+
+# ── Livello 3: espansione template via az pipelines run --preview ─────────────
+#
+# Richiede:
+#   - Secret AZURE_DEVOPS_PAT con scope: Build (Read & Execute)
+#   - Variable AZURE_DEVOPS_ORG: es. 'https://dev.azure.com/MyOrg'
+#   - Variable AZURE_DEVOPS_PROJECT: es. 'Demetra'
+#   - Pipeline ADO registrate con i nomi definiti qui sotto
+#
+# Per abilitare:
+#   1. Aggiungere i secret/variable sopra in Settings → Secrets and variables
+#   2. Rimuovere il commento dal trigger 'push' e 'pull_request' qui sotto
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+  # push:
+  #   branches: ["**"]
+  #   paths:
+  #     - "V3/CI/**"
+  #     - "Tests/preview/**"
+  #     - ".github/workflows/test-preview.yml"
+  # pull_request:
+  #   branches: [main]
+  #   paths:
+  #     - "V3/CI/**"
+  #     - "Tests/preview/**"
+
+jobs:
+  preview:
+    name: ADO Template Expansion Preview
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Azure CLI + DevOps extension
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az extension add --name azure-devops --yes
+
+      - name: Configure az devops defaults
+        env:
+          AZURE_DEVOPS_EXT_PAT: ${{ secrets.AZURE_DEVOPS_PAT }}
+        run: |
+          az devops configure --defaults \
+            organization="${{ vars.AZURE_DEVOPS_ORG }}" \
+            project="${{ vars.AZURE_DEVOPS_PROJECT }}"
+
+      - name: Preview — quality-dotNet (GitFlow)
+        env:
+          AZURE_DEVOPS_EXT_PAT: ${{ secrets.AZURE_DEVOPS_PAT }}
+        run: |
+          az pipelines run \
+            --name "Pipelines - Preview quality-dotNet" \
+            --preview \
+            --output json > /dev/null
+          echo "[PASS] quality-dotNet preview OK"
+
+      - name: Preview — publish-dotNet (GitFlow)
+        env:
+          AZURE_DEVOPS_EXT_PAT: ${{ secrets.AZURE_DEVOPS_PAT }}
+        run: |
+          az pipelines run \
+            --name "Pipelines - Preview publish-dotNet" \
+            --preview \
+            --output json > /dev/null
+          echo "[PASS] publish-dotNet preview OK"

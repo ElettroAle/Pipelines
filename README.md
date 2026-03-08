@@ -1,5 +1,8 @@
 # Azure DevOps Pipeline Templates
 
+[![Static Analysis](https://github.com/ElettroAle/Pipelines/actions/workflows/test-static.yml/badge.svg)](https://github.com/ElettroAle/Pipelines/actions/workflows/test-static.yml)
+[![Script Unit Tests](https://github.com/ElettroAle/Pipelines/actions/workflows/test-scripts.yml/badge.svg)](https://github.com/ElettroAle/Pipelines/actions/workflows/test-scripts.yml)
+
 Raccolta di template YAML riusabili per Azure DevOps. L'obiettivo è ridurre la
 duplicazione nei file di pipeline dei repository applicativi, esponendo moduli
 componibili e utility di alto livello pronte all'uso.

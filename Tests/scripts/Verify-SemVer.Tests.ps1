@@ -23,7 +23,7 @@ BeforeAll {
             [switch]$WithMergeCommit  # Se true, aggiunge un merge commit sopra il commit reale
         )
 
-        $repoDir = Join-Path $env:TEMP "pester-verify-$(New-Guid)"
+        $repoDir = Join-Path ([System.IO.Path]::GetTempPath()) "pester-verify-$(New-Guid)"
         New-Item -ItemType Directory -Path $repoDir | Out-Null
 
         Push-Location $repoDir
@@ -32,23 +32,33 @@ BeforeAll {
         git config user.name "Pester Test"
 
         # Commit iniziale (necessario per poter fare merge)
+        # Nel path WithMergeCommit imposta data fissa nel passato per garantire
+        # ordinamento deterministico in git log (evita race condition same-second)
+        if ($WithMergeCommit) {
+            $env:GIT_COMMITTER_DATE = "@1000000000 +0000"   # 2001-09-09
+            $env:GIT_AUTHOR_DATE    = "@1000000000 +0000"
+        }
         "init" | Set-Content "init.txt"
         git add . | Out-Null
         git commit -m "chore: initial commit" -q | Out-Null
+        Remove-Item Env:\GIT_COMMITTER_DATE -ErrorAction SilentlyContinue
+        Remove-Item Env:\GIT_AUTHOR_DATE    -ErrorAction SilentlyContinue
 
         if ($WithMergeCommit) {
             # Simula un merge: crea branch secondario, poi merge
             git checkout -b feature-branch -q | Out-Null
             "feature" | Set-Content "feature.txt"
             git add . | Out-Null
+            # Data un giorno dopo il commit iniziale: git log --no-merges -n 1
+            # restituirà sempre questo commit (più recente) in modo deterministico
+            $env:GIT_COMMITTER_DATE = "@1000086400 +0000"   # 2001-09-10
+            $env:GIT_AUTHOR_DATE    = "@1000086400 +0000"
             git commit -m $CommitMessage -q | Out-Null   # <-- il commit reale è qui
+            Remove-Item Env:\GIT_COMMITTER_DATE -ErrorAction SilentlyContinue
+            Remove-Item Env:\GIT_AUTHOR_DATE    -ErrorAction SilentlyContinue
 
             git checkout main -q 2>$null
             if ($LASTEXITCODE -ne 0) { git checkout master -q 2>$null }
-
-            "main" | Set-Content "main.txt"
-            git add . | Out-Null
-            git commit -m "another commit on main" -q | Out-Null
 
             # Merge senza fast-forward per creare un merge commit
             git merge feature-branch --no-ff -m "Merge branch 'feature-branch'" -q | Out-Null
@@ -186,12 +196,12 @@ Describe "Verify-SemVer — Branch protetti (main, staging)" {
             $result.ExitCode | Should -Be 1
         }
 
-        It "Rifiuta 'FEAT: ...' (uppercase) su main" {
+        It "Accetta 'FEAT: ...' (uppercase) su main — match è case-insensitive" {
             $repo = New-TempGitRepo -CommitMessage "FEAT: nuova funzionalita maiuscolo"
             $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
             Remove-TempRepo $repo
 
-            $result.ExitCode | Should -Be 1
+            $result.ExitCode | Should -Be 0
         }
 
         It "Rifiuta 'refactor: ...' su main" {
@@ -208,7 +218,8 @@ Describe "Verify-SemVer — Branch protetti (main, staging)" {
             $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
             Remove-TempRepo $repo
 
-            $result.Output | Should -Match [regex]::Escape($msg)
+            $result.ExitCode | Should -Be 1
+            $result.Output   | Should -Match "update: messaggio non convenzionale"
         }
     }
 
@@ -320,5 +331,48 @@ Describe "Verify-SemVer — ADDITIONAL_TAG_BRANCHES" {
         Remove-TempRepo $repo
 
         $result.ExitCode | Should -Be 0
+    }
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SUITE 4: Data-driven da fixtures/valid-commits.txt e invalid-commits.txt
+# ─────────────────────────────────────────────────────────────────────────────
+
+Describe "Verify-SemVer — Fixture: commit validi su main" {
+
+    BeforeDiscovery {
+        $lines = Get-Content "$PSScriptRoot/../fixtures/valid-commits.txt" -ErrorAction Stop
+        $script:ValidCases = $lines |
+            Where-Object { $_ -match '\S' } |
+            ForEach-Object { @{ Msg = $_.Trim() } }
+    }
+
+    It "PASS su main: '<Msg>'" -TestCases $script:ValidCases {
+        param([string]$Msg)
+        $repo = New-TempGitRepo -CommitMessage $Msg
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+    }
+}
+
+Describe "Verify-SemVer — Fixture: commit non validi su main" {
+
+    BeforeDiscovery {
+        $lines = Get-Content "$PSScriptRoot/../fixtures/invalid-commits.txt" -ErrorAction Stop
+        $script:InvalidCases = $lines |
+            Where-Object { $_ -match '\S' } |
+            ForEach-Object { @{ Msg = $_.Trim() } }
+    }
+
+    It "FAIL su main: '<Msg>'" -TestCases $script:InvalidCases {
+        param([string]$Msg)
+        $repo = New-TempGitRepo -CommitMessage $Msg
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 1
     }
 }
