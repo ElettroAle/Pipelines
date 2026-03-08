@@ -1,0 +1,41 @@
+# ── CD Step: Deploy su Azure Static Web Apps ──────────────────────────────────
+#
+# Step template atomico per il deploy di una SPA pre-buildata su
+# Azure Static Web Apps tramite token di deployment.
+#
+# Riusato da:
+#   CD/Agnostic/deploy-angular-staticWebApp.yaml
+#
+# Prerequisiti
+# ────────────
+#   Il contenuto da deployare deve trovarsi in una directory locale
+#   referenziata da `appLocation`. Il build viene saltato (`skip_app_build`)
+#   perché l'artifact è già compilato dalla CI.
+#
+# Parametri
+# ─────────
+#   swaDeploymentToken → token di deployment Azure Static Web Apps
+#   appLocation        → path locale della directory da deployare
+#                        (default: variabile $(appLocation))
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: swaDeploymentToken
+    type: string
+
+  - name: appLocation
+    type: string
+    default: '$(appLocation)'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: AzureStaticWebApp@0
+    displayName: 'Deploy su Azure Static Web Apps'
+    inputs:
+      app_location: '${{ parameters.appLocation }}'
+      output_location: ''
+      skip_app_build: true
+    env:
+      azure_static_web_apps_api_token: '${{ parameters.swaDeploymentToken }}'

@@ -138,7 +138,7 @@ extends:
 > Se la tecnologia è App Service, usare il Pattern A che è più conciso.
 > Per step template riusabili del deploy (consigliato per uniformità),
 > aggiungerli in `V3/CD/Common/Steps/` seguendo il modello di
-> `deploy-azure-appService.yaml`.
+> `appService-deploy.yaml` (naming: `{tech}-deploy.yaml`).
 
 ---
 
@@ -195,9 +195,9 @@ Repo Applicativo                   Repo Pipelines (infrastructure)
 
   cd.yaml (Pattern A)              V3/CD/TrunkFlow/
     extends: ──────────────────►     promote-dotNet-appService.yaml
-                                       └─ Modules/promote.yaml        ← agnostico
-                                             └─ CD/Common/Steps/
-                                                   deploy-azure-appService.yaml
+                                       ├─ Modules/promote.yaml        ← agnostico
+                                       └─ CD/Common/Steps/
+                                             appService-deploy.yaml   ← step atomico
 
   cd.yaml (Pattern B)
     extends: ──────────────────►   V3/CD/TrunkFlow/Modules/promote.yaml

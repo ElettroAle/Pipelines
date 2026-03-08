@@ -128,14 +128,14 @@ stages:
             versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(currentTag) /p:FileVersion=$(currentTag) /p:InformationalVersion="$(currentTag)-$(gitHash)"'
 
       stagingDeploySteps:
-        - template: ../Common/Steps/deploy-azure-appService.yaml
+        - template: ../Common/Steps/appService-deploy.yaml
           parameters:
             azureServiceConnection: ${{ parameters.azureServiceConnection }}
             webAppName: ${{ parameters.stagingWebAppName }}
             packagePath: '$(Build.ArtifactStagingDirectory)/publish/**/*.zip'
 
       prodDeploySteps:
-        - template: ../Common/Steps/deploy-azure-appService.yaml
+        - template: ../Common/Steps/appService-deploy.yaml
           parameters:
             azureServiceConnection: ${{ parameters.azureServiceConnection }}
             webAppName: ${{ parameters.prodWebAppName }}
