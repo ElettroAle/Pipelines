@@ -41,7 +41,14 @@ BeforeAll {
             git checkout -b feature-branch -q | Out-Null
             "feature" | Set-Content "feature.txt"
             git add . | Out-Null
+            # Data futura fissa: garantisce che questo commit sia SEMPRE più recente
+            # di quello iniziale nell'ordinamento di git log (evita race condition sui
+            # timestamp quando i commit avvengono nello stesso secondo)
+            $env:GIT_COMMITTER_DATE = "2100-01-02T12:00:00 +0000"
+            $env:GIT_AUTHOR_DATE    = "2100-01-02T12:00:00 +0000"
             git commit -m $CommitMessage -q | Out-Null   # <-- il commit reale è qui
+            Remove-Item Env:\GIT_COMMITTER_DATE -ErrorAction SilentlyContinue
+            Remove-Item Env:\GIT_AUTHOR_DATE    -ErrorAction SilentlyContinue
 
             git checkout main -q 2>$null
             if ($LASTEXITCODE -ne 0) { git checkout master -q 2>$null }
@@ -204,7 +211,8 @@ Describe "Verify-SemVer — Branch protetti (main, staging)" {
             $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
             Remove-TempRepo $repo
 
-            $result.Output | Should -Match [regex]::Escape($msg)
+            $result.ExitCode | Should -Be 1
+            $result.Output   | Should -Match "update: messaggio non convenzionale"
         }
     }
 

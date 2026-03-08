@@ -297,7 +297,7 @@ Describe "Set-Versioning — REQUIRE_TAG=true, incremento SemVer" {
         Remove-TestRepo $tr
 
         $res.ExitCode | Should -Be 0
-        $remoteTags | Should -Match "1\.1\.0"
+        ($remoteTags -join "`n") | Should -Match "1\.1\.0"
     }
 
     It "computedArtifactName con REQUIRE_TAG=true ha formato {proj}-{env}-{semver}" {
