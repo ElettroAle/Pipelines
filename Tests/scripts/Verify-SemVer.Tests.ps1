@@ -23,7 +23,7 @@ BeforeAll {
             [switch]$WithMergeCommit  # Se true, aggiunge un merge commit sopra il commit reale
         )
 
-        $repoDir = Join-Path $env:TEMP "pester-verify-$(New-Guid)"
+        $repoDir = Join-Path ([System.IO.Path]::GetTempPath()) "pester-verify-$(New-Guid)"
         New-Item -ItemType Directory -Path $repoDir | Out-Null
 
         Push-Location $repoDir

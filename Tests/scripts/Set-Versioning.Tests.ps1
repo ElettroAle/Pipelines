@@ -36,11 +36,12 @@ BeforeAll {
         )
 
         # Bare repo come fake origin
-        $fakeOriginPath = Join-Path $env:TEMP "pester-origin-$(New-Guid)"
+        $tmpDir = [System.IO.Path]::GetTempPath()
+        $fakeOriginPath = Join-Path $tmpDir "pester-origin-$(New-Guid)"
         git init --bare $fakeOriginPath -q | Out-Null
 
         # Working repo
-        $repoPath = Join-Path $env:TEMP "pester-repo-$(New-Guid)"
+        $repoPath = Join-Path $tmpDir "pester-repo-$(New-Guid)"
         New-Item -ItemType Directory -Path $repoPath | Out-Null
         Push-Location $repoPath
 
@@ -320,10 +321,11 @@ Describe "Set-Versioning — REQUIRE_TAG=true, HEAD uguale all'ultimo tag" {
 
     It "Stessa tree → currentTag rimane invariato, nessun nuovo tag" {
         # Crea repo con tag sull'HEAD corrente (stesso tree)
-        $fakeOriginPath = Join-Path $env:TEMP "pester-origin-$(New-Guid)"
+        $tmpDir = [System.IO.Path]::GetTempPath()
+        $fakeOriginPath = Join-Path $tmpDir "pester-origin-$(New-Guid)"
         git init --bare $fakeOriginPath -q | Out-Null
 
-        $repoPath = Join-Path $env:TEMP "pester-repo-$(New-Guid)"
+        $repoPath = Join-Path $tmpDir "pester-repo-$(New-Guid)"
         New-Item -ItemType Directory -Path $repoPath | Out-Null
         Push-Location $repoPath
 
