@@ -46,10 +46,6 @@ BeforeAll {
             git checkout main -q 2>$null
             if ($LASTEXITCODE -ne 0) { git checkout master -q 2>$null }
 
-            "main" | Set-Content "main.txt"
-            git add . | Out-Null
-            git commit -m "another commit on main" -q | Out-Null
-
             # Merge senza fast-forward per creare un merge commit
             git merge feature-branch --no-ff -m "Merge branch 'feature-branch'" -q | Out-Null
         }
