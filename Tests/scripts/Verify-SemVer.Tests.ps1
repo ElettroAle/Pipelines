@@ -32,20 +32,27 @@ BeforeAll {
         git config user.name "Pester Test"
 
         # Commit iniziale (necessario per poter fare merge)
+        # Nel path WithMergeCommit imposta data fissa nel passato per garantire
+        # ordinamento deterministico in git log (evita race condition same-second)
+        if ($WithMergeCommit) {
+            $env:GIT_COMMITTER_DATE = "@1000000000 +0000"   # 2001-09-09
+            $env:GIT_AUTHOR_DATE    = "@1000000000 +0000"
+        }
         "init" | Set-Content "init.txt"
         git add . | Out-Null
         git commit -m "chore: initial commit" -q | Out-Null
+        Remove-Item Env:\GIT_COMMITTER_DATE -ErrorAction SilentlyContinue
+        Remove-Item Env:\GIT_AUTHOR_DATE    -ErrorAction SilentlyContinue
 
         if ($WithMergeCommit) {
             # Simula un merge: crea branch secondario, poi merge
             git checkout -b feature-branch -q | Out-Null
             "feature" | Set-Content "feature.txt"
             git add . | Out-Null
-            # Data futura fissa: garantisce che questo commit sia SEMPRE più recente
-            # di quello iniziale nell'ordinamento di git log (evita race condition sui
-            # timestamp quando i commit avvengono nello stesso secondo)
-            $env:GIT_COMMITTER_DATE = "2100-01-02T12:00:00+0000"
-            $env:GIT_AUTHOR_DATE    = "2100-01-02T12:00:00+0000"
+            # Data un giorno dopo il commit iniziale: git log --no-merges -n 1
+            # restituirà sempre questo commit (più recente) in modo deterministico
+            $env:GIT_COMMITTER_DATE = "@1000086400 +0000"   # 2001-09-10
+            $env:GIT_AUTHOR_DATE    = "@1000086400 +0000"
             git commit -m $CommitMessage -q | Out-Null   # <-- il commit reale è qui
             Remove-Item Env:\GIT_COMMITTER_DATE -ErrorAction SilentlyContinue
             Remove-Item Env:\GIT_AUTHOR_DATE    -ErrorAction SilentlyContinue
