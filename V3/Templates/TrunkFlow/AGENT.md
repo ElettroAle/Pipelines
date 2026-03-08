@@ -1,7 +1,10 @@
 # Istruzioni per Coding Agent — Integrazione Pipeline V3 TrunkFlow
 
 Questo documento guida un coding agent nell'integrare le pipeline
-CI/CD V3 TrunkFlow in un repository applicativo .NET con deploy su Azure App Service.
+CI/CD V3 TrunkFlow in un repository applicativo .NET.
+
+Il coding agent **scrive i file nel repo applicativo** usando `extends:`
+per referenziare i template di questo repo. Non copia file da qui.
 
 ---
 
@@ -11,63 +14,22 @@ TrunkFlow è il flusso corretto quando:
 - Il team lavora su un unico branch (`main`)
 - I rilasci sono manuali e richiedono approvazione esplicita
 - Il versioning SemVer è governato dai Conventional Commits
-- Si vuole separare nettamente il CI (pre-release) dal CD (promozione con tagging)
+- Si vuole separare nettamente il CI (pre-release) dal CD (promozione + tagging)
 
 ---
 
-## Checklist di integrazione
-
-### 1. Struttura nel repo applicativo
-
-Creare due file nella cartella `.azure/pipelines/` (o equivalente):
+## Struttura da creare nel repo applicativo
 
 ```
 .azure/
 └── pipelines/
-    ├── ci.yaml    ← raccordo CI  (copia e adatta ci-dotnet.yaml)
-    └── cd.yaml    ← raccordo CD  (copia e adatta cd-dotnet-appService.yaml)
+    ├── ci.yaml    ← raccordo CI
+    └── cd.yaml    ← raccordo CD
 ```
-
-### 2. Parametri da sostituire
-
-Nei file copiati, sostituire i placeholder:
-
-| Placeholder                 | Valore da impostare                                        |
-|-----------------------------|------------------------------------------------------------|
-| `<OrgName>`                 | Nome dell'organizzazione ADO (es. `MyOrg`)                 |
-| `<PipelinesRepoName>`       | Nome del repo Pipelines (es. `Pipelines`)                  |
-| `<ProjectName>`             | Nome del progetto/soluzione .NET (es. `MyApp.BackEnd`)     |
-| `<ServiceConnectionName>`   | Nome service connection ARM in ADO (es. `sc-arm-myapp`)    |
-| `<app-name-staging>`        | Nome App Service di staging (es. `app-myapp-be-staging`)   |
-| `<app-name-prod>`           | Nome App Service di production (es. `app-myapp-be-prod`)   |
-
-**Regola**: `<ProjectName>` deve corrispondere esattamente al nome della cartella
-che contiene il file `.csproj` e al nome del file `.csproj` stesso.
-Esempio: `projectName: 'MyApp.BackEnd'` → `MyApp.BackEnd/MyApp.BackEnd.csproj`
-
-### 3. Prerequisiti Azure DevOps da verificare
-
-Prima di registrare le pipeline in ADO, verificare che esistano:
-
-- [ ] **Repository resource** `infrastructure` → punta al repo Pipelines
-- [ ] **ADO Environment** `Development` (con o senza approval — usato dalla CI)
-- [ ] **ADO Environment** `Staging` con approval obbligatoria configurata
-- [ ] **ADO Environment** `Production` con approval obbligatoria configurata
-- [ ] **Service connection ARM** con nome corrispondente a `azureServiceConnection`
-- [ ] **Variable group** `staging` nel progetto ADO (richiesto dall'entry point CD)
-
-### 4. Registrare le pipeline in ADO
-
-1. Creare una nuova pipeline puntando a `ci.yaml` → rinominarla `[ProjectName] CI`
-2. Creare una nuova pipeline puntando a `cd.yaml` → rinominarla `[ProjectName] CD`
-3. Verificare che la CI si triggeri automaticamente su push a `main`
-4. Verificare che la CD sia ad avvio solo manuale
 
 ---
 
-## Struttura dei file di raccordo (reference)
-
-### ci.yaml — schema minimo
+## File 1: ci.yaml (nel repo applicativo)
 
 ```yaml
 trigger:
@@ -80,16 +42,22 @@ resources:
   repositories:
     - repository: infrastructure
       type: git
-      name: <OrgName>/<PipelinesRepoName>
+      name: <OrgName>/<PipelinesRepoName>   # es. MyOrg/Pipelines
       ref: refs/heads/main
 
 extends:
   template: V3/CI/TrunkFlow/publish-dotNet.yaml@infrastructure
   parameters:
-    projectName: '<ProjectName>'
+    projectName: '<ProjectName>'             # es. MyApp.BackEnd
 ```
 
-### cd.yaml — schema minimo
+---
+
+## File 2: cd.yaml (nel repo applicativo)
+
+### Pattern A — Deploy su Azure App Service (caso standard)
+
+Estendere l'entry point specifico: basta passare 4 parametri.
 
 ```yaml
 trigger: none
@@ -109,40 +77,141 @@ extends:
     azureServiceConnection: '<ServiceConnectionName>'
     stagingWebAppName: '<app-name-staging>'
     prodWebAppName: '<app-name-prod>'
+
+    # Opzionali — solo se i nomi ADO environment differiscono dal default:
+    # stagingEnvironment: 'Staging'
+    # prodEnvironment: 'Production'
 ```
 
+### Pattern B — Tecnologia di deploy custom (iniettata dall'esterno)
+
+Estendere direttamente l'orchestratore agnostico `Modules/promote.yaml`
+e iniettare `stagingDeploySteps` + `prodDeploySteps` con la tecnologia scelta.
+
+```yaml
+trigger: none
+pr: none
+
+resources:
+  repositories:
+    - repository: infrastructure
+      type: git
+      name: <OrgName>/<PipelinesRepoName>
+      ref: refs/heads/main
+
+extends:
+  template: V3/CD/TrunkFlow/Modules/promote.yaml@infrastructure
+  parameters:
+    projectName: '<ProjectName>'
+
+    buildSteps:
+      - template: V3/CI/Common/Steps/dotnet-build.yaml@infrastructure
+
+    publishSteps:
+      - template: V3/CI/Common/Steps/dotnet-publish.yaml@infrastructure
+        parameters:
+          projectName: '<ProjectName>'
+          targetEnvironment: 'Staging'
+          versionArgs: >-
+            /p:Version=$(currentTag)
+            /p:AssemblyVersion=$(currentTag)
+            /p:FileVersion=$(currentTag)
+            /p:InformationalVersion="$(currentTag)-$(gitHash)"
+
+    # Staging: il binario è appena prodotto — si legge da ArtifactStagingDirectory
+    stagingDeploySteps:
+      - task: <MyDeployTask>@1
+        displayName: 'Deploy su <piattaforma> — Staging'
+        inputs:
+          # parametri specifici della tecnologia scelta
+          package: '$(Build.ArtifactStagingDirectory)/publish/**/*.zip'
+
+    # Production: il binario è scaricato dallo stage precedente — si legge da Pipeline.Workspace/staging
+    prodDeploySteps:
+      - task: <MyDeployTask>@1
+        displayName: 'Deploy su <piattaforma> — Production'
+        inputs:
+          # parametri specifici della tecnologia scelta
+          package: '$(Pipeline.Workspace)/staging/**/*.zip'
+```
+
+> Se la tecnologia è App Service, usare il Pattern A che è più conciso.
+> Per step template riusabili del deploy (consigliato per uniformità),
+> aggiungerli in `V3/CD/Common/Steps/` seguendo il modello di
+> `deploy-azure-appService.yaml`.
+
 ---
 
-## Conventional Commits — regola da seguire su `main`
+## Parametri obbligatori
 
-Ogni commit su `main` (diretto o via PR) **deve** iniziare con uno di:
+| Parametro               | Dove                         | Valore di esempio              |
+|-------------------------|------------------------------|--------------------------------|
+| `<OrgName>`             | `resources.repositories`     | `MyOrg`                        |
+| `<PipelinesRepoName>`   | `resources.repositories`     | `Pipelines`                    |
+| `<ProjectName>`         | `extends.parameters`         | `MyApp.BackEnd`                |
+| `<ServiceConnectionName>` | `extends.parameters` (A)   | `sc-arm-myapp`                 |
+| `<app-name-staging>`    | `extends.parameters` (A)     | `app-myapp-be-staging`         |
+| `<app-name-prod>`       | `extends.parameters` (A)     | `app-myapp-be-prod`            |
 
-| Prefisso   | Effetto sul version bump |
-|------------|--------------------------|
-| `fix:`     | patch (1.2.3 → 1.2.4)   |
-| `feat:`    | minor (1.2.3 → 1.3.0)   |
-| `feat!:`   | major (1.2.3 → 2.0.0)   |
-
-Il CD fallisce con errore esplicito se il commit su `main` non rispetta questo formato.
+**Regola `<ProjectName>`**: deve corrispondere al nome della cartella
+che contiene il `.csproj` e al nome del `.csproj` stesso.
+Esempio: `MyApp.BackEnd` → `MyApp.BackEnd/MyApp.BackEnd.csproj`
 
 ---
 
-## Nota sulla tecnologia di deploy
+## Prerequisiti Azure DevOps
 
-L'entry point `promote-azure-appService.yaml` gestisce il deploy su App Service.
-Se in futuro è necessario un target diverso (IIS su VM, Container Apps, ecc.),
-**non modificare** `Modules/promote.yaml`: creare un nuovo entry point che inietti
-step template diversi tramite `stagingDeploySteps` / `prodDeploySteps`.
+- [ ] Repository resource `infrastructure` punta al repo Pipelines
+- [ ] ADO Environment `Development` (usato dalla CI publish stage)
+- [ ] ADO Environment `Staging` con approval obbligatoria
+- [ ] ADO Environment `Production` con approval obbligatoria
+- [ ] Service connection ARM con permessi Contributor sull'App Service
+- [ ] Variable group `staging` nel progetto ADO (richiesto dall'entry point CD Pattern A)
 
-Questo è lo stesso pattern usato per `buildSteps` / `publishSteps` nella CI.
+---
+
+## Conventional Commits — regola su `main`
+
+| Prefisso  | Version bump              |
+|-----------|---------------------------|
+| `fix:`    | patch (1.2.3 → 1.2.4)    |
+| `feat:`   | minor (1.2.3 → 1.3.0)    |
+| `feat!:`  | major (1.2.3 → 2.0.0)    |
+
+Il CD fallisce esplicitamente se il commit su `main` non rispetta questo formato.
+
+---
+
+## Architettura di riferimento
+
+```
+Repo Applicativo                   Repo Pipelines (infrastructure)
+────────────────                   ────────────────────────────────
+.azure/pipelines/
+  ci.yaml                          V3/CI/TrunkFlow/
+    extends: ──────────────────►     publish-dotNet.yaml
+                                       └─ Modules/publish.yaml
+                                             └─ CI/Common/Steps/dotnet-*.yaml
+
+  cd.yaml (Pattern A)              V3/CD/TrunkFlow/
+    extends: ──────────────────►     promote-azure-appService.yaml
+                                       └─ Modules/promote.yaml        ← agnostico
+                                             └─ CD/Common/Steps/
+                                                   deploy-azure-appService.yaml
+
+  cd.yaml (Pattern B)
+    extends: ──────────────────►   V3/CD/TrunkFlow/Modules/promote.yaml
+      stagingDeploySteps:            (orchestratore agnostico)
+        - <MyDeployTask>
+      prodDeploySteps:
+        - <MyDeployTask>
+```
 
 ---
 
 ## Cosa NON fare
 
-- **Non aggiungere task inline** nei file di raccordo: tutto deve passare
-  dall'entry point del repo Pipelines
-- **Non modificare** il path dell'artifact staging `$(Build.ArtifactStagingDirectory)/publish`
-- **Non aggiungere** `trigger:` al file `cd.yaml`: il promote è sempre manuale
-- **Non creare** variable group `staging` nel repo applicativo: deve esistere
-  nel progetto ADO come variable group condiviso
+- **Non copiare** file da questo repo: usare sempre `extends:`
+- **Non aggiungere task inline** nel file di raccordo: tutto passa dai parametri
+- **Non modificare** il path dell'artifact: `$(Build.ArtifactStagingDirectory)/publish` (staging) e `$(Pipeline.Workspace)/staging` (prod) sono contratti del modulo
+- **Non aggiungere** `trigger:` al `cd.yaml`: il promote è sempre manuale
