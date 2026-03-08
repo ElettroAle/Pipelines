@@ -1,8 +1,8 @@
 # ── CD Module: Promote (TrunkFlow) ────────────────────────────────────────────
 #
 # Orchestratore di CD Promote per governance TrunkFlow.
-# Agnostico rispetto alla tecnologia di hosting: il deploy concreto è
-# iniettato dai caller tramite `stagingDeploySteps` e `prodDeploySteps`.
+# Agnostico rispetto alla tecnologia di build e di hosting: compilazione,
+# publish e deploy sono interamente iniettati dai caller tramite stepList.
 #
 # Flusso
 # ──────
@@ -34,10 +34,14 @@
 # Parametri richiesti
 # ───────────────────
 #   projectName         → nome del repo (checkout path e artifact naming)
-#   buildSteps          → stepList: compilazione del progetto
-#   publishSteps        → stepList: publish con versione embedded
+#   buildSteps          → stepList: compilazione del progetto             [REQUIRED]
+#   publishSteps        → stepList: publish con versione embedded          [REQUIRED]
+#
+# Parametri opzionali ma raccomandati
+# ────────────────────────────────────
 #   stagingDeploySteps  → stepList: deploy sull'ambiente di staging
 #   prodDeploySteps     → stepList: deploy sull'ambiente di production
+#                         (omettere solo per testare il versioning senza deploy)
 #
 # Parametri opzionali
 # ───────────────────
@@ -61,11 +65,9 @@ parameters:
 
   - name: buildSteps
     type: stepList
-    default: []
 
   - name: publishSteps
     type: stepList
-    default: []
 
   - name: stagingDeploySteps
     type: stepList
