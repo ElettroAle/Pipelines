@@ -17,7 +17,7 @@ if ($protectedList -contains $targetBranch) {
     
     Write-Host "Last real commit identified: '$lastCommitMessage'"
 
-    if ($lastCommitMessage -cmatch "^fix:|feat:|feat!:|BREAKING CHANGE:") {
+    if ($lastCommitMessage -match "^fix:|feat:|feat!:|BREAKING CHANGE:") {
         Write-Host "##[section]Validation successful: Conventional Commit found."
     } else {
         Write-Host "##[error]MISSING CONVENTIONAL COMMIT: Your last commit must start with 'fix:', 'feat:', or 'feat!:'"

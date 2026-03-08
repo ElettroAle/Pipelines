@@ -182,12 +182,12 @@ Describe "Verify-SemVer — Branch protetti (main, staging)" {
             $result.ExitCode | Should -Be 1
         }
 
-        It "Rifiuta 'FEAT: ...' (uppercase) su main" {
+        It "Accetta 'FEAT: ...' (uppercase) su main — match è case-insensitive" {
             $repo = New-TempGitRepo -CommitMessage "FEAT: nuova funzionalita maiuscolo"
             $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
             Remove-TempRepo $repo
 
-            $result.ExitCode | Should -Be 1
+            $result.ExitCode | Should -Be 0
         }
 
         It "Rifiuta 'refactor: ...' su main" {
