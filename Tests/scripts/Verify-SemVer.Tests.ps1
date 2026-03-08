@@ -44,8 +44,8 @@ BeforeAll {
             # Data futura fissa: garantisce che questo commit sia SEMPRE più recente
             # di quello iniziale nell'ordinamento di git log (evita race condition sui
             # timestamp quando i commit avvengono nello stesso secondo)
-            $env:GIT_COMMITTER_DATE = "2100-01-02T12:00:00 +0000"
-            $env:GIT_AUTHOR_DATE    = "2100-01-02T12:00:00 +0000"
+            $env:GIT_COMMITTER_DATE = "2100-01-02T12:00:00+0000"
+            $env:GIT_AUTHOR_DATE    = "2100-01-02T12:00:00+0000"
             git commit -m $CommitMessage -q | Out-Null   # <-- il commit reale è qui
             Remove-Item Env:\GIT_COMMITTER_DATE -ErrorAction SilentlyContinue
             Remove-Item Env:\GIT_AUTHOR_DATE    -ErrorAction SilentlyContinue
