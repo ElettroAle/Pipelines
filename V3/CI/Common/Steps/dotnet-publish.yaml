@@ -6,7 +6,7 @@
 #   CI/Agnostic/publish-dotNet.yaml
 #   CI/GitFlow/publish-dotNet.yaml
 #   CI/TrunkFlow/publish-dotNet.yaml
-#   CD/TrunkFlow/promote-azure-appService.yaml
+#   CD/TrunkFlow/promote-dotNet-appService.yaml
 #
 # Il parametro `versionArgs` distingue i casi d'uso:
 #   - Agnostico   → versionArgs='' (default) → nessuna versione embedded nel binario

@@ -71,7 +71,7 @@ resources:
       ref: refs/heads/main
 
 extends:
-  template: V3/CD/TrunkFlow/promote-azure-appService.yaml@infrastructure
+  template: V3/CD/TrunkFlow/promote-dotNet-appService.yaml@infrastructure
   parameters:
     projectName: '<ProjectName>'
     azureServiceConnection: '<ServiceConnectionName>'
@@ -194,7 +194,7 @@ Repo Applicativo                   Repo Pipelines (infrastructure)
                                              └─ CI/Common/Steps/dotnet-*.yaml
 
   cd.yaml (Pattern A)              V3/CD/TrunkFlow/
-    extends: ──────────────────►     promote-azure-appService.yaml
+    extends: ──────────────────►     promote-dotNet-appService.yaml
                                        └─ Modules/promote.yaml        ← agnostico
                                              └─ CD/Common/Steps/
                                                    deploy-azure-appService.yaml

@@ -52,7 +52,7 @@ V3/
     └── TrunkFlow/              # Entry point promote con governance TrunkFlow
         ├── Modules/
         │   └── promote.yaml    # Orchestratore: Verify-SemVer → Set-Versioning → Build → Deploy
-        └── promote-azure-appService.yaml
+        └── promote-dotNet-appService.yaml
 ```
 
 ---
@@ -101,7 +101,7 @@ Tutto su `main`. La CI produce artifact pre-release, la CD promote taglia il tag
 | Template | Descrizione |
 |---|---|
 | `CI/TrunkFlow/publish-dotNet.yaml` | CI .NET con versione pre-release (no tag Git) |
-| `CD/TrunkFlow/promote-azure-appService.yaml` | Promote: Verify-SemVer → versioning → deploy staging → deploy prod |
+| `CD/TrunkFlow/promote-dotNet-appService.yaml` | Promote: Verify-SemVer → versioning → deploy staging → deploy prod |
 
 ---
 
@@ -179,7 +179,7 @@ resources:
       name: MyOrg/Infrastructure
 
 extends:
-  template: pipelines/V3/CD/TrunkFlow/promote-azure-appService.yaml@infrastructure
+  template: pipelines/V3/CD/TrunkFlow/promote-dotNet-appService.yaml@infrastructure
   parameters:
     projectName: 'MyApp.BackEnd'
     azureServiceConnection: 'sc-arm-myapp'

@@ -1,4 +1,4 @@
-# ── CD: Promote TrunkFlow → Azure App Service ─────────────────────────────────
+# ── CD: Promote TrunkFlow — .NET → Azure App Service ──────────────────────────
 #
 # Entry point di CD Promote per progetti .NET su Azure App Service (Windows)
 # con governance TrunkFlow.
@@ -42,7 +42,7 @@
 #           name: MyOrg/Pipelines
 #
 #     extends:
-#       template: V3/CD/TrunkFlow/promote-azure-appService.yaml@infrastructure
+#       template: V3/CD/TrunkFlow/promote-dotNet-appService.yaml@infrastructure
 #       parameters:
 #         projectName: 'MyApp.BackEnd'
 #         azureServiceConnection: 'sc-arm-myapp'

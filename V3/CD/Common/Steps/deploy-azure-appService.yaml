@@ -4,7 +4,7 @@
 # (Windows) tramite Zip Deploy.
 #
 # Riusato da:
-#   CD/TrunkFlow/promote-azure-appService.yaml  (stagingDeploySteps / prodDeploySteps)
+#   CD/TrunkFlow/promote-dotNet-appService.yaml  (stagingDeploySteps / prodDeploySteps)
 #
 # Parametri
 # ─────────
