@@ -1,0 +1,60 @@
+# ── CD TrunkFlow: .NET Backend → Azure App Service ───────────────────────────
+#
+# File di raccordo CD (Promote) da copiare nel repository applicativo.
+# Sostituire tutti i placeholder <...> con i valori reali del progetto.
+#
+# Posizionamento consigliato nel repo applicativo:
+#   .azure/pipelines/cd.yaml
+#
+# Prerequisiti in Azure DevOps
+# ────────────────────────────
+#   1. Questa pipeline è sempre ad avvio manuale (trigger: none)
+#   2. Repository resource "infrastructure" che punta al repo Pipelines
+#   3. ADO Environment "Staging" con approvazione obbligatoria configurata
+#   4. ADO Environment "Production" con approvazione obbligatoria configurata
+#   5. Service connection ARM con permessi Contributor sull'App Service
+#   6. Variable group "staging" nel progetto ADO (usato dall'entry point)
+#
+# Flusso di promozione
+# ────────────────────
+#   Avvio manuale
+#     → Approval "Staging"
+#       → Verify-SemVer (valida Conventional Commits su main)
+#       → Set-Versioning (calcola SemVer, crea tag Git)
+#       → Build + Publish (con versione embedded)
+#       → Upload artifact staging
+#       → Deploy App Service staging
+#     → Approval "Production"
+#       → Download artifact staging (stesso binario, no rebuild)
+#       → Deploy App Service production
+#
+# Conventional Commits attesi su main
+# ────────────────────────────────────
+#   fix:    → patch bump  (es. 1.2.3 → 1.2.4)
+#   feat:   → minor bump  (es. 1.2.3 → 1.3.0)
+#   feat!:  → major bump  (es. 1.2.3 → 2.0.0)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+trigger: none
+pr: none
+
+resources:
+  repositories:
+    - repository: infrastructure
+      type: git
+      name: <OrgName>/<PipelinesRepoName>   # es. MyOrg/Pipelines
+      ref: refs/heads/main
+
+extends:
+  template: V3/CD/TrunkFlow/promote-azure-appService.yaml@infrastructure
+  parameters:
+    projectName: '<ProjectName>'                    # es. MyApp.BackEnd
+    azureServiceConnection: '<ServiceConnectionName>'  # es. sc-arm-myapp
+    stagingWebAppName: '<app-name-staging>'         # es. app-myapp-be-staging
+    prodWebAppName: '<app-name-prod>'               # es. app-myapp-be-prod
+
+    # Opzionali — modificare solo se i nomi ADO environment differiscono
+    # dal default ('Staging' / 'Production'):
+    # stagingEnvironment: 'Staging'
+    # prodEnvironment: 'Production'

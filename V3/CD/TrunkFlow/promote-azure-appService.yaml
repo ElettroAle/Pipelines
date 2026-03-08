@@ -1,19 +1,33 @@
 # ── CD: Promote TrunkFlow → Azure App Service ─────────────────────────────────
 #
-# Template di Promote per progetti .NET su Azure App Service (Windows)
+# Entry point di CD Promote per progetti .NET su Azure App Service (Windows)
 # con governance TrunkFlow.
+#
+# Responsabilità di questo file
+# ──────────────────────────────
+#   1. Definisce variabili di build (.NET SDK, config, runtime)
+#   2. Inietta nell'orchestratore `Modules/promote.yaml`:
+#      - buildSteps        → compilazione .NET
+#      - publishSteps      → dotnet publish con versione embedded
+#      - stagingDeploySteps → deploy zip su App Service di staging
+#      - prodDeploySteps   → deploy zip su App Service di production
+#
+#   L'orchestratore è agnostico rispetto alla piattaforma di hosting;
+#   tutta la logica App Service risiede qui e in `../Common/Steps/`.
+#   Per supportare una tecnologia diversa (IIS su VM, Container, ecc.)
+#   basta creare un nuovo entry point che inietti step template diversi.
 #
 # Flusso
 # ──────
 #   StagingPromotion → Verify-SemVer → Set-Versioning → Build → Publish (versionato)
-#                   → Upload artifact staging → Deploy staging
-#   ProdPromotion   → Download artifact staging → Deploy production (no rebuild)
+#                   → Upload artifact staging → Deploy App Service staging
+#   ProdPromotion   → Download artifact staging → Deploy App Service production
 #
 # Utilizzo nel repo applicativo
 # ─────────────────────────────
 #   Il file di raccordo nel repo applicativo deve:
 #     1. Definire trigger: none (il promote è sempre manuale)
-#     2. Includere questo template con `template:`
+#     2. Includere questo template con `extends:`
 #     3. Passare i parametri obbligatori
 #
 #   Esempio raccordo (nel repo applicativo):
@@ -25,10 +39,10 @@
 #       repositories:
 #         - repository: infrastructure
 #           type: git
-#           name: MyOrg/Infrastructure
+#           name: MyOrg/Pipelines
 #
 #     extends:
-#       template: pipelines/V3/CD/TrunkFlow/promote-azure-appService.yaml@infrastructure
+#       template: V3/CD/TrunkFlow/promote-azure-appService.yaml@infrastructure
 #       parameters:
 #         projectName: 'MyApp.BackEnd'
 #         azureServiceConnection: 'sc-arm-myapp'
@@ -100,9 +114,6 @@ stages:
   - template: ./Modules/promote.yaml
     parameters:
       projectName: ${{ parameters.projectName }}
-      azureServiceConnection: ${{ parameters.azureServiceConnection }}
-      stagingWebAppName: ${{ parameters.stagingWebAppName }}
-      prodWebAppName: ${{ parameters.prodWebAppName }}
       stagingEnvironment: ${{ parameters.stagingEnvironment }}
       prodEnvironment: ${{ parameters.prodEnvironment }}
 
@@ -115,3 +126,17 @@ stages:
             projectName: ${{ parameters.projectName }}
             targetEnvironment: '${{ parameters.stagingEnvironment }}'
             versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(currentTag) /p:FileVersion=$(currentTag) /p:InformationalVersion="$(currentTag)-$(gitHash)"'
+
+      stagingDeploySteps:
+        - template: ../Common/Steps/deploy-azure-appService.yaml
+          parameters:
+            azureServiceConnection: ${{ parameters.azureServiceConnection }}
+            webAppName: ${{ parameters.stagingWebAppName }}
+            packagePath: '$(Build.ArtifactStagingDirectory)/publish/**/*.zip'
+
+      prodDeploySteps:
+        - template: ../Common/Steps/deploy-azure-appService.yaml
+          parameters:
+            azureServiceConnection: ${{ parameters.azureServiceConnection }}
+            webAppName: ${{ parameters.prodWebAppName }}
+            packagePath: '$(Pipeline.Workspace)/staging/**/*.zip'

@@ -1,0 +1,40 @@
+# ── CI TrunkFlow: .NET Backend ────────────────────────────────────────────────
+#
+# File di raccordo CI da copiare nel repository applicativo.
+# Sostituire tutti i placeholder <...> con i valori reali del progetto.
+#
+# Posizionamento consigliato nel repo applicativo:
+#   .azure/pipelines/ci.yaml
+#
+# Prerequisiti in Azure DevOps
+# ────────────────────────────
+#   1. Pipeline resource che punta a questo file
+#   2. Repository resource "infrastructure" che punta al repo Pipelines
+#   3. ADO Environment "Development" (usato come gate di approval per il
+#      deployment job del publish stage)
+#   4. Variable group "development" con:
+#        targetEnvironment   → nome ambiente (es. Development)
+#        azureServiceConnection → (opzionale, solo se serve upload su storage)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr: none
+
+resources:
+  repositories:
+    - repository: infrastructure
+      type: git
+      name: <OrgName>/<PipelinesRepoName>   # es. MyOrg/Pipelines
+      ref: refs/heads/main
+
+extends:
+  template: V3/CI/TrunkFlow/publish-dotNet.yaml@infrastructure
+  parameters:
+    projectName: '<ProjectName>'             # es. MyApp.BackEnd
+                                             # deve corrispondere al nome del
+                                             # folder contenente il .csproj
