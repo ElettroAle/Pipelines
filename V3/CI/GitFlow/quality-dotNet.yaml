@@ -16,6 +16,10 @@ parameters:
     type: string
     default: self
 
+  - name: gitLeaksNoGit
+    type: boolean
+    default: true
+
 variables:
   - name: dotnetVersion
     value: '10.0.x'
@@ -32,5 +36,6 @@ stages:
     parameters:
       projectName: ${{ parameters.projectName }}
       checkoutRepository: ${{ parameters.checkoutRepository }}
+      gitLeaksNoGit: ${{ parameters.gitLeaksNoGit }}
       buildAndTestSteps:
         - template: ../Common/Steps/dotnet-quality.yaml
