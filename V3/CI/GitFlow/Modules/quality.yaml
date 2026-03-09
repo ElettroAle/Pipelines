@@ -13,6 +13,7 @@
 # ─────────
 #   projectName        → nome del repo applicativo (default: nome del repo ADO)
 #   buildAndTestSteps  → stepList iniettata nel job BuildAndTest dopo Gitleaks
+#   checkoutRepository → repository da fare checkout (default: self)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,10 @@ parameters:
     type: stepList
     default: []
 
+  - name: checkoutRepository
+    type: string
+    default: self
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 stages:
@@ -36,7 +41,7 @@ stages:
         displayName: 'Validate SemVer Title'
         condition: eq(variables['Build.Reason'], 'PullRequest')
         steps:
-          - checkout: self
+          - checkout: ${{ parameters.checkoutRepository }}
             path: s/${{ parameters.projectName }}
             fetchDepth: 10
 
@@ -59,7 +64,7 @@ stages:
           vmImage: 'ubuntu-latest'
         condition: succeeded()
         steps:
-          - checkout: self
+          - checkout: ${{ parameters.checkoutRepository }}
             fetchDepth: 0
 
           - script: |
