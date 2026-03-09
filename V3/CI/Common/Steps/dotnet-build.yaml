@@ -52,4 +52,4 @@ steps:
     inputs:
       command: 'build'
       projects: '${{ parameters.publishProject }}'
-      arguments: '--configuration ${{ parameters.buildConfiguration }} --runtime ${{ parameters.targetRuntime }} --self-contained ${{ parameters.selfContained }}'
+      arguments: '--configuration ${{ parameters.buildConfiguration }} /p:RuntimeIdentifier=${{ parameters.targetRuntime }} /p:SelfContained=${{ parameters.selfContained }}'
