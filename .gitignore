@@ -1,3 +1,4 @@
 # Ignore Visual Studio workspace files
 .vs/
 
+.repomix/*
