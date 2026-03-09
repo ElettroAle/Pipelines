@@ -12,6 +12,10 @@ parameters:
     type: string
     default: '$(Build.Repository.Name)'
 
+  - name: checkoutRepository
+    type: string
+    default: self
+
 variables:
   - name: dotnetVersion
     value: '10.0.x'
@@ -27,5 +31,6 @@ stages:
   - template: ./Modules/quality.yaml
     parameters:
       projectName: ${{ parameters.projectName }}
+      checkoutRepository: ${{ parameters.checkoutRepository }}
       buildAndTestSteps:
         - template: ../Common/Steps/dotnet-quality.yaml
