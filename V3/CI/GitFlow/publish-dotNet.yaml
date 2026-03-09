@@ -20,7 +20,7 @@ parameters:
 
 variables:
   - name: publishProject
-    value: '${{ parameters.projectName }}/${{ parameters.projectName }}.csproj'
+    value: '**/${{ parameters.projectName }}.csproj'
   - name: outputDirectory
     value: '$(Build.ArtifactStagingDirectory)/publish'
   - name: dotnetVersion
