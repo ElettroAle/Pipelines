@@ -56,7 +56,7 @@ stages:
           - task: PowerShell@2
             displayName: 'Verify SemVer in PR Commits'
             inputs:
-              filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Verify-SemVer.ps1'
+              filePath: '$(Build.SourcesDirectory)/infrastructure/V3/CI/Scripts/Verify-SemVer.ps1'
               workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
               pwsh: true
             env:
