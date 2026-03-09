@@ -46,7 +46,7 @@ steps:
     inputs:
       command: 'custom'
       custom: 'list'
-      arguments: '${{ parameters.buildProjects }} package --vulnerable --include-transitive'
+      arguments: 'package --vulnerable --include-transitive'
 
   - task: DotNetCoreCLI@2
     displayName: 'Restore'
