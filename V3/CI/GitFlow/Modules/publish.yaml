@@ -21,6 +21,7 @@
 #   projectName    → nome del repo applicativo (default: nome del repo ADO)
 #   buildSteps     → stepList iniettata nel job Compile dopo il checkout
 #   publishSteps   → stepList iniettata nel job PublishArtifact dopo Set-Versioning
+#   checkoutRepository → repository da fare checkout (default: self)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -37,6 +38,10 @@ parameters:
     type: stepList
     default: []
 
+  - name: checkoutRepository
+    type: string
+    default: self
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 stages:
@@ -46,7 +51,7 @@ stages:
       - job: Compile
         displayName: 'Restore and Build'
         steps:
-          - checkout: self
+          - checkout: ${{ parameters.checkoutRepository }}
             path: s/${{ parameters.projectName }}
 
           - ${{ parameters.buildSteps }}
@@ -63,7 +68,7 @@ stages:
           runOnce:
             deploy:
               steps:
-                - checkout: self
+                - checkout: ${{ parameters.checkoutRepository }}
                   path: s/${{ parameters.projectName }}
                   fetchDepth: 0
                   persistCredentials: true
@@ -75,7 +80,7 @@ stages:
                 - task: PowerShell@2
                   displayName: 'Conditional Versioning and Tagging'
                   inputs:
-                    filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Set-Versioning.ps1'
+                    filePath: '$(Build.SourcesDirectory)/infrastructure/V3/CI/Scripts/Set-Versioning.ps1'
                     workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
                     pwsh: true
                   env:
