@@ -61,9 +61,6 @@ stages:
       checkoutRepository: ${{ parameters.checkoutRepository }}
       buildSteps:
         - template: ../Common/Steps/dotnet-build.yaml
-          parameters:
-            targetRuntime: $(targetRuntime)
-            selfContained: $(selfContained)
 
       publishSteps:
         - template: ../Common/Steps/dotnet-publish.yaml

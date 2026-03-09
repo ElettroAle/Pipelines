@@ -13,8 +13,6 @@
 #   dotnetVersion      → versione SDK .NET      (default: variabile $(dotnetVersion))
 #   publishProject     → path del .csproj        (default: variabile $(publishProject))
 #   buildConfiguration → configurazione build    (default: variabile $(buildConfiguration))
-#   selfContained      → self-contained build     (default: variabile $(selfContained))
-#   targetRuntime      → runtime identifier RID   (default: variabile $(targetRuntime))
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -31,14 +29,6 @@ parameters:
     type: string
     default: '$(buildConfiguration)'
 
-  - name: selfContained
-    type: string
-    default: '$(selfContained)'
-
-  - name: targetRuntime
-    type: string
-    default: '$(targetRuntime)'
-
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
@@ -52,4 +42,4 @@ steps:
     inputs:
       command: 'build'
       projects: '${{ parameters.publishProject }}'
-      arguments: '--configuration ${{ parameters.buildConfiguration }} /p:RuntimeIdentifier=${{ parameters.targetRuntime }} /p:SelfContained=${{ parameters.selfContained }}'
+      arguments: '--configuration ${{ parameters.buildConfiguration }}'
