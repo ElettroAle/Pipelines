@@ -12,6 +12,7 @@
 # Parametri
 # ─────────
 #   buildAndTestSteps  → stepList iniettata nel job BuildAndTest dopo Gitleaks
+#   gitLeaksNoGit      → passa --no-git a Gitleaks (default: false)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -19,6 +20,10 @@ parameters:
   - name: buildAndTestSteps
     type: stepList
     default: []
+
+  - name: gitLeaksNoGit
+    type: boolean
+    default: false
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -35,8 +40,8 @@ stages:
           - checkout: self
             fetchDepth: 0
 
-          - script: |
-              docker run -v $(Build.SourcesDirectory):/path zricethezav/gitleaks:latest detect --source="/path" --exit-code 1 --verbose
-            displayName: 'Gitleaks (Secret Scanning)'
+          - template: ./Steps/gitleaks.yaml
+            parameters:
+              noGit: ${{ parameters.gitLeaksNoGit }}
 
           - ${{ parameters.buildAndTestSteps }}

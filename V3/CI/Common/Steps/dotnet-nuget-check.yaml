@@ -1,0 +1,34 @@
+# ── CI Step: DotNet NuGet Vulnerability Check ─────────────────────────────────
+#
+# Step template condiviso per la verifica delle vulnerabilità NuGet in progetti .NET.
+# Installa l'SDK e scansiona i pacchetti (diretti e transitivi).
+#
+# Riusato da:
+#   CI/Agnostic/quality-dotNet.yaml
+#   CI/GitFlow/quality-dotNet.yaml
+#
+# Parametri
+# ─────────
+#   dotnetVersion → versione SDK .NET (default: variabile $(dotnetVersion))
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: dotnetVersion
+    type: string
+    default: '$(dotnetVersion)'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: UseDotNet@2
+    displayName: 'Install .NET SDK'
+    inputs:
+      version: ${{ parameters.dotnetVersion }}
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Check NuGet Vulnerabilities'
+    inputs:
+      command: 'custom'
+      custom: 'list'
+      arguments: 'package --vulnerable --include-transitive'

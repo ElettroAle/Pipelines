@@ -1,0 +1,41 @@
+# ── CI Step: DotNet Test + Coverage ───────────────────────────────────────────
+#
+# Step template condiviso per l'esecuzione dei test e la pubblicazione
+# del code coverage in progetti .NET.
+#
+# Riusato da:
+#   CI/Agnostic/quality-dotNet.yaml
+#   CI/GitFlow/quality-dotNet.yaml
+#
+# Parametri
+# ─────────
+#   buildConfiguration → configurazione build   (default: variabile $(buildConfiguration))
+#   testProjects       → glob pattern test proj  (default: variabile $(testProjects))
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: buildConfiguration
+    type: string
+    default: '$(buildConfiguration)'
+
+  - name: testProjects
+    type: string
+    default: '$(testProjects)'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: DotNetCoreCLI@2
+    displayName: 'Test'
+    inputs:
+      command: 'test'
+      projects: '${{ parameters.testProjects }}'
+      arguments: '--configuration ${{ parameters.buildConfiguration }} --no-build --no-restore --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura'
+
+  - task: PublishCodeCoverageResults@2
+    displayName: 'Publish Code Coverage'
+    inputs:
+      codeCoverageTool: 'Cobertura'
+      summaryFileLocation: '$(Agent.TempDirectory)/**/coverage.cobertura.xml'
+      additionalCodeCoverageFiles: '$(Agent.TempDirectory)/**/coverage.opencover.xml'

@@ -72,9 +72,8 @@ stages:
           - checkout: ${{ parameters.checkoutRepository }}
             fetchDepth: 0
 
-          - script: |
-              NO_GIT_FLAG=${{ iif(parameters.gitLeaksNoGit, '--no-git', '') }}
-              docker run -v $(Build.SourcesDirectory):/path zricethezav/gitleaks:latest detect --source="/path" $NO_GIT_FLAG --exit-code 1 --verbose
-            displayName: 'Gitleaks (Secret Scanning)'
+          - template: ../../Common/Steps/gitleaks.yaml
+            parameters:
+              noGit: ${{ parameters.gitLeaksNoGit }}
 
           - ${{ parameters.buildAndTestSteps }}
