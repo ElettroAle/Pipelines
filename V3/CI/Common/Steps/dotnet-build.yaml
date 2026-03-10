@@ -1,18 +1,21 @@
 # ── CI Step: DotNet Build ──────────────────────────────────────────────────────
 #
 # Step template condiviso per la fase di build di progetti .NET.
+# Installa l'SDK e compila i progetti specificati (singolo o glob pattern).
 #
 # Riusato da:
 #   CI/Agnostic/publish-dotNet.yaml
+#   CI/Agnostic/quality-dotNet.yaml
 #   CI/GitFlow/publish-dotNet.yaml
+#   CI/GitFlow/quality-dotNet.yaml
 #   CI/TrunkFlow/publish-dotNet.yaml
 #   CD/TrunkFlow/promote-dotNet-appService.yaml
 #
 # Parametri
 # ─────────
-#   dotnetVersion      → versione SDK .NET      (default: variabile $(dotnetVersion))
-#   publishProject     → path del .csproj        (default: variabile $(publishProject))
-#   buildConfiguration → configurazione build    (default: variabile $(buildConfiguration))
+#   dotnetVersion      → versione SDK .NET                    (default: variabile $(dotnetVersion))
+#   projects           → path o glob pattern del/dei .csproj  (default: variabile $(publishProject))
+#   buildConfiguration → configurazione build                 (default: variabile $(buildConfiguration))
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -21,7 +24,7 @@ parameters:
     type: string
     default: '$(dotnetVersion)'
 
-  - name: publishProject
+  - name: projects
     type: string
     default: '$(publishProject)'
 
@@ -41,5 +44,5 @@ steps:
     displayName: 'DotNet Build'
     inputs:
       command: 'build'
-      projects: '${{ parameters.publishProject }}'
+      projects: '${{ parameters.projects }}'
       arguments: '--configuration ${{ parameters.buildConfiguration }}'

@@ -1,0 +1,28 @@
+# ── CI Step: Gitleaks (Secret Scanning) ───────────────────────────────────────
+#
+# Esegue una scansione dei segreti nel codice sorgente tramite Gitleaks.
+#
+# Riusato da:
+#   CI/Common/quality.yaml
+#   CI/GitFlow/Modules/quality.yaml
+#
+# Parametri
+# ─────────
+#   noGit → passa --no-git a Gitleaks (default: false)
+#           Usare true quando la history Git non è accessibile nell'agent
+#           (es. checkout con fetchDepth limitato o senza .git/)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: noGit
+    type: boolean
+    default: false
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - script: |
+      NO_GIT_FLAG=${{ iif(parameters.noGit, '--no-git', '') }}
+      docker run -v $(Build.SourcesDirectory):/path zricethezav/gitleaks:latest detect --source="/path" $NO_GIT_FLAG --exit-code 1 --verbose
+    displayName: 'Gitleaks (Secret Scanning)'

@@ -28,4 +28,8 @@ stages:
   - template: ../Common/quality.yaml
     parameters:
       buildAndTestSteps:
-        - template: ../Common/Steps/dotnet-quality.yaml
+        - template: ../Common/Steps/dotnet-nuget-check.yaml
+        - template: ../Common/Steps/dotnet-build.yaml
+          parameters:
+            projects: '$(buildProjects)'
+        - template: ../Common/Steps/dotnet-test.yaml
