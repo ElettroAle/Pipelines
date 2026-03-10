@@ -14,20 +14,23 @@
 #
 # Parametri
 # ─────────
-#   projectName        → nome repo (per FileTransform folderPath)
-#   targetEnvironment  → ambiente target (compile-time o variabile runtime)
-#   outputDirectory    → path output artifact   (default: variabile $(outputDirectory))
-#   publishProject     → path del .csproj        (default: variabile $(publishProject))
-#   buildConfiguration → configurazione build    (default: variabile $(buildConfiguration))
-#   targetRuntime      → runtime identifier      (default: variabile $(targetRuntime))
-#   selfContained      → self-contained flag     (default: variabile $(selfContained))
-#   versionArgs        → argomenti /p:Version=…  (default: '' → omesso)
+#   projectName            → nome repo (per FileTransform folderPath)
+#                            obbligatorio solo se variableSubstitution: true
+#   targetEnvironment      → ambiente target (compile-time o variabile runtime)
+#   outputDirectory        → path output artifact   (default: variabile $(outputDirectory))
+#   publishProject         → path del .csproj        (default: variabile $(publishProject))
+#   buildConfiguration     → configurazione build    (default: variabile $(buildConfiguration))
+#   targetRuntime          → runtime identifier      (default: variabile $(targetRuntime))
+#   selfContained          → self-contained flag     (default: variabile $(selfContained))
+#   versionArgs            → argomenti /p:Version=…  (default: '' → omesso)
+#   variableSubstitution   → abilita FileTransform JSON + Verify XDT (default: false)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
 parameters:
   - name: projectName
     type: string
+    default: ''
 
   - name: targetEnvironment
     type: string
@@ -57,14 +60,19 @@ parameters:
     type: string
     default: ''
 
+  - name: variableSubstitution
+    type: boolean
+    default: false
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
-  - task: FileTransform@2
-    displayName: 'JSON Variable Substitution'
-    inputs:
-      folderPath: '$(Build.SourcesDirectory)/${{ parameters.projectName }}/${{ parameters.projectName }}'
-      jsonTargetFiles: '**/appsettings.${{ parameters.targetEnvironment }}.json'
+  - ${{ if parameters.variableSubstitution }}:
+    - task: FileTransform@2
+      displayName: 'JSON Variable Substitution'
+      inputs:
+        folderPath: '$(Build.SourcesDirectory)/${{ parameters.projectName }}/${{ parameters.projectName }}'
+        jsonTargetFiles: '**/appsettings.${{ parameters.targetEnvironment }}.json'
 
   - task: DotNetCoreCLI@2
     displayName: 'DotNet Publish'
@@ -81,9 +89,10 @@ steps:
       modifyOutputPath: false
       zipAfterPublish: true
 
-  - script: |
-      if grep -q "__ENVIRONMENT_REQUIRED__" ${{ parameters.outputDirectory }}/web.config; then
-        echo "##[error]XDT Transformation failed."
-        exit 1
-      fi
-    displayName: 'Verify XDT'
+  - ${{ if parameters.variableSubstitution }}:
+    - script: |
+        if grep -q "__ENVIRONMENT_REQUIRED__" ${{ parameters.outputDirectory }}/web.config; then
+          echo "##[error]XDT Transformation failed."
+          exit 1
+        fi
+      displayName: 'Verify XDT'
