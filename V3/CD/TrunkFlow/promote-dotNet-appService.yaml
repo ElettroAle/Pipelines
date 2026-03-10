@@ -91,6 +91,10 @@ parameters:
     type: string
     default: 'Production'
 
+  - name: checkoutRepository
+    displayName: 'Repository da fare checkout'
+    type: string
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 variables:
@@ -114,6 +118,7 @@ stages:
   - template: ./Modules/promote.yaml
     parameters:
       projectName: ${{ parameters.projectName }}
+      checkoutRepository: ${{ parameters.checkoutRepository }}
       stagingEnvironment: ${{ parameters.stagingEnvironment }}
       prodEnvironment: ${{ parameters.prodEnvironment }}
 

@@ -27,6 +27,9 @@ parameters:
     type: string
     default: '$(Build.Repository.Name)'
 
+  - name: checkoutRepository
+    type: string
+
 variables:
   - name: publishProject
     value: '${{ parameters.projectName }}/${{ parameters.projectName }}.csproj'
@@ -48,6 +51,7 @@ stages:
   - template: ./Modules/publish.yaml
     parameters:
       projectName: ${{ parameters.projectName }}
+      checkoutRepository: ${{ parameters.checkoutRepository }}
       buildSteps:
         - template: ../Common/Steps/dotnet-build.yaml
 

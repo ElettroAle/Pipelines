@@ -34,7 +34,8 @@
 # Parametri richiesti
 # ───────────────────
 #   projectName         → nome del repo (checkout path e artifact naming)
-#   buildSteps          → stepList: compilazione del progetto             [REQUIRED]
+#   checkoutRepository  → repository da fare checkout                      [REQUIRED]
+#   buildSteps          → stepList: compilazione del progetto              [REQUIRED]
 #   publishSteps        → stepList: publish con versione embedded          [REQUIRED]
 #
 # Parametri opzionali ma raccomandati
@@ -62,6 +63,9 @@ parameters:
   - name: prodEnvironment
     type: string
     default: 'Production'
+
+  - name: checkoutRepository
+    type: string
 
   - name: buildSteps
     type: stepList
@@ -96,7 +100,7 @@ stages:
               steps:
 
                 # ── 1. Checkout sorgente e infrastruttura ───────────────────
-                - checkout: self
+                - checkout: ${{ parameters.checkoutRepository }}
                   path: s/${{ parameters.projectName }}
                   fetchDepth: 0
                   persistCredentials: true

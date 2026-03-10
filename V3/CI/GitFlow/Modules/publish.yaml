@@ -21,7 +21,7 @@
 #   projectName    → nome del repo applicativo (default: nome del repo ADO)
 #   buildSteps     → stepList iniettata nel job Compile dopo il checkout
 #   publishSteps   → stepList iniettata nel job PublishArtifact dopo Set-Versioning
-#   checkoutRepository → repository da fare checkout (default: self)
+#   checkoutRepository → repository da fare checkout [REQUIRED]
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -40,7 +40,6 @@ parameters:
 
   - name: checkoutRepository
     type: string
-    default: self
 
 # ─────────────────────────────────────────────────────────────────────────────
 

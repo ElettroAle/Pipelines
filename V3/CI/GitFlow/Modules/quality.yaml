@@ -13,8 +13,8 @@
 # ─────────
 #   projectName        → nome del repo applicativo (default: nome del repo ADO)
 #   buildAndTestSteps  → stepList iniettata nel job BuildAndTest dopo Gitleaks
-#   checkoutRepository → repository da fare checkout (default: self)
-#   gitLeaksNoGit      → passa --no-git a Gitleaks (default: true; false per repo con history git accessibile)
+#   checkoutRepository → repository da fare checkout [REQUIRED]
+#   gitLeaksNoGit      → passa --no-git a Gitleaks (default: true)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -29,7 +29,6 @@ parameters:
 
   - name: checkoutRepository
     type: string
-    default: self
 
   - name: gitLeaksNoGit
     type: boolean
@@ -63,17 +62,8 @@ stages:
               TARGET_BRANCH: $(System.PullRequest.TargetBranch)
               ADDITIONAL_TAG_BRANCHES: $(additionalRequiredTaggingBranches)
 
-      - job: BuildAndTest
-        displayName: 'Build, Test and Security'
-        pool:
-          vmImage: 'ubuntu-latest'
-        condition: succeeded()
-        steps:
-          - checkout: ${{ parameters.checkoutRepository }}
-            fetchDepth: 0
-
-          - template: ../../Common/Steps/gitleaks.yaml
-            parameters:
-              noGit: ${{ parameters.gitLeaksNoGit }}
-
-          - ${{ parameters.buildAndTestSteps }}
+      - template: ../../Common/Jobs/quality-build-and-test.yaml
+        parameters:
+          checkoutRepository: ${{ parameters.checkoutRepository }}
+          gitLeaksNoGit: ${{ parameters.gitLeaksNoGit }}
+          buildAndTestSteps: ${{ parameters.buildAndTestSteps }}

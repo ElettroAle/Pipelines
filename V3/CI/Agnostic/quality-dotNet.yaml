@@ -13,6 +13,9 @@ parameters:
     type: string
     default: '$(Build.Repository.Name)'
 
+  - name: checkoutRepository
+    type: string
+
 variables:
   - name: dotnetVersion
     value: '10.0.x'
@@ -27,6 +30,7 @@ variables:
 stages:
   - template: ../Common/quality.yaml
     parameters:
+      checkoutRepository: ${{ parameters.checkoutRepository }}
       buildAndTestSteps:
         - template: ../Common/Steps/dotnet-nuget-check.yaml
         - template: ../Common/Steps/dotnet-build.yaml
