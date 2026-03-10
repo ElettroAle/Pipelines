@@ -16,6 +16,9 @@
 #   dotnetVersion      → versione SDK .NET                    (default: variabile $(dotnetVersion))
 #   projects           → path o glob pattern del/dei .csproj  (default: variabile $(publishProject))
 #   buildConfiguration → configurazione build                 (default: variabile $(buildConfiguration))
+#   selfContained      → forza /p:SelfContained               (default: false)
+#                        Impostare esplicitamente per evitare che la pipeline variable
+#                        omonima venga interpretata da MSBuild come proprietà.
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -32,6 +35,10 @@ parameters:
     type: string
     default: '$(buildConfiguration)'
 
+  - name: selfContained
+    type: boolean
+    default: false
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
@@ -45,4 +52,4 @@ steps:
     inputs:
       command: 'build'
       projects: '${{ parameters.projects }}'
-      arguments: '--configuration ${{ parameters.buildConfiguration }}'
+      arguments: '--configuration ${{ parameters.buildConfiguration }} /p:SelfContained=${{ parameters.selfContained }}'
