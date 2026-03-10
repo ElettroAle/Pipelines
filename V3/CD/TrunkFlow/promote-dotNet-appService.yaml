@@ -95,6 +95,15 @@ parameters:
     displayName: 'Repository da fare checkout'
     type: string
 
+  - name: targetRuntime
+    displayName: 'Runtime identifier .NET (es. win-x64, linux-x64)'
+    type: string
+
+  - name: selfContained
+    displayName: 'Binario self-contained (true | false)'
+    type: string
+    default: 'false'
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 variables:
@@ -106,10 +115,6 @@ variables:
     value: '10.0.x'
   - name: buildConfiguration
     value: 'Release'
-  - name: targetRuntime
-    value: 'win-x64'
-  - name: selfContained
-    value: 'true'
   - group: "staging"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -130,6 +135,8 @@ stages:
           parameters:
             projectName: ${{ parameters.projectName }}
             targetEnvironment: '${{ parameters.stagingEnvironment }}'
+            targetRuntime: '${{ parameters.targetRuntime }}'
+            selfContained: '${{ parameters.selfContained }}'
             versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(currentTag) /p:FileVersion=$(currentTag) /p:InformationalVersion="$(currentTag)-$(gitHash)"'
 
       stagingDeploySteps:

@@ -9,7 +9,10 @@
 # Parametri
 # ─────────
 #   projectName       → nome del repo (usato per checkout path e artifact naming)
+#   checkoutRepository → repository da fare checkout [REQUIRED]
 #   targetEnvironment → ambiente target (es. Development, Staging, Production)
+#   targetRuntime     → runtime identifier .NET (es. win-x64, linux-x64) [REQUIRED]
+#   selfContained     → produce binario self-contained [REQUIRED]
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -25,6 +28,13 @@ parameters:
     type: string
     default: 'Development'
 
+  - name: targetRuntime
+    type: string
+
+  - name: selfContained
+    type: string
+    default: 'false'
+
 variables:
   - name: publishProject
     value: '${{ parameters.projectName }}/${{ parameters.projectName }}.csproj'
@@ -34,10 +44,6 @@ variables:
     value: '10.0.x'
   - name: buildConfiguration
     value: 'Release'
-  - name: targetRuntime
-    value: 'win-x64'
-  - name: selfContained
-    value: 'true'
   - name: targetEnvironment
     value: '${{ parameters.targetEnvironment }}'
 
@@ -55,3 +61,5 @@ stages:
           parameters:
             projectName: ${{ parameters.projectName }}
             targetEnvironment: '${{ parameters.targetEnvironment }}'
+            targetRuntime: '${{ parameters.targetRuntime }}'
+            selfContained: '${{ parameters.selfContained }}'

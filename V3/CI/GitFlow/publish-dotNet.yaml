@@ -17,6 +17,16 @@ parameters:
   - name: checkoutRepository
     type: string
 
+  - name: targetRuntime
+    type: string
+    # Esempi: win-x64, linux-x64, osx-x64
+    # Lista completa: https://learn.microsoft.com/dotnet/core/rid-catalog
+
+  - name: selfContained
+    type: string
+    default: 'false'
+    # Valori: 'true' | 'false'
+
 variables:
   - name: publishProject
     value: '**/${{ parameters.projectName }}.csproj'
@@ -26,10 +36,6 @@ variables:
     value: '10.0.x'
   - name: buildConfiguration
     value: 'Release'
-  - name: targetRuntime
-    value: 'win-x64'
-  - name: selfContained
-    value: 'true'
 
   - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/dev') }}:
     - group: "development"
@@ -65,4 +71,6 @@ stages:
         - template: ../Common/Steps/dotnet-publish.yaml
           parameters:
             projectName: ${{ parameters.projectName }}
+            targetRuntime: '${{ parameters.targetRuntime }}'
+            selfContained: '${{ parameters.selfContained }}'
             versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(currentTag) /p:FileVersion=$(currentTag) /p:InformationalVersion="$(currentTag)-$(gitHash)"'

@@ -220,8 +220,8 @@ Queste variabili devono essere definite nell'entry point (come `variables:` o tr
 | `dotnetVersion` | stringa | `dotnet-build.yaml`, `dotnet-publish.yaml`, `dotnet-quality.yaml` |
 | `publishProject` | stringa | `dotnet-build.yaml`, `dotnet-publish.yaml` |
 | `buildConfiguration` | stringa | tutti |
-| `targetRuntime` | stringa | `dotnet-publish.yaml` |
-| `selfContained` | stringa | `dotnet-publish.yaml` |
+| `targetRuntime` | **parametro entry point** | publish-dotNet.yaml → `dotnet-publish.yaml` |
+| `selfContained` | **parametro entry point** | publish-dotNet.yaml → `dotnet-publish.yaml` |
 | `outputDirectory` | stringa | `dotnet-publish.yaml`, `angular-publish.yaml` |
 | `targetEnvironment` | stringa | `dotnet-publish.yaml` |
 | `nodeVersion` | stringa | `angular-*.yaml` |
