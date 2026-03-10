@@ -24,6 +24,7 @@ parameters:
 
   - name: selfContained
     type: string
+    default: 'false'
     # Valori: 'true' | 'false'
 
 variables:
