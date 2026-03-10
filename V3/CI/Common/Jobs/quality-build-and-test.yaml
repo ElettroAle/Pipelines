@@ -1,0 +1,46 @@
+# ── CI Job: Quality — Build and Test ──────────────────────────────────────────
+#
+# Job template condiviso per la fase BuildAndTest della Quality gate.
+# Esegue il checkout, Gitleaks e gli step tech-specific iniettati dal caller.
+#
+# Riusato da:
+#   CI/Common/quality.yaml
+#   CI/GitFlow/Modules/quality.yaml
+#
+# Parametri
+# ─────────
+#   checkoutRepository → repository da fare checkout    [REQUIRED]
+#   gitLeaksNoGit      → passa --no-git a Gitleaks      (default: false)
+#   buildAndTestSteps  → stepList con gli step tech-specific
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: checkoutRepository
+    type: string
+
+  - name: gitLeaksNoGit
+    type: boolean
+    default: false
+
+  - name: buildAndTestSteps
+    type: stepList
+    default: []
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+jobs:
+  - job: BuildAndTest
+    displayName: 'Build, Test and Security'
+    pool:
+      vmImage: 'ubuntu-latest'
+    condition: succeeded()
+    steps:
+      - checkout: ${{ parameters.checkoutRepository }}
+        fetchDepth: 0
+
+      - template: ../Steps/gitleaks.yaml
+        parameters:
+          noGit: ${{ parameters.gitLeaksNoGit }}
+
+      - ${{ parameters.buildAndTestSteps }}

@@ -14,10 +14,11 @@
 #
 # Parametri
 # ─────────
-#   projectName    → nome del repo applicativo (default: nome del repo ADO)
-#   artifactName   → nome dell'artifact pubblicato (default: 'drop')
-#   buildSteps     → stepList iniettata nel job Compile dopo il checkout
-#   publishSteps   → stepList iniettata nel job PublishArtifact
+#   projectName        → nome del repo applicativo (default: nome del repo ADO)
+#   artifactName       → nome dell'artifact pubblicato (default: 'drop')
+#   checkoutRepository → repository da fare checkout [REQUIRED]
+#   buildSteps         → stepList iniettata nel job Compile dopo il checkout
+#   publishSteps       → stepList iniettata nel job PublishArtifact
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,9 @@ parameters:
   - name: artifactName
     type: string
     default: 'drop'
+
+  - name: checkoutRepository
+    type: string
 
   - name: buildSteps
     type: stepList
@@ -49,7 +53,7 @@ stages:
         pool:
           vmImage: 'ubuntu-latest'
         steps:
-          - checkout: self
+          - checkout: ${{ parameters.checkoutRepository }}
             path: s/${{ parameters.projectName }}
 
           - ${{ parameters.buildSteps }}
@@ -66,7 +70,7 @@ stages:
           runOnce:
             deploy:
               steps:
-                - checkout: self
+                - checkout: ${{ parameters.checkoutRepository }}
                   path: s/${{ parameters.projectName }}
 
                 - ${{ parameters.publishSteps }}

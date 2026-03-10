@@ -16,7 +16,6 @@ parameters:
 
   - name: checkoutRepository
     type: string
-    default: self
 
 variables:
   - name: publishProject

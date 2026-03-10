@@ -18,6 +18,9 @@ parameters:
     type: string
     default: '$(Build.Repository.Name)'
 
+  - name: checkoutRepository
+    type: string
+
   - name: targetEnvironment
     type: string
     default: 'Development'
@@ -42,6 +45,7 @@ stages:
   - template: ../Common/publish.yaml
     parameters:
       projectName: ${{ parameters.projectName }}
+      checkoutRepository: ${{ parameters.checkoutRepository }}
       artifactName: '${{ parameters.projectName }}-${{ parameters.targetEnvironment }}'
       buildSteps:
         - template: ../Common/Steps/dotnet-build.yaml
