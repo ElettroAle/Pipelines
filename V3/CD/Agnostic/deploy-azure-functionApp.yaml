@@ -29,6 +29,8 @@
 #   ciSourceBranch           → branch CI da cui scaricare l'artifact
 #                              (default: '$(Build.SourceBranch)', override per trigger manuale
 #                               es. 'refs/heads/dev')
+#   appType                  → tipo di Function App
+#                              (default: 'functionAppLinux')
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -58,6 +60,12 @@ parameters:
     displayName: 'Branch CI da cui scaricare l''artifact (default: branch corrente)'
     type: string
     default: '$(Build.SourceBranch)'
+
+  - name: appType
+    displayName: 'Tipo di Function App'
+    type: string
+    default: 'functionAppLinux'
+    # Valori: 'functionApp' (Windows) | 'functionAppLinux' (Linux)
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -100,3 +108,4 @@ stages:
                     azureServiceConnection: '${{ parameters.azureServiceConnection }}'
                     functionAppName: '${{ parameters.functionAppName }}'
                     packagePath: '$(Pipeline.Workspace)/${{ parameters.ciPipelineResourceAlias }}/**/*.zip'
+                    appType: '${{ parameters.appType }}'

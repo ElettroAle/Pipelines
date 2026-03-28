@@ -13,6 +13,8 @@
 #   functionAppName        → nome completo Function App (es. func-myapp-be-staging)
 #   packagePath            → glob path del .zip da deployare
 #                            (default: variabile $(packagePath))
+#   appType                → tipo di Function App
+#                            (default: 'functionAppLinux')
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -27,6 +29,11 @@ parameters:
     type: string
     default: '$(packagePath)'
 
+  - name: appType
+    type: string
+    default: 'functionAppLinux'
+    # Valori: 'functionApp' (Windows) | 'functionAppLinux' (Linux)
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
@@ -34,7 +41,7 @@ steps:
     displayName: 'Deploy su Function App — ${{ parameters.functionAppName }}'
     inputs:
       azureSubscription: '${{ parameters.azureServiceConnection }}'
-      appType: 'functionApp'
+      appType: '${{ parameters.appType }}'
       appName: '${{ parameters.functionAppName }}'
       package: '${{ parameters.packagePath }}'
       deploymentMethod: 'zipDeploy'
