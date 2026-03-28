@@ -1,0 +1,40 @@
+# ── CD Step: Deploy su Azure Function App ─────────────────────────────────────
+#
+# Step template atomico per il deploy di un pacchetto .zip su Azure Function App
+# tramite Zip Deploy.
+#
+# Riusato da:
+#   CD/Agnostic/deploy-azure-functionApp.yaml
+#   CD/TrunkFlow/promote-dotNet-functionApp.yaml  (stagingDeploySteps / prodDeploySteps)
+#
+# Parametri
+# ─────────
+#   azureServiceConnection → nome service connection ARM in Azure DevOps
+#   functionAppName        → nome completo Function App (es. func-myapp-be-staging)
+#   packagePath            → glob path del .zip da deployare
+#                            (default: variabile $(packagePath))
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: azureServiceConnection
+    type: string
+
+  - name: functionAppName
+    type: string
+
+  - name: packagePath
+    type: string
+    default: '$(packagePath)'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: AzureFunctionApp@2
+    displayName: 'Deploy su Function App — ${{ parameters.functionAppName }}'
+    inputs:
+      azureSubscription: '${{ parameters.azureServiceConnection }}'
+      appType: 'functionApp'
+      appName: '${{ parameters.functionAppName }}'
+      package: '${{ parameters.packagePath }}'
+      deploymentMethod: 'zipDeploy'
