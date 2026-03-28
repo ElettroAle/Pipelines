@@ -14,8 +14,9 @@
 #
 # Parametri
 # ─────────
-#   projectName            → nome repo (per FileTransform folderPath)
+#   substitutionFolder     → path relativo a $(Build.SourcesDirectory) usato da FileTransform
 #                            obbligatorio solo se variableSubstitution: true
+#                            (es. 'MyApp/MyApp' se il repo è checkout a s/MyApp/)
 #   targetEnvironment      → ambiente target (compile-time o variabile runtime)
 #   outputDirectory        → path output artifact   (default: variabile $(outputDirectory))
 #   publishProject         → path del .csproj        (default: variabile $(publishProject))
@@ -28,7 +29,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 parameters:
-  - name: projectName
+  - name: substitutionFolder
     type: string
     default: ''
 
@@ -71,7 +72,7 @@ steps:
     - task: FileTransform@2
       displayName: 'JSON Variable Substitution'
       inputs:
-        folderPath: '$(Build.SourcesDirectory)/${{ parameters.projectName }}/${{ parameters.projectName }}'
+        folderPath: '$(Build.SourcesDirectory)/${{ parameters.substitutionFolder }}'
         jsonTargetFiles: '**/appsettings.${{ parameters.targetEnvironment }}.json'
 
   - task: DotNetCoreCLI@2

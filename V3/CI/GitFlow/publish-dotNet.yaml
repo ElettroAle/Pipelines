@@ -27,16 +27,17 @@ parameters:
     default: 'false'
     # Valori: 'true' | 'false'
 
-variables:
-  - name: publishProject
-    value: '**/${{ parameters.projectName }}.csproj'
-  - name: outputDirectory
-    value: '$(Build.ArtifactStagingDirectory)/publish'
-  - name: dotnetVersion
-    value: '10.0.x'
-  - name: buildConfiguration
-    value: 'Release'
+  - name: variableSubstitution
+    type: boolean
+    default: false
 
+  - name: substitutionFolder
+    type: string
+    default: ''
+    # Obbligatorio se variableSubstitution: true
+    # Esempio: 'MyApp/MyApp' (path relativo a $(Build.SourcesDirectory))
+
+variables:
   - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/dev') }}:
     - group: "development"
     - name: requireTag
@@ -66,11 +67,20 @@ stages:
       checkoutRepository: ${{ parameters.checkoutRepository }}
       buildSteps:
         - template: ../Common/Steps/dotnet-build.yaml
+          parameters:
+            projects: '**/${{ parameters.projectName }}.csproj'
+            dotnetVersion: '10.0.x'
+            buildConfiguration: 'Release'
 
       publishSteps:
         - template: ../Common/Steps/dotnet-publish.yaml
           parameters:
-            projectName: ${{ parameters.projectName }}
+            publishProject: '**/${{ parameters.projectName }}.csproj'
+            dotnetVersion: '10.0.x'
+            buildConfiguration: 'Release'
+            outputDirectory: '$(Build.ArtifactStagingDirectory)/publish'
             targetRuntime: '${{ parameters.targetRuntime }}'
             selfContained: '${{ parameters.selfContained }}'
             versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(currentTag) /p:FileVersion=$(currentTag) /p:InformationalVersion="$(currentTag)-$(gitHash)"'
+            variableSubstitution: ${{ parameters.variableSubstitution }}
+            substitutionFolder: '${{ parameters.substitutionFolder }}'
