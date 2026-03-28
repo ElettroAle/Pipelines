@@ -29,6 +29,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 parameters:
+  - name: dotnetVersion
+    type: string
+    default: '10.0.x'
+
   - name: substitutionFolder
     type: string
     default: ''
@@ -68,6 +72,11 @@ parameters:
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
+  - task: UseDotNet@2
+    displayName: 'Install .NET SDK'
+    inputs:
+      version: ${{ parameters.dotnetVersion }}
+
   - ${{ if parameters.variableSubstitution }}:
     - task: FileTransform@2
       displayName: 'JSON Variable Substitution'
