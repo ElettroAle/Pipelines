@@ -104,17 +104,21 @@ parameters:
     type: string
     default: 'false'
 
+  - name: variableSubstitution
+    displayName: 'Abilita sostituzione variabili JSON (FileTransform)'
+    type: boolean
+    default: false
+
+  - name: substitutionFolder
+    displayName: 'Path relativo a $(Build.SourcesDirectory) per FileTransform'
+    type: string
+    default: ''
+    # Obbligatorio se variableSubstitution: true
+    # Esempio: 'MyApp/MyApp' (path relativo a $(Build.SourcesDirectory))
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 variables:
-  - name: publishProject
-    value: '${{ parameters.projectName }}/${{ parameters.projectName }}.csproj'
-  - name: outputDirectory
-    value: '$(Build.ArtifactStagingDirectory)/publish'
-  - name: dotnetVersion
-    value: '10.0.x'
-  - name: buildConfiguration
-    value: 'Release'
   - group: "staging"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -129,15 +133,24 @@ stages:
 
       buildSteps:
         - template: ../../CI/Common/Steps/dotnet-build.yaml
+          parameters:
+            projects: '${{ parameters.projectName }}/${{ parameters.projectName }}.csproj'
+            dotnetVersion: '10.0.x'
+            buildConfiguration: 'Release'
 
       publishSteps:
         - template: ../../CI/Common/Steps/dotnet-publish.yaml
           parameters:
-            projectName: ${{ parameters.projectName }}
+            publishProject: '${{ parameters.projectName }}/${{ parameters.projectName }}.csproj'
+            dotnetVersion: '10.0.x'
+            buildConfiguration: 'Release'
+            outputDirectory: '$(Build.ArtifactStagingDirectory)/publish'
             targetEnvironment: '${{ parameters.stagingEnvironment }}'
             targetRuntime: '${{ parameters.targetRuntime }}'
             selfContained: '${{ parameters.selfContained }}'
             versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(currentTag) /p:FileVersion=$(currentTag) /p:InformationalVersion="$(currentTag)-$(gitHash)"'
+            variableSubstitution: ${{ parameters.variableSubstitution }}
+            substitutionFolder: '${{ parameters.substitutionFolder }}'
 
       stagingDeploySteps:
         - template: ../Common/Steps/appService-deploy.yaml
