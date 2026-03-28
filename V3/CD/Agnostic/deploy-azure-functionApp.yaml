@@ -26,6 +26,9 @@
 # ───────────────────
 #   ciPipelineResourceAlias  → alias del pipeline resource dichiarato nel raccordo
 #                              (default: 'ci_be')
+#   ciSourceBranch           → branch CI da cui scaricare l'artifact
+#                              (default: '$(Build.SourceBranch)', override per trigger manuale
+#                               es. 'refs/heads/dev')
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -50,6 +53,11 @@ parameters:
     displayName: 'Alias del pipeline resource dichiarato nel raccordo'
     type: string
     default: 'ci_be'
+
+  - name: ciSourceBranch
+    displayName: 'Branch CI da cui scaricare l''artifact (default: branch corrente)'
+    type: string
+    default: '$(Build.SourceBranch)'
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -83,7 +91,7 @@ stages:
                     project: '$(System.TeamProjectId)'
                     definition: '$(resources.pipeline.${{ parameters.ciPipelineResourceAlias }}.pipelineID)'
                     buildVersionToDownload: 'latestFromBranch'
-                    branchName: '$(Build.SourceBranch)'
+                    branchName: '${{ parameters.ciSourceBranch }}'
                     downloadPath: '$(Pipeline.Workspace)/${{ parameters.ciPipelineResourceAlias }}'
 
                 # ── 3. Deploy su Azure Function App ──────────────────────────
