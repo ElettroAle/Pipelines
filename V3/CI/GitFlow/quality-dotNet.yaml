@@ -19,6 +19,22 @@ parameters:
     type: boolean
     default: true
 
+  - name: enableSonar
+    type: boolean
+    default: false
+
+  - name: sonarServiceConnection
+    type: string
+    default: 'SonarCloud'
+
+  - name: sonarOrganization
+    type: string
+    default: ''
+
+  - name: sonarProjectKey
+    type: string
+    default: ''
+
 variables:
   - name: dotnetVersion
     value: '10.0.x'
@@ -42,3 +58,9 @@ stages:
           parameters:
             projects: '$(buildProjects)'
         - template: ../Common/Steps/dotnet-test.yaml
+        - ${{ if parameters.enableSonar }}:
+          - template: ../Common/Steps/dotnet-sonar.yaml
+            parameters:
+              sonarServiceConnection: ${{ parameters.sonarServiceConnection }}
+              sonarOrganization: ${{ parameters.sonarOrganization }}
+              sonarProjectKey: ${{ parameters.sonarProjectKey }}

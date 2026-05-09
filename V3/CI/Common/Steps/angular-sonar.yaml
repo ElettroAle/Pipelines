@@ -1,0 +1,66 @@
+# ── CI Step: SonarCloud — Angular ──────────────────────────────────────────────
+#
+# Esegue l'analisi SonarCloud completa (Prepare → Analyze → Publish) per
+# progetti Angular in CLI mode. Da iniettare dopo angular-quality.yaml.
+#
+# Riusato da:
+#   CI/GitFlow/quality-angular.yaml
+#   CI/Agnostic/quality-angular.yaml
+#
+# Parametri
+# ─────────
+#   sonarServiceConnection → nome della Service Connection ADO di tipo SonarCloud [REQUIRED]
+#   sonarOrganization      → nome organizzazione SonarCloud                       [REQUIRED]
+#   sonarProjectKey        → chiave univoca del progetto SonarCloud               [REQUIRED]
+#   sonarSources           → cartella sorgenti (es. nome del progetto Angular)    [REQUIRED]
+#   sonarProjectName       → nome del progetto (default: sonarProjectKey)
+#   sonarExtraProperties   → proprietà aggiuntive (es. coverage report path)
+#
+# Coverage Angular:
+#   sonarExtraProperties: 'sonar.javascript.lcov.reportPaths=$(projectName)/coverage/lcov.info'
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: sonarServiceConnection
+    type: string
+
+  - name: sonarOrganization
+    type: string
+
+  - name: sonarProjectKey
+    type: string
+
+  - name: sonarSources
+    type: string
+
+  - name: sonarProjectName
+    type: string
+    default: '${{ parameters.sonarProjectKey }}'
+
+  - name: sonarExtraProperties
+    type: string
+    default: ''
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: SonarCloudPrepare@2
+    displayName: 'SonarCloud Prepare'
+    inputs:
+      SonarCloud: '${{ parameters.sonarServiceConnection }}'
+      organization: '${{ parameters.sonarOrganization }}'
+      scannerMode: 'CLI'
+      configMode: 'manual'
+      cliProjectKey: '${{ parameters.sonarProjectKey }}'
+      cliProjectName: '${{ parameters.sonarProjectName }}'
+      cliSources: '${{ parameters.sonarSources }}'
+      extraProperties: '${{ parameters.sonarExtraProperties }}'
+
+  - task: SonarCloudAnalyze@2
+    displayName: 'SonarCloud Analyze'
+
+  - task: SonarCloudPublish@2
+    displayName: 'SonarCloud Publish'
+    inputs:
+      pollingTimeoutSec: '300'

@@ -230,3 +230,6 @@ Queste variabili devono essere definite nell'entry point (come `variables:` o tr
 | `appLocation` | stringa | `staticWebApp-deploy.yaml` |
 | `currentTag` | stringa | `versionArgs` (esposto da Set-Versioning) |
 | `gitHash` | stringa | `versionArgs` (esposto da Set-Versioning) |
+| `sonarServiceConnection` | **parametro entry point** | quality-dotNet.yaml, quality-angular.yaml → `dotnet-sonar.yaml`, `angular-sonar.yaml` |
+| `sonarOrganization` | **parametro entry point** | quality-dotNet.yaml, quality-angular.yaml → `dotnet-sonar.yaml`, `angular-sonar.yaml` |
+| `sonarProjectKey` | **parametro entry point** | quality-dotNet.yaml, quality-angular.yaml → `dotnet-sonar.yaml`, `angular-sonar.yaml` |
