@@ -26,9 +26,11 @@ steps:
     inputs:
       version: ${{ parameters.dotnetVersion }}
 
-  - task: DotNetCoreCLI@2
+  - script: |
+      OUTPUT=$(dotnet list package --vulnerable --include-transitive 2>&1)
+      echo "$OUTPUT"
+      if echo "$OUTPUT" | grep -q "has the following vulnerable packages"; then
+        echo "##[error]Vulnerable NuGet packages detected. Pipeline failed."
+        exit 1
+      fi
     displayName: 'Check NuGet Vulnerabilities'
-    inputs:
-      command: 'custom'
-      custom: 'list'
-      arguments: 'package --vulnerable --include-transitive'
