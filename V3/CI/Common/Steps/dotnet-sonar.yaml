@@ -17,7 +17,9 @@
 #   sonarExtraProperties   → proprietà aggiuntive (es. coverage report path)
 #
 # Coverage .NET:
-#   sonarExtraProperties: 'sonar.cs.opencover.reportsPaths=$(Agent.TempDirectory)/**/coverage.opencover.xml'
+#   impostare sonarExtraProperties in base al formato di report effettivamente
+#   prodotto da dotnet-test.yaml (es. Cobertura), evitando riferimenti a file
+#   OpenCover come coverage.opencover.xml se non vengono generati.
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
