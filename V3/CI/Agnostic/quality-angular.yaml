@@ -49,4 +49,4 @@ stages:
               sonarServiceConnection: ${{ parameters.sonarServiceConnection }}
               sonarOrganization: ${{ parameters.sonarOrganization }}
               sonarProjectKey: ${{ parameters.sonarProjectKey }}
-              sonarSources: ${{ parameters.projectName }}
+              sonarSources: '.'
