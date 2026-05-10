@@ -82,6 +82,12 @@ stages:
       projectName: ${{ parameters.projectName }}
       checkoutRepository: ${{ parameters.checkoutRepository }}
       buildSteps:
+        - template: ../Common/Steps/dotnet-sonar-prepare.yaml
+          parameters:
+            enableSonar: ${{ parameters.enableSonar }}
+            sonarServiceConnection: ${{ parameters.sonarServiceConnection }}
+            sonarOrganization: ${{ parameters.sonarOrganization }}
+            sonarProjectKey: ${{ parameters.sonarProjectKey }}
         - template: ../Common/Steps/dotnet-build.yaml
           parameters:
             projects: '**/${{ parameters.projectName }}.csproj'
@@ -91,8 +97,6 @@ stages:
           parameters:
             enableSonar: ${{ parameters.enableSonar }}
             sonarServiceConnection: ${{ parameters.sonarServiceConnection }}
-            sonarOrganization: ${{ parameters.sonarOrganization }}
-            sonarProjectKey: ${{ parameters.sonarProjectKey }}
 
       publishSteps:
         - template: ../Common/Steps/dotnet-publish.yaml
