@@ -58,9 +58,9 @@ stages:
           parameters:
             projects: '$(buildProjects)'
         - template: ../Common/Steps/dotnet-test.yaml
-        - ${{ if parameters.enableSonar }}:
-          - template: ../Common/Steps/dotnet-sonar.yaml
-            parameters:
-              sonarServiceConnection: ${{ parameters.sonarServiceConnection }}
-              sonarOrganization: ${{ parameters.sonarOrganization }}
-              sonarProjectKey: ${{ parameters.sonarProjectKey }}
+        - template: ../Common/Steps/dotnet-sonar.yaml
+          parameters:
+            enableSonar: ${{ parameters.enableSonar }}
+            sonarServiceConnection: ${{ parameters.sonarServiceConnection }}
+            sonarOrganization: ${{ parameters.sonarOrganization }}
+            sonarProjectKey: ${{ parameters.sonarProjectKey }}
