@@ -77,7 +77,7 @@ steps:
       inputs:
         SonarCloud: '${{ parameters.sonarServiceConnection }}'
         organization: '${{ parameters.sonarOrganization }}'
-        scannerMode: 'MSBuild'
+        scannerMode: 'dotnet'
         projectKey: '${{ parameters.sonarProjectKey }}'
         projectName: '${{ parameters.sonarProjectKey }}'
         extraProperties: '${{ parameters.sonarExtraProperties }}'
