@@ -17,7 +17,7 @@
 #   sonarExtraProperties   → proprietà aggiuntive (es. coverage report path)
 #
 # Coverage Angular:
-#   sonarExtraProperties: 'sonar.javascript.lcov.reportPaths=$(projectName)/coverage/lcov.info'
+#   sonarExtraProperties: 'sonar.javascript.lcov.reportPaths=${{ parameters.sonarSources }}/coverage/lcov.info'
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
