@@ -27,6 +27,14 @@ parameters:
     type: stepList
     default: []
 
+  - name: dependsOn
+    type: object
+    default: []
+
+  - name: condition
+    type: string
+    default: 'succeeded()'
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 jobs:
@@ -34,7 +42,8 @@ jobs:
     displayName: 'Build, Test and Security'
     pool:
       vmImage: 'ubuntu-latest'
-    condition: succeeded()
+    dependsOn: ${{ parameters.dependsOn }}
+    condition: ${{ parameters.condition }}
     steps:
       - checkout: ${{ parameters.checkoutRepository }}
         fetchDepth: 0
