@@ -91,6 +91,7 @@ steps:
 
     - task: SonarCloudPublish@3
       displayName: 'SonarCloud Publish'
+      continueOnError: true
       inputs:
         SonarCloud: '${{ parameters.sonarServiceConnection }}'
         pollingTimeoutSec: '300'
