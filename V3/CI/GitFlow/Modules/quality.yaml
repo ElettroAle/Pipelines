@@ -67,3 +67,5 @@ stages:
           checkoutRepository: ${{ parameters.checkoutRepository }}
           gitLeaksNoGit: ${{ parameters.gitLeaksNoGit }}
           buildAndTestSteps: ${{ parameters.buildAndTestSteps }}
+          dependsOn: [ValidatePRTitle]
+          condition: in(dependencies.ValidatePRTitle.result, 'Succeeded', 'Skipped')
