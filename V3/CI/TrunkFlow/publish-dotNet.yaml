@@ -50,6 +50,22 @@ parameters:
     # Obbligatorio se variableSubstitution: true
     # Esempio: 'MyApp/MyApp' (path relativo a $(Build.SourcesDirectory))
 
+  - name: enableSonar
+    type: boolean
+    default: false
+
+  - name: sonarServiceConnection
+    type: string
+    default: 'SonarCloud'
+
+  - name: sonarOrganization
+    type: string
+    default: ''
+
+  - name: sonarProjectKey
+    type: string
+    default: ''
+
 variables:
   - name: targetEnvironment
     value: 'Development'
@@ -66,6 +82,12 @@ stages:
             projects: '${{ parameters.projectName }}/${{ parameters.projectName }}.csproj'
             dotnetVersion: '10.0.x'
             buildConfiguration: 'Release'
+        - template: ../Common/Steps/dotnet-sonar.yaml
+          parameters:
+            enableSonar: ${{ parameters.enableSonar }}
+            sonarServiceConnection: ${{ parameters.sonarServiceConnection }}
+            sonarOrganization: ${{ parameters.sonarOrganization }}
+            sonarProjectKey: ${{ parameters.sonarProjectKey }}
 
       publishSteps:
         - template: ../Common/Steps/dotnet-publish.yaml
