@@ -33,10 +33,10 @@ parameters:
 
 steps:
   - ${{ if parameters.enableSonar }}:
-    - task: SonarCloudAnalyze@3
+    - task: SonarCloudAnalyze@4
       displayName: 'SonarCloud Analyze'
 
-    - task: SonarCloudPublish@3
+    - task: SonarCloudPublish@4
       displayName: 'SonarCloud Publish'
       inputs:
         SonarCloud: '${{ parameters.sonarServiceConnection }}'

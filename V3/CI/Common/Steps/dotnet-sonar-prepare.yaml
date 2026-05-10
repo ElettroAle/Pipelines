@@ -72,7 +72,7 @@ steps:
         fi
       displayName: 'Validate SonarCloud required parameters'
 
-    - task: SonarCloudPrepare@3
+    - task: SonarCloudPrepare@4
       displayName: 'SonarCloud Prepare'
       inputs:
         SonarCloud: '${{ parameters.sonarServiceConnection }}'
