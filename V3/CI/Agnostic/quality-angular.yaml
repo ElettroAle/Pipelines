@@ -43,10 +43,9 @@ stages:
       checkoutRepository: ${{ parameters.checkoutRepository }}
       buildAndTestSteps:
         - template: ../Common/Steps/angular-quality.yaml
-        - ${{ if parameters.enableSonar }}:
-          - template: ../Common/Steps/angular-sonar.yaml
-            parameters:
-              sonarServiceConnection: ${{ parameters.sonarServiceConnection }}
-              sonarOrganization: ${{ parameters.sonarOrganization }}
-              sonarProjectKey: ${{ parameters.sonarProjectKey }}
-              sonarSources: '.'
+        - template: ../Common/Steps/angular-sonar.yaml
+          parameters:
+            enableSonar: ${{ parameters.enableSonar }}
+            sonarServiceConnection: ${{ parameters.sonarServiceConnection }}
+            sonarOrganization: ${{ parameters.sonarOrganization }}
+            sonarProjectKey: ${{ parameters.sonarProjectKey }}
