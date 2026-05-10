@@ -45,6 +45,29 @@ parameters:
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
+  - script: |
+      set -euo pipefail
+
+      service_connection='${{ parameters.sonarServiceConnection }}'
+      organization='${{ parameters.sonarOrganization }}'
+      project_key='${{ parameters.sonarProjectKey }}'
+
+      if [[ -z "${service_connection// }" ]]; then
+        echo "ERROR: 'sonarServiceConnection' is required when SonarCloud analysis is enabled."
+        exit 1
+      fi
+
+      if [[ -z "${organization// }" ]]; then
+        echo "ERROR: 'sonarOrganization' is required when SonarCloud analysis is enabled."
+        exit 1
+      fi
+
+      if [[ -z "${project_key// }" ]]; then
+        echo "ERROR: 'sonarProjectKey' is required when SonarCloud analysis is enabled."
+        exit 1
+      fi
+    displayName: 'Validate SonarCloud required parameters'
+
   - task: SonarCloudPrepare@2
     displayName: 'SonarCloud Prepare'
     inputs:
