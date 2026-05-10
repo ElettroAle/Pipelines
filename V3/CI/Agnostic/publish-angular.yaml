@@ -30,6 +30,22 @@ parameters:
     type: string
     default: 'development'
 
+  - name: enableSonar
+    type: boolean
+    default: false
+
+  - name: sonarServiceConnection
+    type: string
+    default: 'SonarCloud'
+
+  - name: sonarOrganization
+    type: string
+    default: ''
+
+  - name: sonarProjectKey
+    type: string
+    default: ''
+
 variables:
   - name: nodeVersion
     value: '22.x'
@@ -48,6 +64,12 @@ stages:
         - template: ../Common/Steps/angular-build.yaml
           parameters:
             buildConfiguration: '${{ parameters.buildConfiguration }}'
+        - template: ../Common/Steps/angular-sonar.yaml
+          parameters:
+            enableSonar: ${{ parameters.enableSonar }}
+            sonarServiceConnection: ${{ parameters.sonarServiceConnection }}
+            sonarOrganization: ${{ parameters.sonarOrganization }}
+            sonarProjectKey: ${{ parameters.sonarProjectKey }}
 
       publishSteps:
         - template: ../Common/Steps/angular-publish.yaml
