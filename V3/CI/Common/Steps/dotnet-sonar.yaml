@@ -74,7 +74,7 @@ steps:
         fi
       displayName: 'Validate SonarCloud required parameters'
 
-    - task: SonarCloudPrepare@2
+    - task: SonarCloudPrepare@3
       displayName: 'SonarCloud Prepare'
       inputs:
         SonarCloud: '${{ parameters.sonarServiceConnection }}'
@@ -86,10 +86,10 @@ steps:
         cliSources: '${{ parameters.sonarSources }}'
         extraProperties: '${{ parameters.sonarExtraProperties }}'
 
-    - task: SonarCloudAnalyze@2
+    - task: SonarCloudAnalyze@3
       displayName: 'SonarCloud Analyze'
 
-    - task: SonarCloudPublish@2
+    - task: SonarCloudPublish@3
       displayName: 'SonarCloud Publish'
       inputs:
         pollingTimeoutSec: '300'
