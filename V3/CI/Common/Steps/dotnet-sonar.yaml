@@ -1,0 +1,92 @@
+# ── CI Step: SonarCloud — .NET ─────────────────────────────────────────────────
+#
+# Esegue l'analisi SonarCloud completa (Prepare → Analyze → Publish) per
+# progetti .NET in CLI mode. Da iniettare dopo dotnet-test.yaml.
+#
+# Riusato da:
+#   CI/GitFlow/quality-dotNet.yaml
+#   CI/Agnostic/quality-dotNet.yaml
+#
+# Parametri
+# ─────────
+#   sonarServiceConnection → nome della Service Connection ADO di tipo SonarCloud [REQUIRED]
+#   sonarOrganization      → nome organizzazione SonarCloud                       [REQUIRED]
+#   sonarProjectKey        → chiave univoca del progetto SonarCloud               [REQUIRED]
+#   sonarProjectName       → nome del progetto (default: sonarProjectKey)
+#   sonarSources           → cartella sorgenti da analizzare (default: '.')
+#   sonarExtraProperties   → proprietà aggiuntive (es. coverage report path)
+#
+# Coverage .NET:
+#   impostare sonarExtraProperties in base al formato di report effettivamente
+#   prodotto da dotnet-test.yaml (es. Cobertura), evitando riferimenti a file
+#   OpenCover come coverage.opencover.xml se non vengono generati.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: sonarServiceConnection
+    type: string
+
+  - name: sonarOrganization
+    type: string
+
+  - name: sonarProjectKey
+    type: string
+
+  - name: sonarProjectName
+    type: string
+    default: '${{ parameters.sonarProjectKey }}'
+
+  - name: sonarSources
+    type: string
+    default: '.'
+
+  - name: sonarExtraProperties
+    type: string
+    default: ''
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - script: |
+      set -euo pipefail
+
+      service_connection='${{ parameters.sonarServiceConnection }}'
+      organization='${{ parameters.sonarOrganization }}'
+      project_key='${{ parameters.sonarProjectKey }}'
+
+      if [[ -z "${service_connection// }" ]]; then
+        echo "ERROR: 'sonarServiceConnection' is required when SonarCloud analysis is enabled."
+        exit 1
+      fi
+
+      if [[ -z "${organization// }" ]]; then
+        echo "ERROR: 'sonarOrganization' is required when SonarCloud analysis is enabled."
+        exit 1
+      fi
+
+      if [[ -z "${project_key// }" ]]; then
+        echo "ERROR: 'sonarProjectKey' is required when SonarCloud analysis is enabled."
+        exit 1
+      fi
+    displayName: 'Validate SonarCloud required parameters'
+
+  - task: SonarCloudPrepare@2
+    displayName: 'SonarCloud Prepare'
+    inputs:
+      SonarCloud: '${{ parameters.sonarServiceConnection }}'
+      organization: '${{ parameters.sonarOrganization }}'
+      scannerMode: 'CLI'
+      configMode: 'manual'
+      cliProjectKey: '${{ parameters.sonarProjectKey }}'
+      cliProjectName: '${{ parameters.sonarProjectName }}'
+      cliSources: '${{ parameters.sonarSources }}'
+      extraProperties: '${{ parameters.sonarExtraProperties }}'
+
+  - task: SonarCloudAnalyze@2
+    displayName: 'SonarCloud Analyze'
+
+  - task: SonarCloudPublish@2
+    displayName: 'SonarCloud Publish'
+    inputs:
+      pollingTimeoutSec: '300'

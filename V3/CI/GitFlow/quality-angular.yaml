@@ -15,6 +15,22 @@ parameters:
   - name: checkoutRepository
     type: string
 
+  - name: enableSonar
+    type: boolean
+    default: false
+
+  - name: sonarServiceConnection
+    type: string
+    default: 'SonarCloud'
+
+  - name: sonarOrganization
+    type: string
+    default: ''
+
+  - name: sonarProjectKey
+    type: string
+    default: ''
+
 variables:
   - name: nodeVersion
     value: '22.x'
@@ -27,3 +43,10 @@ stages:
       checkoutRepository: ${{ parameters.checkoutRepository }}
       buildAndTestSteps:
         - template: ../Common/Steps/angular-quality.yaml
+        - ${{ if parameters.enableSonar }}:
+          - template: ../Common/Steps/angular-sonar.yaml
+            parameters:
+              sonarServiceConnection: ${{ parameters.sonarServiceConnection }}
+              sonarOrganization: ${{ parameters.sonarOrganization }}
+              sonarProjectKey: ${{ parameters.sonarProjectKey }}
+              sonarSources: '.'
