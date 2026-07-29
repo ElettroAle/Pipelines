@@ -19,13 +19,8 @@ parameters:
     type: boolean
     default: true
 
-  # '**/*.csproj' fa girare un `dotnet build` per ogni progetto. Passare
-  # '**/*.sln' per una build unica: misurata 1m29s contro 2m42s su
-  # Aidea.Dxp.AI (27 progetti).
-  #
-  # Solo prestazioni, NON risolve il disco pieno: le due strategie lasciano lo
-  # stesso spazio libero a fine build (252 MB misurati su entrambe). Per lo
-  # spazio serve `freeDiskSpace` nel job BuildAndTest.
+  # '**/*.csproj' compila un progetto per volta, '**/*.sln' in un colpo solo.
+  # Incide sulla durata, non sul footprint su disco.
   - name: buildProjects
     type: string
     default: '**/*.csproj'
