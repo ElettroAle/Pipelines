@@ -58,8 +58,18 @@ jobs:
     # manda MSBuild in retry loop (MSB3026) fino alla morte dell'agent.
     timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
     steps:
-      # L'immagine hosted ubuntu-latest dichiara solo ~14 GB liberi: un build
-      # .NET con dipendenze Azure li esaurisce. Rimuove toolchain non usate.
+      # Misurato sull'immagine ubuntu-24.04 20260720.247.2: l'agent parte con
+      # 15 GB liberi, mentre il build di Aidea.Dxp.AI occupa 12,1 GB (8,3 GB di
+      # workspace + 3,8 GB di cache NuGet). I 2,9 GB di margine non bastano al
+      # job completo, il disco arriva a zero e MSBuild entra in retry loop
+      # (MSB3026) finche' l'agent muore.
+      #
+      # Questa pulizia libera 21,7 GB in ~60s (14689M -> 36349M misurati), e
+      # porta lo spazio residuo a fine build da 252 MB a 22 GB.
+      #
+      # Nota: cambiare strategia di build NON risolve. Una build unica sulla
+      # solution e 27 build per progetto lasciano lo stesso spazio (252 MB):
+      # il footprint e' quello, indipendentemente da come lo si compila.
       - ${{ if eq(parameters.freeDiskSpace, true) }}:
         - script: |
             echo "Spazio prima della pulizia:"
@@ -67,7 +77,9 @@ jobs:
             sudo rm -rf /usr/local/lib/android \
                         /opt/ghc /usr/local/.ghcup \
                         /opt/hostedtoolcache/CodeQL \
-                        /usr/share/swift
+                        /usr/share/swift \
+                        /usr/local/share/powershell \
+                        /usr/share/miniconda
             echo "Spazio dopo la pulizia:"
             df -h /
           displayName: 'Free disk space'
