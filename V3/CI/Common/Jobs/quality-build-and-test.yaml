@@ -12,6 +12,8 @@
 #   checkoutRepository → repository da fare checkout    [REQUIRED]
 #   gitLeaksNoGit      → passa --no-git a Gitleaks      (default: false)
 #   buildAndTestSteps  → stepList con gli step tech-specific
+#   freeDiskSpace      → rimuove toolchain non usate    (default: true)
+#   timeoutInMinutes   → timeout del job                (default: 30)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -35,6 +37,14 @@ parameters:
     type: string
     default: 'succeeded()'
 
+  - name: freeDiskSpace
+    type: boolean
+    default: true
+
+  - name: timeoutInMinutes
+    type: number
+    default: 30
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 jobs:
@@ -44,7 +54,23 @@ jobs:
       vmImage: 'ubuntu-latest'
     dependsOn: ${{ parameters.dependsOn }}
     condition: ${{ parameters.condition }}
+    timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
     steps:
+      # Lo spazio libero dell'immagine hosted non copre il footprint di una
+      # build .NET con chiusura di dipendenze ampia. A disco pieno MSBuild
+      # entra in retry loop sulle copie e l'agent muore.
+      - ${{ if eq(parameters.freeDiskSpace, true) }}:
+        - script: |
+            df -h /
+            sudo rm -rf /usr/local/lib/android \
+                        /opt/ghc /usr/local/.ghcup \
+                        /opt/hostedtoolcache/CodeQL \
+                        /usr/share/swift \
+                        /usr/local/share/powershell \
+                        /usr/share/miniconda
+            df -h /
+          displayName: 'Free disk space'
+
       - checkout: ${{ parameters.checkoutRepository }}
         fetchDepth: 0
 
@@ -53,3 +79,9 @@ jobs:
           noGit: ${{ parameters.gitLeaksNoGit }}
 
       - ${{ parameters.buildAndTestSteps }}
+
+      - script: |
+          df -h /
+          du -xh "$(Agent.BuildDirectory)" --max-depth=2 2>/dev/null | sort -rh | head -15
+        displayName: 'Disk usage report'
+        condition: always()
