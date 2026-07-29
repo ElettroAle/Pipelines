@@ -12,6 +12,8 @@
 #   checkoutRepository → repository da fare checkout    [REQUIRED]
 #   gitLeaksNoGit      → passa --no-git a Gitleaks      (default: false)
 #   buildAndTestSteps  → stepList con gli step tech-specific
+#   freeDiskSpace      → libera spazio sull'agent hosted (default: true)
+#   timeoutInMinutes   → timeout del job                (default: 30)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -35,6 +37,14 @@ parameters:
     type: string
     default: 'succeeded()'
 
+  - name: freeDiskSpace
+    type: boolean
+    default: true
+
+  - name: timeoutInMinutes
+    type: number
+    default: 30
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 jobs:
@@ -44,7 +54,24 @@ jobs:
       vmImage: 'ubuntu-latest'
     dependsOn: ${{ parameters.dependsOn }}
     condition: ${{ parameters.condition }}
+    # Timeout esplicito: senza di esso il default e' 60 min, e un disco pieno
+    # manda MSBuild in retry loop (MSB3026) fino alla morte dell'agent.
+    timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
     steps:
+      # L'immagine hosted ubuntu-latest dichiara solo ~14 GB liberi: un build
+      # .NET con dipendenze Azure li esaurisce. Rimuove toolchain non usate.
+      - ${{ if eq(parameters.freeDiskSpace, true) }}:
+        - script: |
+            echo "Spazio prima della pulizia:"
+            df -h /
+            sudo rm -rf /usr/local/lib/android \
+                        /opt/ghc /usr/local/.ghcup \
+                        /opt/hostedtoolcache/CodeQL \
+                        /usr/share/swift
+            echo "Spazio dopo la pulizia:"
+            df -h /
+          displayName: 'Free disk space'
+
       - checkout: ${{ parameters.checkoutRepository }}
         fetchDepth: 0
 
@@ -53,3 +80,10 @@ jobs:
           noGit: ${{ parameters.gitLeaksNoGit }}
 
       - ${{ parameters.buildAndTestSteps }}
+
+      # Consumo disco misurato, non ipotizzato: gira anche a job fallito.
+      - script: |
+          df -h /
+          du -xh "$(Agent.BuildDirectory)" --max-depth=2 2>/dev/null | sort -rh | head -15
+        displayName: 'Disk usage report'
+        condition: always()

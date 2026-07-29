@@ -15,6 +15,7 @@
 #   buildAndTestSteps  → stepList iniettata nel job BuildAndTest dopo Gitleaks
 #   checkoutRepository → repository da fare checkout [REQUIRED]
 #   gitLeaksNoGit      → passa --no-git a Gitleaks (default: true)
+#   timeoutInMinutes   → timeout del job BuildAndTest (default: 30)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,10 @@ parameters:
   - name: gitLeaksNoGit
     type: boolean
     default: true
+
+  - name: timeoutInMinutes
+    type: number
+    default: 30
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -67,5 +72,6 @@ stages:
           checkoutRepository: ${{ parameters.checkoutRepository }}
           gitLeaksNoGit: ${{ parameters.gitLeaksNoGit }}
           buildAndTestSteps: ${{ parameters.buildAndTestSteps }}
+          timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
           dependsOn: [ValidatePRTitle]
           condition: in(dependencies.ValidatePRTitle.result, 'Succeeded', 'Skipped')

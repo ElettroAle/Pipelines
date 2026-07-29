@@ -19,6 +19,16 @@ parameters:
     type: boolean
     default: true
 
+  # '**/*.csproj' fa girare un `dotnet build` per ogni progetto: su repo grandi
+  # il disco dell'agent hosted si esaurisce. Passare '**/*.sln' per una build unica.
+  - name: buildProjects
+    type: string
+    default: '**/*.csproj'
+
+  - name: timeoutInMinutes
+    type: number
+    default: 30
+
   - name: enableSonar
     type: boolean
     default: false
@@ -52,6 +62,7 @@ stages:
       projectName: ${{ parameters.projectName }}
       checkoutRepository: ${{ parameters.checkoutRepository }}
       gitLeaksNoGit: ${{ parameters.gitLeaksNoGit }}
+      timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
       buildAndTestSteps:
         - template: ../Common/Steps/dotnet-nuget-check.yaml
         - template: ../Common/Steps/dotnet-sonar-prepare.yaml
@@ -62,7 +73,7 @@ stages:
             sonarProjectKey: ${{ parameters.sonarProjectKey }}
         - template: ../Common/Steps/dotnet-build.yaml
           parameters:
-            projects: '$(buildProjects)'
+            projects: ${{ parameters.buildProjects }}
         - template: ../Common/Steps/dotnet-test.yaml
         - template: ../Common/Steps/dotnet-sonar.yaml
           parameters:
