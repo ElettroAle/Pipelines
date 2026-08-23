@@ -91,7 +91,6 @@ stages:
                   inputs:
                     filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Set-Versioning.ps1'
                     workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
-                    pwsh: true
                   env:
                     TARGET_ENV: $(targetEnvironment)
                     REQUIRE_TAG: 'false'

@@ -62,7 +62,6 @@ stages:
             inputs:
               filePath: '$(Build.SourcesDirectory)/infrastructure/V3/CI/Scripts/Verify-SemVer.ps1'
               workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
-              pwsh: true
             env:
               TARGET_BRANCH: $(System.PullRequest.TargetBranch)
               ADDITIONAL_TAG_BRANCHES: $(additionalRequiredTaggingBranches)
