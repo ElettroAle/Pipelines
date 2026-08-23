@@ -35,6 +35,11 @@ parameters:
     type: boolean
     default: true
 
+  - name: pool
+    type: object
+    default:
+      vmImage: 'ubuntu-latest'
+
   - name: timeoutInMinutes
     type: number
     default: 30
@@ -71,6 +76,7 @@ stages:
           checkoutRepository: ${{ parameters.checkoutRepository }}
           gitLeaksNoGit: ${{ parameters.gitLeaksNoGit }}
           buildAndTestSteps: ${{ parameters.buildAndTestSteps }}
+          pool: ${{ parameters.pool }}
           timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
           dependsOn: [ValidatePRTitle]
           condition: in(dependencies.ValidatePRTitle.result, 'Succeeded', 'Skipped')

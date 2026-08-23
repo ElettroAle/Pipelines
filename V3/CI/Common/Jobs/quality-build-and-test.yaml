@@ -12,6 +12,7 @@
 #   checkoutRepository → repository da fare checkout    [REQUIRED]
 #   gitLeaksNoGit      → passa --no-git a Gitleaks      (default: false)
 #   buildAndTestSteps  → stepList con gli step tech-specific
+#   pool               → pool del job                   (default: hosted ubuntu-latest)
 #   freeDiskSpace      → rimuove toolchain non usate    (default: true)
 #   timeoutInMinutes   → timeout del job                (default: 30)
 #
@@ -37,6 +38,11 @@ parameters:
     type: string
     default: 'succeeded()'
 
+  - name: pool
+    type: object
+    default:
+      vmImage: 'ubuntu-latest'
+
   - name: freeDiskSpace
     type: boolean
     default: true
@@ -50,8 +56,7 @@ parameters:
 jobs:
   - job: BuildAndTest
     displayName: 'Build, Test and Security'
-    pool:
-      vmImage: 'ubuntu-latest'
+    pool: ${{ parameters.pool }}
     dependsOn: ${{ parameters.dependsOn }}
     condition: ${{ parameters.condition }}
     timeoutInMinutes: ${{ parameters.timeoutInMinutes }}

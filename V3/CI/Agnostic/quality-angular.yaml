@@ -32,6 +32,11 @@ parameters:
     type: string
     default: ''
 
+  - name: pool
+    type: object
+    default:
+      vmImage: 'ubuntu-latest'
+
 variables:
   - name: nodeVersion
     value: '22.x'
@@ -41,6 +46,7 @@ stages:
   - template: ../Common/quality.yaml
     parameters:
       checkoutRepository: ${{ parameters.checkoutRepository }}
+      pool: ${{ parameters.pool }}
       buildAndTestSteps:
         - template: ../Common/Steps/angular-quality.yaml
         - template: ../Common/Steps/angular-sonar.yaml

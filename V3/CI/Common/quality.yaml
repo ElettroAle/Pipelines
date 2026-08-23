@@ -29,6 +29,11 @@ parameters:
     type: boolean
     default: false
 
+  - name: pool
+    type: object
+    default:
+      vmImage: 'ubuntu-latest'
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 stages:
@@ -40,3 +45,4 @@ stages:
           checkoutRepository: ${{ parameters.checkoutRepository }}
           gitLeaksNoGit: ${{ parameters.gitLeaksNoGit }}
           buildAndTestSteps: ${{ parameters.buildAndTestSteps }}
+          pool: ${{ parameters.pool }}
