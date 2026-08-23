@@ -32,6 +32,11 @@ parameters:
     type: string
     default: ''
 
+  - name: pool
+    type: object
+    default:
+      vmImage: 'ubuntu-latest'
+
 variables:
   - name: dotnetVersion
     value: '10.0.x'
@@ -47,6 +52,7 @@ stages:
   - template: ../Common/quality.yaml
     parameters:
       checkoutRepository: ${{ parameters.checkoutRepository }}
+      pool: ${{ parameters.pool }}
       buildAndTestSteps:
         - template: ../Common/Steps/dotnet-nuget-check.yaml
         - template: ../Common/Steps/dotnet-sonar-prepare.yaml

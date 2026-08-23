@@ -45,6 +45,11 @@ parameters:
     type: string
     default: ''
 
+  - name: pool
+    type: object
+    default:
+      vmImage: 'ubuntu-latest'
+
 variables:
   - name: dotnetVersion
     value: '10.0.x'
@@ -61,6 +66,7 @@ stages:
     parameters:
       projectName: ${{ parameters.projectName }}
       checkoutRepository: ${{ parameters.checkoutRepository }}
+      pool: ${{ parameters.pool }}
       gitLeaksNoGit: ${{ parameters.gitLeaksNoGit }}
       timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
       buildAndTestSteps:

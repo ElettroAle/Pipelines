@@ -46,6 +46,11 @@ parameters:
     type: string
     default: ''
 
+  - name: pool
+    type: object
+    default:
+      vmImage: 'ubuntu-latest'
+
 variables:
   - name: nodeVersion
     value: '22.x'
@@ -59,6 +64,7 @@ stages:
     parameters:
       projectName: ${{ parameters.projectName }}
       checkoutRepository: ${{ parameters.checkoutRepository }}
+      pool: ${{ parameters.pool }}
       artifactName: '${{ parameters.projectName }}-${{ parameters.targetEnvironment }}'
       buildSteps:
         - template: ../Common/Steps/angular-build.yaml

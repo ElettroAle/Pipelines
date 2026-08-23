@@ -27,6 +27,7 @@
 #   checkoutRepository → repository da fare checkout [REQUIRED]
 #   buildSteps         → stepList iniettata nel job Compile dopo il checkout
 #   publishSteps       → stepList iniettata nel job PublishArtifact dopo Set-Versioning
+#   pool               → pool del job Compile (default: hosted ubuntu-latest)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,11 @@ parameters:
     type: stepList
     default: []
 
+  - name: pool
+    type: object
+    default:
+      vmImage: 'ubuntu-latest'
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 stages:
@@ -54,8 +60,7 @@ stages:
     jobs:
       - job: Compile
         displayName: 'Restore and Build'
-        pool:
-          vmImage: 'ubuntu-latest'
+        pool: ${{ parameters.pool }}
         steps:
           - checkout: ${{ parameters.checkoutRepository }}
             path: s/${{ parameters.projectName }}

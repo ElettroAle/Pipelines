@@ -66,6 +66,11 @@ parameters:
     type: string
     default: ''
 
+  - name: pool
+    type: object
+    default:
+      vmImage: 'ubuntu-latest'
+
 variables:
   - name: targetEnvironment
     value: 'Development'
@@ -76,6 +81,7 @@ stages:
     parameters:
       projectName: ${{ parameters.projectName }}
       checkoutRepository: ${{ parameters.checkoutRepository }}
+      pool: ${{ parameters.pool }}
       buildSteps:
         - template: ../Common/Steps/dotnet-sonar-prepare.yaml
           parameters:
