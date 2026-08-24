@@ -80,7 +80,7 @@ if ($isRequireTag -eq "true") {
     Write-Host "##vso[task.setvariable variable=computedArtifactName]$safeProjName-$envName-$newTag"
 }
 else {
-    Write-Host "##[warning]Tagging is DISABLED — versione calcolata da ultimo tag git"
+    Write-Host "##[warning]Tagging is DISABLED - versione calcolata da ultimo tag git"
 
     $lastTag = git describe --tags --abbrev=0 2>$null
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($lastTag)) {
