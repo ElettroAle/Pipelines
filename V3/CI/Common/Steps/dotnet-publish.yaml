@@ -101,9 +101,14 @@ steps:
       zipAfterPublish: true
 
   - ${{ if parameters.variableSubstitution }}:
-    - script: |
-        if grep -q "__ENVIRONMENT_REQUIRED__" ${{ parameters.outputDirectory }}/web.config; then
-          echo "##[error]XDT Transformation failed."
-          exit 1
-        fi
+    # PowerShell@2 senza pwsh: powershell.exe su Windows, pwsh su Linux.
+    # Uno step `script:` sarebbe cmd.exe sugli agent Windows.
+    - task: PowerShell@2
       displayName: 'Verify XDT'
+      inputs:
+        targetType: 'inline'
+        script: |
+          if (Select-String -Path '${{ parameters.outputDirectory }}/web.config' -Pattern '__ENVIRONMENT_REQUIRED__' -Quiet) {
+            Write-Host "##[error]XDT Transformation failed."
+            exit 1
+          }

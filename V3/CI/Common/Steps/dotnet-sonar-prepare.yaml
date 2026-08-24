@@ -49,28 +49,21 @@ parameters:
 
 steps:
   - ${{ if parameters.enableSonar }}:
-    - script: |
-        set -euo pipefail
-
-        service_connection='${{ parameters.sonarServiceConnection }}'
-        organization='${{ parameters.sonarOrganization }}'
-        project_key='${{ parameters.sonarProjectKey }}'
-
-        if [[ -z "${service_connection// }" ]]; then
-          echo "ERROR: 'sonarServiceConnection' is required when SonarCloud analysis is enabled."
-          exit 1
-        fi
-
-        if [[ -z "${organization// }" ]]; then
-          echo "ERROR: 'sonarOrganization' is required when SonarCloud analysis is enabled."
-          exit 1
-        fi
-
-        if [[ -z "${project_key// }" ]]; then
-          echo "ERROR: 'sonarProjectKey' is required when SonarCloud analysis is enabled."
-          exit 1
-        fi
+    # PowerShell@2 senza pwsh: powershell.exe su Windows, pwsh su Linux.
+    # Uno step `script:` sarebbe cmd.exe sugli agent Windows.
+    - task: PowerShell@2
       displayName: 'Validate SonarCloud required parameters'
+      inputs:
+        targetType: 'inline'
+        script: |
+          $missing = @()
+          if ([string]::IsNullOrWhiteSpace('${{ parameters.sonarServiceConnection }}')) { $missing += 'sonarServiceConnection' }
+          if ([string]::IsNullOrWhiteSpace('${{ parameters.sonarOrganization }}'))     { $missing += 'sonarOrganization' }
+          if ([string]::IsNullOrWhiteSpace('${{ parameters.sonarProjectKey }}'))       { $missing += 'sonarProjectKey' }
+          if ($missing.Count -gt 0) {
+            Write-Host "ERROR: required when SonarCloud analysis is enabled: $($missing -join ', ')"
+            exit 1
+          }
 
     - task: SonarCloudPrepare@4
       displayName: 'SonarCloud Prepare'
