@@ -76,6 +76,10 @@ stages:
       - deployment: DeployFunctionApp
         displayName: 'Deploy BE — ${{ parameters.functionAppName }}'
         environment: '${{ parameters.targetEnvironment }}'
+        # Pool self-hosted riusa la working directory tra run: senza clean, zip di
+        # run precedenti restano nel downloadPath e rompono il glob '**/*.zip'.
+        workspace:
+          clean: all
         strategy:
           runOnce:
             deploy:
