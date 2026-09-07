@@ -1,0 +1,65 @@
+# ── CI Step: Ensure Java ───────────────────────────────────────────────────────
+#
+# Garantisce un JDK e JAVA_HOME sull'agent per lo scanner Sonar in CLI mode
+# (sonar-scanner.bat e' un'app Java). Non serve in scannerMode 'dotnet': quello
+# scarica da solo il JRE dal server, motivo per cui le pipeline .NET passano
+# sugli stessi agent dove le Angular falliscono con "JAVA_HOME not found".
+#
+# Il JDK finisce in Agent.ToolsDirectory, che sopravvive alla pulizia del
+# workspace: su un pool self-hosted il download lo paga solo la prima run
+# di ogni macchina.
+#
+# Riusato da:
+#   CI/Common/Steps/angular-sonar.yaml
+#
+# Parametri
+# ─────────
+#   javaVersion → major version del JDK Temurin da installare (default: 17)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: javaVersion
+    type: string
+    default: '17'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: PowerShell@2
+    displayName: 'Ensure Java'
+    inputs:
+      targetType: 'inline'
+      pwsh: true
+      script: |
+        $ErrorActionPreference = 'Stop'
+
+        if ($env:JAVA_HOME -and (Test-Path (Join-Path $env:JAVA_HOME 'bin'))) {
+          Write-Host "JAVA_HOME gia' presente: $env:JAVA_HOME"
+          return
+        }
+
+        $toolsRoot = if ($env:AGENT_TOOLSDIRECTORY) { $env:AGENT_TOOLSDIRECTORY } else { $env:AGENT_HOMEDIRECTORY }
+        $jdkRoot = Join-Path $toolsRoot 'temurin/${{ parameters.javaVersion }}'
+        $jdk = Get-ChildItem $jdkRoot -Directory -Filter 'jdk-*' -ErrorAction SilentlyContinue | Select-Object -First 1
+
+        if (-not $jdk) {
+          $platform = if ($IsWindows) { @{ os = 'windows'; extension = 'zip' } } else { @{ os = 'linux'; extension = 'tar.gz' } }
+          $archive = Join-Path ([IO.Path]::GetTempPath()) "temurin.$($platform.extension)"
+
+          Write-Host "Download Temurin ${{ parameters.javaVersion }} ($($platform.os)) in $jdkRoot"
+          New-Item -ItemType Directory -Force -Path $jdkRoot | Out-Null
+          Invoke-WebRequest -UseBasicParsing -OutFile $archive `
+            -Uri "https://api.adoptium.net/v3/binary/latest/${{ parameters.javaVersion }}/ga/$($platform.os)/x64/jdk/hotspot/normal/eclipse"
+
+          if ($IsWindows) { Expand-Archive -Path $archive -DestinationPath $jdkRoot -Force } else { tar -xzf $archive -C $jdkRoot }
+          Remove-Item $archive -Force
+
+          $jdk = Get-ChildItem $jdkRoot -Directory -Filter 'jdk-*' | Select-Object -First 1
+        }
+
+        $javaHome = $jdk.FullName
+        $javaBin = Join-Path $javaHome 'bin'
+        Write-Host "JAVA_HOME impostato a $javaHome"
+        Write-Host "##vso[task.setvariable variable=JAVA_HOME]$javaHome"
+        Write-Host "##vso[task.prependpath]$javaBin"
