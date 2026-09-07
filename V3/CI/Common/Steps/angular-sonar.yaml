@@ -51,6 +51,8 @@ parameters:
 
 steps:
   - ${{ if parameters.enableSonar }}:
+    - template: ./ensure-java.yaml
+
     - task: SonarCloudPrepare@4
       displayName: 'SonarCloud Prepare'
       inputs:
