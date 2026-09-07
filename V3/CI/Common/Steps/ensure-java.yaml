@@ -9,6 +9,9 @@
 # workspace: su un pool self-hosted il download lo paga solo la prima run
 # di ogni macchina.
 #
+# Uno step per OS invece di un unico script pwsh: PowerShell Core non e'
+# installato sugli agent Windows self-hosted.
+#
 # Riusato da:
 #   CI/Common/Steps/angular-sonar.yaml
 #
@@ -27,10 +30,10 @@ parameters:
 
 steps:
   - task: PowerShell@2
-    displayName: 'Ensure Java'
+    displayName: 'Ensure Java (Windows)'
+    condition: eq(variables['Agent.OS'], 'Windows_NT')
     inputs:
       targetType: 'inline'
-      pwsh: true
       script: |
         $ErrorActionPreference = 'Stop'
 
@@ -40,19 +43,22 @@ steps:
         }
 
         $toolsRoot = if ($env:AGENT_TOOLSDIRECTORY) { $env:AGENT_TOOLSDIRECTORY } else { $env:AGENT_HOMEDIRECTORY }
-        $jdkRoot = Join-Path $toolsRoot 'temurin/${{ parameters.javaVersion }}'
+        $jdkRoot = Join-Path $toolsRoot 'temurin\${{ parameters.javaVersion }}'
         $jdk = Get-ChildItem $jdkRoot -Directory -Filter 'jdk-*' -ErrorAction SilentlyContinue | Select-Object -First 1
 
         if (-not $jdk) {
-          $platform = if ($IsWindows) { @{ os = 'windows'; extension = 'zip' } } else { @{ os = 'linux'; extension = 'tar.gz' } }
-          $archive = Join-Path ([IO.Path]::GetTempPath()) "temurin.$($platform.extension)"
-
-          Write-Host "Download Temurin ${{ parameters.javaVersion }} ($($platform.os)) in $jdkRoot"
+          $archive = Join-Path $env:TEMP 'temurin.zip'
+          Write-Host "Download Temurin ${{ parameters.javaVersion }} in $jdkRoot"
           New-Item -ItemType Directory -Force -Path $jdkRoot | Out-Null
-          Invoke-WebRequest -UseBasicParsing -OutFile $archive `
-            -Uri "https://api.adoptium.net/v3/binary/latest/${{ parameters.javaVersion }}/ga/$($platform.os)/x64/jdk/hotspot/normal/eclipse"
 
-          if ($IsWindows) { Expand-Archive -Path $archive -DestinationPath $jdkRoot -Force } else { tar -xzf $archive -C $jdkRoot }
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          # La progress bar di Invoke-WebRequest costa piu' del download stesso su Windows PowerShell.
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest -UseBasicParsing -OutFile $archive `
+            -Uri "https://api.adoptium.net/v3/binary/latest/${{ parameters.javaVersion }}/ga/windows/x64/jdk/hotspot/normal/eclipse"
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::ExtractToDirectory($archive, $jdkRoot)
           Remove-Item $archive -Force
 
           $jdk = Get-ChildItem $jdkRoot -Directory -Filter 'jdk-*' | Select-Object -First 1
@@ -63,3 +69,34 @@ steps:
         Write-Host "JAVA_HOME impostato a $javaHome"
         Write-Host "##vso[task.setvariable variable=JAVA_HOME]$javaHome"
         Write-Host "##vso[task.prependpath]$javaBin"
+
+  - task: Bash@3
+    displayName: 'Ensure Java (Linux)'
+    condition: ne(variables['Agent.OS'], 'Windows_NT')
+    inputs:
+      targetType: 'inline'
+      script: |
+        set -euo pipefail
+
+        if [ -n "${JAVA_HOME:-}" ] && [ -d "$JAVA_HOME/bin" ]; then
+          echo "JAVA_HOME gia' presente: $JAVA_HOME"
+          exit 0
+        fi
+
+        toolsRoot="${AGENT_TOOLSDIRECTORY:-$AGENT_HOMEDIRECTORY}"
+        jdkRoot="$toolsRoot/temurin/${{ parameters.javaVersion }}"
+        jdk=$(find "$jdkRoot" -maxdepth 1 -type d -name 'jdk-*' 2>/dev/null | head -1)
+
+        if [ -z "$jdk" ]; then
+          echo "Download Temurin ${{ parameters.javaVersion }} in $jdkRoot"
+          mkdir -p "$jdkRoot"
+          curl -fsSL -o /tmp/temurin.tar.gz \
+            "https://api.adoptium.net/v3/binary/latest/${{ parameters.javaVersion }}/ga/linux/x64/jdk/hotspot/normal/eclipse"
+          tar -xzf /tmp/temurin.tar.gz -C "$jdkRoot"
+          rm -f /tmp/temurin.tar.gz
+          jdk=$(find "$jdkRoot" -maxdepth 1 -type d -name 'jdk-*' | head -1)
+        fi
+
+        echo "JAVA_HOME impostato a $jdk"
+        echo "##vso[task.setvariable variable=JAVA_HOME]$jdk"
+        echo "##vso[task.prependpath]$jdk/bin"
