@@ -40,15 +40,15 @@ steps:
     inputs:
       versionSpec: ${{ parameters.nodeVersion }}
 
-  - script: npm ci
+  - bash: npm ci
     displayName: 'Install Dependencies'
     workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}
 
-  - script: npx ng build --configuration=${{ parameters.buildConfiguration }}
+  - bash: npx ng build --configuration=${{ parameters.buildConfiguration }}
     displayName: 'Angular Build'
     workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}
 
-  - script: |
+  - bash: |
       mkdir -p '${{ parameters.outputDirectory }}'
       REAL_OUTPUT=$(find dist -name "index.html" -exec dirname {} \; | head -n 1)
       echo "Copia dei file da $REAL_OUTPUT a ${{ parameters.outputDirectory }}"
