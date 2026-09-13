@@ -74,6 +74,7 @@ stages:
     jobs:
       - deployment: PublishArtifact
         displayName: 'Release Dev Build'
+        pool: ${{ parameters.pool }}
         environment: '$(targetEnvironment)'
         strategy:
           runOnce:

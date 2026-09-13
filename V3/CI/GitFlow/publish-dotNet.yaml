@@ -61,6 +61,11 @@ parameters:
     type: string
     default: '**/*.UnitTest*.csproj'
 
+  - name: pool
+    type: object
+    default:
+      vmImage: 'ubuntu-latest'
+
 variables:
   - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/dev') }}:
     - group: "development"
@@ -89,6 +94,7 @@ stages:
     parameters:
       projectName: ${{ parameters.projectName }}
       checkoutRepository: ${{ parameters.checkoutRepository }}
+      pool: ${{ parameters.pool }}
       buildSteps:
         - template: ../Common/Steps/dotnet-sonar-prepare.yaml
           parameters:
