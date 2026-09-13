@@ -37,6 +37,5 @@ steps:
       app_location: '${{ parameters.appLocation }}'
       output_location: ''
       skip_app_build: true
-    workingDirectory: $(Build.SourcesDirectory)
     env:
       azure_static_web_apps_api_token: '${{ parameters.swaDeploymentToken }}'
