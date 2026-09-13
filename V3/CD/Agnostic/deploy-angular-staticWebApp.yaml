@@ -101,12 +101,6 @@ stages:
                   displayName: 'Flatten artifact directory'
 
                 # ── 4. Deploy su Azure Static Web Apps ───────────────────────
-                # app_location relativo (non $(Build.SourcesDirectory)/drop): AzureStaticWebApp@0
-                # lancia un container Docker che monta il workspace dell'agent, e su self-hosted
-                # la traduzione di un path assoluto host->container fallisce ("Could not detect
-                # this directory" anche quando la cartella esiste). Path relativo + working
-                # directory esplicita in staticWebApp-deploy.yaml risolve nello stesso posto
-                # ma passa attraverso il mount del container correttamente.
                 - template: ../Common/Steps/staticWebApp-deploy.yaml
                   parameters:
                     swaDeploymentToken: '${{ parameters.swaDeploymentToken }}'

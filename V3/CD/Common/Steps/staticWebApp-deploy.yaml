@@ -37,8 +37,6 @@ steps:
       app_location: '${{ parameters.appLocation }}'
       output_location: ''
       skip_app_build: true
-    # workingDirectory esplicita: app_location e' relativo, deve risolvere rispetto
-    # alla stessa directory in cui il caller ha scaricato/flattenato l'artifact.
     workingDirectory: $(Build.SourcesDirectory)
     env:
       azure_static_web_apps_api_token: '${{ parameters.swaDeploymentToken }}'
