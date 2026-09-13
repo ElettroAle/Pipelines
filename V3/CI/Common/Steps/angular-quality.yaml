@@ -28,10 +28,10 @@ parameters:
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
-  - task: NodeTool@0
+  - task: UseNode@1
     displayName: 'Install Node.js'
     inputs:
-      versionSpec: ${{ parameters.nodeVersion }}
+      version: ${{ parameters.nodeVersion }}
 
   - script: npm ci
     displayName: 'Install Dependencies'
