@@ -40,18 +40,22 @@ steps:
     inputs:
       version: ${{ parameters.nodeVersion }}
 
-  - bash: npm ci
+  - script: npm ci
     displayName: 'Install Dependencies'
     workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}
 
-  - bash: npx ng build --configuration=${{ parameters.buildConfiguration }}
+  - script: npx ng build --configuration=${{ parameters.buildConfiguration }}
     displayName: 'Angular Build'
     workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}
 
-  - bash: |
-      mkdir -p '${{ parameters.outputDirectory }}'
-      REAL_OUTPUT=$(find dist -name "index.html" -exec dirname {} \; | head -n 1)
-      echo "Copia dei file da $REAL_OUTPUT a ${{ parameters.outputDirectory }}"
-      cp -r $REAL_OUTPUT/. '${{ parameters.outputDirectory }}/'
+  # PowerShell (non bash): gli agent self-hosted Windows di questo runtime non hanno
+  # bash.exe garantito sul PATH. Individua dinamicamente la cartella di output reale
+  # di ng build (varia tra 'dist/<project>' e 'dist/<project>/browser' a seconda
+  # della versione Angular) cercando index.html, poi copia il suo contenuto.
+  - powershell: |
+      New-Item -ItemType Directory -Force -Path '${{ parameters.outputDirectory }}' | Out-Null
+      $realOutput = (Get-ChildItem -Path dist -Recurse -Filter 'index.html' | Select-Object -First 1).DirectoryName
+      Write-Host "Copia dei file da $realOutput a ${{ parameters.outputDirectory }}"
+      Copy-Item -Path (Join-Path $realOutput '*') -Destination '${{ parameters.outputDirectory }}' -Recurse -Force
     displayName: 'Copy dist to Artifact Staging'
     workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}
