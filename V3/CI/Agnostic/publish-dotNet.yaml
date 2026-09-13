@@ -61,6 +61,14 @@ parameters:
     type: string
     default: ''
 
+  - name: sonarExtraProperties
+    type: string
+    default: 'sonar.cs.cobertura.reportsPaths=$(Agent.TempDirectory)/**/coverage.cobertura.xml'
+
+  - name: testProjects
+    type: string
+    default: '**/*.UnitTest*.csproj'
+
   - name: pool
     type: object
     default:
@@ -80,11 +88,20 @@ stages:
             sonarServiceConnection: ${{ parameters.sonarServiceConnection }}
             sonarOrganization: ${{ parameters.sonarOrganization }}
             sonarProjectKey: ${{ parameters.sonarProjectKey }}
+            sonarExtraProperties: ${{ parameters.sonarExtraProperties }}
         - template: ../Common/Steps/dotnet-build.yaml
           parameters:
             projects: '${{ parameters.projectName }}/${{ parameters.projectName }}.csproj'
             dotnetVersion: '10.0.x'
             buildConfiguration: 'Release'
+        # I test girano solo ad analisi attiva: servono a produrre il cobertura
+        # che Sonar legge, la publish di per se' non li richiede.
+        - ${{ if parameters.enableSonar }}:
+          - template: ../Common/Steps/dotnet-test.yaml
+            parameters:
+              buildConfiguration: 'Release'
+              testProjects: ${{ parameters.testProjects }}
+              buildArguments: ''
         - template: ../Common/Steps/dotnet-sonar.yaml
           parameters:
             enableSonar: ${{ parameters.enableSonar }}

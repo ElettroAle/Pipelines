@@ -32,6 +32,16 @@ parameters:
     type: string
     default: ''
 
+  - name: sonarExtraProperties
+    type: string
+    default: 'sonar.javascript.lcov.reportPaths=coverage/lcov.info'
+
+  # 'src' e non '.': il default di angular-sonar.yaml analizzerebbe anche
+  # e2e/scripts/config di root, oltre al codice applicativo.
+  - name: sonarSources
+    type: string
+    default: 'src'
+
   - name: pool
     type: object
     default:
@@ -55,3 +65,5 @@ stages:
             sonarServiceConnection: ${{ parameters.sonarServiceConnection }}
             sonarOrganization: ${{ parameters.sonarOrganization }}
             sonarProjectKey: ${{ parameters.sonarProjectKey }}
+            sonarExtraProperties: ${{ parameters.sonarExtraProperties }}
+            sonarSources: ${{ parameters.sonarSources }}
