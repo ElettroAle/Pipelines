@@ -85,7 +85,7 @@ steps:
 
         toolsRoot="${AGENT_TOOLSDIRECTORY:-$AGENT_HOMEDIRECTORY}"
         jdkRoot="$toolsRoot/temurin/${{ parameters.javaVersion }}"
-        jdk=$(find "$jdkRoot" -maxdepth 1 -type d -name 'jdk-*' 2>/dev/null | head -1)
+        jdk=$(find "$jdkRoot" -maxdepth 1 -type d -name 'jdk-*' 2>/dev/null | head -1 || true)
 
         if [ -z "$jdk" ]; then
           echo "Download Temurin ${{ parameters.javaVersion }} in $jdkRoot"
