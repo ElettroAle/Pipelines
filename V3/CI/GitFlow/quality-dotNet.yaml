@@ -45,6 +45,13 @@ parameters:
     type: string
     default: ''
 
+  # Il default punta al cobertura prodotto da dotnet-test.yaml, che in questo
+  # template gira sempre: senza questa property Sonar ignora il file e riporta
+  # 0% di coverage pur avendola gia' sul disco dell'agent.
+  - name: sonarExtraProperties
+    type: string
+    default: 'sonar.cs.cobertura.reportsPaths=$(Agent.TempDirectory)/**/coverage.cobertura.xml'
+
   - name: pool
     type: object
     default:
@@ -77,6 +84,7 @@ stages:
             sonarServiceConnection: ${{ parameters.sonarServiceConnection }}
             sonarOrganization: ${{ parameters.sonarOrganization }}
             sonarProjectKey: ${{ parameters.sonarProjectKey }}
+            sonarExtraProperties: ${{ parameters.sonarExtraProperties }}
         - template: ../Common/Steps/dotnet-build.yaml
           parameters:
             projects: ${{ parameters.buildProjects }}

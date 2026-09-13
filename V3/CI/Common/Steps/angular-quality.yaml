@@ -1,7 +1,7 @@
 # ── CI Step: Angular Quality ───────────────────────────────────────────────────
 #
 # Step template condiviso per la fase di quality gate di progetti Angular.
-# Contiene: installazione Node.js, npm ci, ng build (compile check).
+# Contiene: installazione Node.js, npm ci, ng build (compile check), test Jest con coverage.
 #
 # Riusato da:
 #   CI/Agnostic/quality-angular.yaml
@@ -17,6 +17,13 @@ parameters:
   - name: nodeVersion
     type: string
     default: '$(nodeVersion)'
+
+  # Jest, non Karma: nessun browser richiesto sull'agent. Coverage con reporter
+  # lcov di default (Jest lo include gia' in coverageReporters), letto poi da
+  # angular-sonar.yaml via sonar.javascript.lcov.reportPaths.
+  - name: testCommand
+    type: string
+    default: 'npx jest --coverage --maxWorkers=50%'
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -34,12 +41,6 @@ steps:
     displayName: 'Angular Build (compile check)'
     workingDirectory: $(Build.SourcesDirectory)
 
-  # Placeholder test steps:
-  # - script: npx ng test --watch=false --code-coverage
-  #   displayName: 'Unit Tests'
-  #   workingDirectory: $(Build.SourcesDirectory)
-  # - task: PublishCodeCoverageResults@2
-  #   displayName: 'Publish Code Coverage'
-  #   inputs:
-  #     codeCoverageTool: 'Cobertura'
-  #     summaryFileLocation: 'coverage/demetra/cobertura-coverage.xml'
+  - script: ${{ parameters.testCommand }}
+    displayName: 'Unit Tests'
+    workingDirectory: $(Build.SourcesDirectory)

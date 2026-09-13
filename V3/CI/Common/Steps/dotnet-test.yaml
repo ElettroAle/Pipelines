@@ -6,6 +6,9 @@
 # Riusato da:
 #   CI/Agnostic/quality-dotNet.yaml
 #   CI/GitFlow/quality-dotNet.yaml
+#   CI/Agnostic/publish-dotNet.yaml
+#   CI/GitFlow/publish-dotNet.yaml
+#   CI/TrunkFlow/publish-dotNet.yaml
 #
 # Parametri
 # ─────────
@@ -23,6 +26,13 @@ parameters:
     type: string
     default: '$(testProjects)'
 
+  # I template di quality compilano i progetti di test insieme al resto; nelle
+  # publish il build tocca solo il csproj dell'app, quindi li' il valore va
+  # svuotato perche' sia questo step a compilarli.
+  - name: buildArguments
+    type: string
+    default: '--no-build --no-restore'
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
@@ -31,7 +41,7 @@ steps:
     inputs:
       command: 'test'
       projects: '${{ parameters.testProjects }}'
-      arguments: '--configuration ${{ parameters.buildConfiguration }} --no-build --no-restore --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura'
+      arguments: '--configuration ${{ parameters.buildConfiguration }} ${{ parameters.buildArguments }} --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura'
 
   - task: PublishCodeCoverageResults@2
     displayName: 'Publish Code Coverage'
