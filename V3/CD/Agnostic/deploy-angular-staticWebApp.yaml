@@ -104,4 +104,4 @@ stages:
                 - template: ../Common/Steps/staticWebApp-deploy.yaml
                   parameters:
                     swaDeploymentToken: '${{ parameters.swaDeploymentToken }}'
-                    appLocation: '$(Build.SourcesDirectory)/drop'
+                    appLocation: 'drop'
