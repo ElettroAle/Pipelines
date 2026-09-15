@@ -25,6 +25,12 @@ parameters:
     type: string
     default: '**/*.csproj'
 
+  # Il glob dei progetti di test: chi consuma il template decide se il quality
+  # gate copre i soli unit test o anche altre suite.
+  - name: testProjects
+    type: string
+    default: '**/*.UnitTest*.csproj'
+
   - name: timeoutInMinutes
     type: number
     default: 30
@@ -62,10 +68,6 @@ variables:
     value: '10.0.x'
   - name: buildConfiguration
     value: 'Release'
-  - name: buildProjects
-    value: '**/*.csproj'
-  - name: testProjects
-    value: '**/*.UnitTest*.csproj'
   - group: "common-quality"
 
 stages:
@@ -89,6 +91,8 @@ stages:
           parameters:
             projects: ${{ parameters.buildProjects }}
         - template: ../Common/Steps/dotnet-test.yaml
+          parameters:
+            testProjects: ${{ parameters.testProjects }}
         - template: ../Common/Steps/dotnet-sonar.yaml
           parameters:
             enableSonar: ${{ parameters.enableSonar }}
