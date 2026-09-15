@@ -16,6 +16,18 @@ parameters:
   - name: checkoutRepository
     type: string
 
+  # '**/*.csproj' compila un progetto per volta, '**/*.sln' in un colpo solo.
+  # Incide sulla durata, non sul footprint su disco.
+  - name: buildProjects
+    type: string
+    default: '**/*.csproj'
+
+  # Il glob dei progetti di test: chi consuma il template decide se il quality
+  # gate copre i soli unit test o anche altre suite.
+  - name: testProjects
+    type: string
+    default: '**/*.UnitTest*.csproj'
+
   - name: enableSonar
     type: boolean
     default: false
@@ -49,10 +61,6 @@ variables:
     value: '10.0.x'
   - name: buildConfiguration
     value: 'Release'
-  - name: buildProjects
-    value: '**/*.csproj'
-  - name: testProjects
-    value: '**/*.UnitTest*.csproj'
   - group: "common-quality"
 
 stages:
@@ -71,8 +79,10 @@ stages:
             sonarExtraProperties: ${{ parameters.sonarExtraProperties }}
         - template: ../Common/Steps/dotnet-build.yaml
           parameters:
-            projects: '$(buildProjects)'
+            projects: ${{ parameters.buildProjects }}
         - template: ../Common/Steps/dotnet-test.yaml
+          parameters:
+            testProjects: ${{ parameters.testProjects }}
         - template: ../Common/Steps/dotnet-sonar.yaml
           parameters:
             enableSonar: ${{ parameters.enableSonar }}

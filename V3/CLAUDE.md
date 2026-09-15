@@ -225,8 +225,8 @@ Queste variabili devono essere definite nell'entry point (come `variables:` o tr
 | `outputDirectory` | stringa | `dotnet-publish.yaml`, `angular-publish.yaml` |
 | `targetEnvironment` | stringa | `dotnet-publish.yaml` |
 | `nodeVersion` | stringa | `angular-*.yaml` |
-| `buildProjects` | stringa | `dotnet-quality.yaml` |
-| `testProjects` | stringa | `dotnet-quality.yaml` |
+| `buildProjects` | **parametro entry point** | quality-dotNet.yaml → `dotnet-build.yaml` |
+| `testProjects` | **parametro entry point** | quality-dotNet.yaml, publish-dotNet.yaml → `dotnet-test.yaml` |
 | `appLocation` | stringa | `staticWebApp-deploy.yaml` |
 | `currentTag` | stringa | `versionArgs` (esposto da Set-Versioning) |
 | `gitHash` | stringa | `versionArgs` (esposto da Set-Versioning) |
