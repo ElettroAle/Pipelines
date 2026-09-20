@@ -91,12 +91,21 @@ stages:
                 # ── 3. Flatten artifact directory ────────────────────────────
                 # Porta i file da drop/<nome-versione>/ direttamente in drop/
                 # in modo che il task SWA trovi index.html in app_location.
+                # DownloadPipelineArtifact scarica gia' piatto quando l'artifact CI
+                # e' stato pubblicato con artifactName: appiattire solo se drop non
+                # ha ancora un index.html e contiene esattamente una sottocartella,
+                # altrimenti una cartella di contenuto legittima (es. public/flags/)
+                # verrebbe sparsa nella radice e persa.
                 - bash: |
-                    SUBDIR=$(find "$(Build.SourcesDirectory)/drop" -mindepth 1 -maxdepth 1 -type d | head -1)
-                    if [ -n "$SUBDIR" ]; then
-                      echo "Flatten: $SUBDIR -> drop/"
-                      cp -r "$SUBDIR"/. "$(Build.SourcesDirectory)/drop/"
-                      rm -rf "$SUBDIR"
+                    DROP="$(Build.SourcesDirectory)/drop"
+                    if [ ! -f "$DROP/index.html" ]; then
+                      COUNT=$(find "$DROP" -mindepth 1 -maxdepth 1 -type d | wc -l)
+                      if [ "$COUNT" -eq 1 ]; then
+                        SUBDIR=$(find "$DROP" -mindepth 1 -maxdepth 1 -type d)
+                        echo "Flatten: $SUBDIR -> drop/"
+                        cp -r "$SUBDIR"/. "$DROP/"
+                        rm -rf "$SUBDIR"
+                      fi
                     fi
                   displayName: 'Flatten artifact directory'
 
