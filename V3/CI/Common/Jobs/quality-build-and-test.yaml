@@ -15,7 +15,7 @@
 #   pool               → pool del job                   (default: hosted ubuntu-latest)
 #   freeDiskSpace      → rimuove toolchain non usate    (default: true)
 #   timeoutInMinutes   → timeout del job                (default: 30)
-#   workspaceClean     → pulizia workspace prima del job (default: '', nessuna)
+#   workspaceClean     → pulizia workspace prima del job (default: 'none', nessuna)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -56,7 +56,8 @@ parameters:
   # accumulano run dopo run; 'all' lo azzera, al prezzo di un checkout da capo.
   - name: workspaceClean
     type: string
-    default: ''
+    default: 'none'
+    values: ['none', 'outputs', 'resources', 'all']
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -64,7 +65,7 @@ jobs:
   - job: BuildAndTest
     displayName: 'Build, Test and Security'
     pool: ${{ parameters.pool }}
-    ${{ if ne(parameters.workspaceClean, '') }}:
+    ${{ if ne(parameters.workspaceClean, 'none') }}:
       workspace:
         clean: ${{ parameters.workspaceClean }}
     dependsOn: ${{ parameters.dependsOn }}
