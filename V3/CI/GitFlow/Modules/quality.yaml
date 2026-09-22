@@ -16,7 +16,7 @@
 #   checkoutRepository → repository da fare checkout [REQUIRED]
 #   gitLeaksNoGit      → passa --no-git a Gitleaks (default: true)
 #   timeoutInMinutes   → timeout del job BuildAndTest (default: 30)
-#   workspaceClean     → pulizia workspace prima del job (default: '', nessuna)
+#   workspaceClean     → pulizia workspace prima del job (default: 'none', nessuna)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -47,8 +47,8 @@ parameters:
 
   - name: workspaceClean
     type: string
-    default: ''
-    values: ['', 'outputs', 'resources', 'all']
+    default: 'none'
+    values: ['none', 'outputs', 'resources', 'all']
 
 # ─────────────────────────────────────────────────────────────────────────────
 
