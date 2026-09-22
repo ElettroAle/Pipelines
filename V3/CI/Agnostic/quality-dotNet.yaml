@@ -91,6 +91,7 @@ stages:
         - template: ../Common/Steps/dotnet-build.yaml
           parameters:
             projects: ${{ parameters.buildProjects }}
+            installSdk: false
         # Dopo la build: lo scanner riusa gli asset di restore invece di rifarli.
         - template: ../Common/Steps/dotnet-nuget-check.yaml
           parameters:
