@@ -19,6 +19,7 @@
 #   selfContained      → forza /p:SelfContained               (default: false)
 #                        Impostare esplicitamente per evitare che la pipeline variable
 #                        omonima venga interpretata da MSBuild come proprietà.
+#   installSdk         → installa l'SDK prima della build     (default: true)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -39,13 +40,20 @@ parameters:
     type: boolean
     default: false
 
+  # Chi ha già installato l'SDK a monte (es. per uno step che gira prima nello
+  # stesso job, come SonarCloud Prepare) evita di rifarlo qui.
+  - name: installSdk
+    type: boolean
+    default: true
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
-  - task: UseDotNet@2
-    displayName: 'Install .NET SDK'
-    inputs:
-      version: ${{ parameters.dotnetVersion }}
+  - ${{ if parameters.installSdk }}:
+    - task: UseDotNet@2
+      displayName: 'Install .NET SDK'
+      inputs:
+        version: ${{ parameters.dotnetVersion }}
 
   - task: DotNetCoreCLI@2
     displayName: 'DotNet Build'

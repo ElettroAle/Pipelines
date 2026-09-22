@@ -75,6 +75,12 @@ stages:
       pool: ${{ parameters.pool }}
       workspaceClean: ${{ parameters.workspaceClean }}
       buildAndTestSteps:
+        # SonarCloud Prepare invoca dotnet direttamente: su agent senza SDK di sistema
+        # (self-hosted) va installato prima, non nello step dotnet-build successivo.
+        - task: UseDotNet@2
+          displayName: 'Install .NET SDK'
+          inputs:
+            version: '$(dotnetVersion)'
         - template: ../Common/Steps/dotnet-sonar-prepare.yaml
           parameters:
             enableSonar: ${{ parameters.enableSonar }}
@@ -85,6 +91,7 @@ stages:
         - template: ../Common/Steps/dotnet-build.yaml
           parameters:
             projects: ${{ parameters.buildProjects }}
+            installSdk: false
         # Dopo la build: lo scanner riusa gli asset di restore invece di rifarli.
         - template: ../Common/Steps/dotnet-nuget-check.yaml
           parameters:
