@@ -85,6 +85,12 @@ stages:
       timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
       workspaceClean: ${{ parameters.workspaceClean }}
       buildAndTestSteps:
+        # SonarCloud Prepare invoca dotnet direttamente: su agent senza SDK di sistema
+        # (self-hosted) va installato prima, non nello step dotnet-build successivo.
+        - task: UseDotNet@2
+          displayName: 'Install .NET SDK'
+          inputs:
+            version: '$(dotnetVersion)'
         - template: ../Common/Steps/dotnet-sonar-prepare.yaml
           parameters:
             enableSonar: ${{ parameters.enableSonar }}
