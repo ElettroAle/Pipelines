@@ -60,4 +60,6 @@ steps:
     inputs:
       command: 'build'
       projects: '${{ parameters.projects }}'
-      arguments: '--configuration ${{ parameters.buildConfiguration }} /p:SelfContained=${{ parameters.selfContained }}'
+      # dotnet build usa /m:1 di default: su una solution multi-progetto lascia
+      # inutilizzati i core oltre il primo.
+      arguments: '--configuration ${{ parameters.buildConfiguration }} /p:SelfContained=${{ parameters.selfContained }} /m'
