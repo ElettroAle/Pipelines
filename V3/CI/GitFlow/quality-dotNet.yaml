@@ -61,7 +61,6 @@ parameters:
   - name: workspaceClean
     type: string
     default: ''
-    values: ['', 'outputs', 'resources', 'all']
 
   - name: pool
     type: object

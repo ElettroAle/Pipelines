@@ -37,7 +37,6 @@ parameters:
   - name: workspaceClean
     type: string
     default: ''
-    values: ['', 'outputs', 'resources', 'all']
 
 # ─────────────────────────────────────────────────────────────────────────────
 
