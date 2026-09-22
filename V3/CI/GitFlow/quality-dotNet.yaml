@@ -58,6 +58,11 @@ parameters:
     type: string
     default: 'sonar.cs.cobertura.reportsPaths=$(Agent.TempDirectory)/**/coverage.cobertura.xml'
 
+  - name: workspaceClean
+    type: string
+    default: ''
+    values: ['', 'outputs', 'resources', 'all']
+
   - name: pool
     type: object
     default:
@@ -78,8 +83,8 @@ stages:
       pool: ${{ parameters.pool }}
       gitLeaksNoGit: ${{ parameters.gitLeaksNoGit }}
       timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
+      workspaceClean: ${{ parameters.workspaceClean }}
       buildAndTestSteps:
-        - template: ../Common/Steps/dotnet-nuget-check.yaml
         - template: ../Common/Steps/dotnet-sonar-prepare.yaml
           parameters:
             enableSonar: ${{ parameters.enableSonar }}
@@ -90,6 +95,10 @@ stages:
         - template: ../Common/Steps/dotnet-build.yaml
           parameters:
             projects: ${{ parameters.buildProjects }}
+        # Dopo la build: lo scanner riusa gli asset di restore invece di rifarli.
+        - template: ../Common/Steps/dotnet-nuget-check.yaml
+          parameters:
+            installSdk: false
         - template: ../Common/Steps/dotnet-test.yaml
           parameters:
             testProjects: ${{ parameters.testProjects }}

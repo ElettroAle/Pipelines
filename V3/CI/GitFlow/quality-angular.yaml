@@ -41,6 +41,11 @@ parameters:
     type: string
     default: 'src'
 
+  - name: workspaceClean
+    type: string
+    default: ''
+    values: ['', 'outputs', 'resources', 'all']
+
   - name: pool
     type: object
     default:
@@ -57,6 +62,7 @@ stages:
       projectName: ${{ parameters.projectName }}
       checkoutRepository: ${{ parameters.checkoutRepository }}
       pool: ${{ parameters.pool }}
+      workspaceClean: ${{ parameters.workspaceClean }}
       buildAndTestSteps:
         - template: ../Common/Steps/angular-quality.yaml
         - template: ../Common/Steps/angular-sonar.yaml

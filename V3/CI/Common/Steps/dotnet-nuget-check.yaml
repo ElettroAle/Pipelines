@@ -10,6 +10,7 @@
 # Parametri
 # ─────────
 #   dotnetVersion → versione SDK .NET (default: variabile $(dotnetVersion))
+#   installSdk    → installa l'SDK prima della scansione (default: true)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -18,13 +19,20 @@ parameters:
     type: string
     default: '$(dotnetVersion)'
 
+  # Dopo dotnet-build.yaml l'SDK e' gia' installato e gli asset di restore sono
+  # sul disco: reinstallare e ri-restorare raddoppia il costo dello step.
+  - name: installSdk
+    type: boolean
+    default: true
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
-  - task: UseDotNet@2
-    displayName: 'Install .NET SDK'
-    inputs:
-      version: ${{ parameters.dotnetVersion }}
+  - ${{ if parameters.installSdk }}:
+    - task: UseDotNet@2
+      displayName: 'Install .NET SDK'
+      inputs:
+        version: ${{ parameters.dotnetVersion }}
 
   - script: |
       OUTPUT=$(dotnet list package --vulnerable --include-transitive 2>&1)

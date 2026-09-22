@@ -16,6 +16,7 @@
 #   checkoutRepository → repository da fare checkout [REQUIRED]
 #   gitLeaksNoGit      → passa --no-git a Gitleaks (default: true)
 #   timeoutInMinutes   → timeout del job BuildAndTest (default: 30)
+#   workspaceClean     → pulizia workspace prima del job (default: '', nessuna)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -44,6 +45,11 @@ parameters:
     type: number
     default: 30
 
+  - name: workspaceClean
+    type: string
+    default: ''
+    values: ['', 'outputs', 'resources', 'all']
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 stages:
@@ -51,9 +57,12 @@ stages:
     displayName: 'Quality Checks'
     jobs:
 
+      # Una condition custom sostituisce il controllo di cancellazione implicito:
+      # senza not(canceled()) il job parte anche quando la run e' stata annullata.
       - job: ValidatePRTitle
         displayName: 'Validate SemVer Title'
-        condition: eq(variables['Build.Reason'], 'PullRequest')
+        pool: ${{ parameters.pool }}
+        condition: and(not(canceled()), eq(variables['Build.Reason'], 'PullRequest'))
         steps:
           - checkout: ${{ parameters.checkoutRepository }}
             path: s/${{ parameters.projectName }}
@@ -78,5 +87,6 @@ stages:
           buildAndTestSteps: ${{ parameters.buildAndTestSteps }}
           pool: ${{ parameters.pool }}
           timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
+          workspaceClean: ${{ parameters.workspaceClean }}
           dependsOn: [ValidatePRTitle]
-          condition: in(dependencies.ValidatePRTitle.result, 'Succeeded', 'Skipped')
+          condition: and(not(canceled()), in(dependencies.ValidatePRTitle.result, 'Succeeded', 'Skipped'))
