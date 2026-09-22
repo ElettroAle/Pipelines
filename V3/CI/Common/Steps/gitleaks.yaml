@@ -22,7 +22,10 @@ parameters:
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
+  # Tag fisso e non ':latest': su un agent persistente ':latest' riscarica il
+  # layer a ogni rilascio upstream, e una regola nuova fa fallire build su
+  # codice che non e' cambiato.
   - script: |
       NO_GIT_FLAG=${{ iif(parameters.noGit, '--no-git', '') }}
-      docker run -v $(Build.SourcesDirectory):/path zricethezav/gitleaks:latest detect --source="/path" $NO_GIT_FLAG --exit-code 1 --verbose
+      docker run -v $(Build.SourcesDirectory):/path zricethezav/gitleaks:v8.30.1 detect --source="/path" $NO_GIT_FLAG --exit-code 1 --verbose
     displayName: 'Gitleaks (Secret Scanning)'

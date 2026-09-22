@@ -15,6 +15,7 @@
 #   pool               → pool del job                   (default: hosted ubuntu-latest)
 #   freeDiskSpace      → rimuove toolchain non usate    (default: true)
 #   timeoutInMinutes   → timeout del job                (default: 30)
+#   workspaceClean     → pulizia workspace prima del job (default: '', nessuna)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -51,12 +52,22 @@ parameters:
     type: number
     default: 30
 
+  # Su un agent persistente il workspace non viene mai svuotato e bin/obj si
+  # accumulano run dopo run; 'all' lo azzera, al prezzo di un checkout da capo.
+  - name: workspaceClean
+    type: string
+    default: ''
+    values: ['', 'outputs', 'resources', 'all']
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 jobs:
   - job: BuildAndTest
     displayName: 'Build, Test and Security'
     pool: ${{ parameters.pool }}
+    ${{ if ne(parameters.workspaceClean, '') }}:
+      workspace:
+        clean: ${{ parameters.workspaceClean }}
     dependsOn: ${{ parameters.dependsOn }}
     condition: ${{ parameters.condition }}
     timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
@@ -85,8 +96,10 @@ jobs:
 
       - ${{ parameters.buildAndTestSteps }}
 
+      # not(canceled()) e non always(): il report serve anche sui fallimenti,
+      # ma always() lo farebbe girare pure sulle run annullate.
       - script: |
           df -h /
           du -xh "$(Agent.BuildDirectory)" --max-depth=2 2>/dev/null | sort -rh | head -15
         displayName: 'Disk usage report'
-        condition: always()
+        condition: not(canceled())
