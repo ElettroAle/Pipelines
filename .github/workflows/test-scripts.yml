@@ -17,8 +17,13 @@ on:
 
 jobs:
   pester:
-    name: Pester — Set-Versioning + Verify-SemVer + ScenarioCoverage
-    runs-on: ubuntu-latest
+    name: Pester — ${{ matrix.os }}
+    # ScenarioCoverage.cs gira su agent ADO Linux e Windows: la suite gira su entrambi.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
@@ -56,6 +61,6 @@ jobs:
         uses: dorny/test-reporter@v1
         if: always()
         with:
-          name: Pester Results
+          name: Pester Results (${{ matrix.os }})
           path: pester-results.xml
           reporter: java-junit

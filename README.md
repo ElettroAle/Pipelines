@@ -186,6 +186,7 @@ extends:
   (variabile `REQNROLL_FORMATTERS`, file `scenario-coverage/$(Build.BuildId).ndjson` nell'output
   di ogni progetto). `gherkin-scenario-coverage.yaml` esegue `CI/Scripts/ScenarioCoverage.cs`, che
   legge i `.feature` su disco con il parser Gherkin ufficiale e li confronta con i messages.
+  Lo step è una sola riga `dotnet run` senza sintassi di shell: gira su agent Linux e Windows.
 - **Cosa fa fallire.** Scenario mai eseguito (feature fuori da ogni progetto di test o esclusa da
   `testProjects`), frase senza binding, step pending o ambiguo, scenario saltato a runtime, fallito,
   eseguito senza step, Gherkin non valido, messages non allineati ai sorgenti.

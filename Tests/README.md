@@ -101,11 +101,11 @@ Ogni test crea un repository git reale con un **bare repo locale come fake remot
 | Branch non protetti | Check skippato su `dev`, `feature/x`, ecc. |
 | `ADDITIONAL_TAG_BRANCHES` | Branch extra protetti via env var |
 
-#### `ScenarioCoverage.Tests.ps1` (11 suite, 17 test)
+#### `ScenarioCoverage.Tests.ps1` (14 suite, 25 test)
 
 Lo script gira come processo (`dotnet run`), come in pipeline. Le fixture `green` e `red` sono l'output
 reale di una run Reqnroll + xUnit con `BUILD_BUILDID=4242`; i casi con corpus diversi copiano una
-fixture in `TestDrive` e la alterano.
+fixture in `TestDrive` e la alterano. Il workflow esegue la suite su `ubuntu-latest` e `windows-latest`.
 
 | Suite | Scenario testato |
 |---|---|
@@ -118,7 +118,10 @@ fixture in `TestDrive` e la alterano.
 | Gherkin non valido | Problema del corpus (exit 1), non errore di invocazione |
 | Nessun `.feature` | Exit 0 senza verificare nulla |
 | Riepilogo markdown | Tabelle problemi / in attesa |
-| Invocazione non valida | Exit 2: opzioni mancanti o sconosciute, root assente, messages illeggibili |
+| CRLF | `.feature` con fine riga Windows: stesse righe di un checkout LF |
+| Modalità `warn` | Exit 0 con problemi; `##vso` solo con `TF_BUILD`; SucceededWithIssues anche su messages illeggibili |
+| Modalità `enforce` su agent | Exit 1 con `logissue type=error`, `task.uploadsummary` del riepilogo |
+| Invocazione non valida | Exit 2: opzioni mancanti o sconosciute, modalità sconosciuta (anche in pipeline), root assente, messages illeggibili |
 
 Per rigenerare le fixture: un progetto xUnit con `Reqnroll.xUnit` 3.3.4, i `.feature` della fixture e
 `BUILD_BUILDID=4242`, `REQNROLL_FORMATTERS={"formatters":{"message":{"outputFilePath":"scenario-coverage/{env:BUILD_BUILDID}.ndjson"}}}`

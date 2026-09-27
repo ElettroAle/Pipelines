@@ -174,13 +174,98 @@ Describe 'ScenarioCoverage' {
         }
     }
 
+    Context 'File .feature con fine riga CRLF' {
+        BeforeAll {
+            $root = Copy-Fixture 'green'
+            Get-ChildItem "$root/Spec/Features" -Filter *.feature | ForEach-Object {
+                $text = [System.IO.File]::ReadAllText($_.FullName) -replace "`r?`n", "`r`n"
+                [System.IO.File]::WriteAllText($_.FullName, $text)
+            }
+            $result = Invoke-OnCorpus $root
+        }
+
+        It 'riconosce le stesse righe di un checkout LF' {
+            $result.ExitCode | Should -Be 0
+            $result.Output | Should -Match '6 attesi, 4 verificati, 2 in attesa'
+        }
+    }
+
+    Context 'Modalità warn' {
+        BeforeAll {
+            $red = Join-Path $FixturesRoot 'red'
+            $local = Invoke-ScenarioCoverage @('--root', $red, '--messages-file', $MessagesFile, '--mode', 'warn')
+            $env:TF_BUILD = 'True'
+            try {
+                $agent = Invoke-ScenarioCoverage @('--root', $red, '--messages-file', $MessagesFile, '--mode', 'warn')
+                $unreadable = Copy-Fixture 'green'
+                Add-Content -Path "$unreadable/Spec/bin/Release/net10.0/$MessagesFile" -Value '{non json'
+                $agentUnreadable = Invoke-ScenarioCoverage @('--root', $unreadable, '--messages-file', $MessagesFile, '--mode', 'warn')
+            }
+            finally {
+                Remove-Item Env:TF_BUILD
+            }
+        }
+
+        It 'riporta i problemi ma esce con 0' {
+            $local.ExitCode | Should -Be 0
+            $local.Output | Should -Match 'PROBLEMA Spec/Features/Carrello\.feature:17'
+        }
+
+        It 'fuori da Azure Pipelines non emette logging command' {
+            $local.Output | Should -Not -Match '##vso\['
+        }
+
+        It 'su un agent segna lo step SucceededWithIssues con un warning' {
+            $agent.Output | Should -Match '##vso\[task\.logissue type=warning\]Copertura scenari non verificata'
+            $agent.Output | Should -Match '##vso\[task\.complete result=SucceededWithIssues;\]'
+        }
+
+        It 'non blocca nemmeno su messages illeggibili' {
+            $agentUnreadable.ExitCode | Should -Be 0
+            $agentUnreadable.Output | Should -Match '##vso\[task\.complete result=SucceededWithIssues;\]'
+        }
+    }
+
+    Context 'Modalità enforce su un agent' {
+        BeforeAll {
+            $summary = Join-Path $TestDrive "summary-$(New-Guid).md"
+            $env:TF_BUILD = 'True'
+            try {
+                $result = Invoke-ScenarioCoverage @('--root', (Join-Path $FixturesRoot 'red'), '--messages-file', $MessagesFile, '--mode', 'enforce', '--summary', $summary)
+            }
+            finally {
+                Remove-Item Env:TF_BUILD
+            }
+        }
+
+        It 'esce con 1 con un errore e senza SucceededWithIssues' {
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match '##vso\[task\.logissue type=error\]'
+            $result.Output | Should -Not -Match 'SucceededWithIssues'
+        }
+
+        It 'pubblica il riepilogo markdown' {
+            $result.Output | Should -Match '##vso\[task\.uploadsummary\].*summary-.*\.md'
+        }
+    }
+
     Context 'Invocazione non valida' {
         It 'esce con 2 senza --messages-file' {
             (Invoke-ScenarioCoverage @('--root', $TestDrive)).ExitCode | Should -Be 2
         }
 
         It 'esce con 2 con un''opzione sconosciuta' {
-            (Invoke-ScenarioCoverage @('--root', $TestDrive, '--messages-file', 'x.ndjson', '--mode', 'warn')).ExitCode | Should -Be 2
+            (Invoke-ScenarioCoverage @('--root', $TestDrive, '--messages-file', 'x.ndjson', '--level', 'warn')).ExitCode | Should -Be 2
+        }
+
+        It 'esce con 2 con una modalità sconosciuta, anche su un agent' {
+            $env:TF_BUILD = 'True'
+            try {
+                (Invoke-ScenarioCoverage @('--root', $TestDrive, '--messages-file', 'x.ndjson', '--mode', 'soft')).ExitCode | Should -Be 2
+            }
+            finally {
+                Remove-Item Env:TF_BUILD
+            }
         }
 
         It 'esce con 2 se la root non esiste' {

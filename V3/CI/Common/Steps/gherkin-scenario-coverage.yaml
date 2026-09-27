@@ -17,6 +17,8 @@
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #
 # Richiede un .NET SDK >= 10 già installato: lo script è una file-based app.
+# Una sola riga senza variabili di shell: gira uguale in bash (Linux/macOS) e
+# in cmd (Windows). La modalità la applica lo script stesso.
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -40,23 +42,10 @@ parameters:
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
-  - script: |
-      summary="$(Agent.TempDirectory)/scenario-coverage.md"
-      dotnet run "$TEMPLATES_DIRECTORY/V3/CI/Scripts/ScenarioCoverage.cs" -- \
-        --root "$SOURCES_DIRECTORY" --messages-file "$MESSAGES_FILE" --summary "$summary"
-      status=$?
-      if [ -f "$summary" ]; then echo "##vso[task.uploadsummary]$summary"; fi
-      if [ "$status" -eq 0 ]; then exit 0; fi
-      if [ "$COVERAGE_MODE" = "warn" ]; then
-        echo "##vso[task.logissue type=warning]Copertura scenari non verificata (exit $status): modalita' warn, la run non si blocca"
-        echo "##vso[task.complete result=SucceededWithIssues;]"
-        exit 0
-      fi
-      echo "##vso[task.logissue type=error]Copertura scenari non verificata (exit $status)"
-      exit "$status"
+  - script: >-
+      dotnet run "${{ parameters.templatesDirectory }}/V3/CI/Scripts/ScenarioCoverage.cs" --
+      --root "${{ parameters.sourcesDirectory }}"
+      --messages-file "${{ parameters.messagesFile }}"
+      --summary "$(Agent.TempDirectory)/scenario-coverage.md"
+      --mode ${{ parameters.mode }}
     displayName: 'Scenario coverage (${{ parameters.mode }})'
-    env:
-      COVERAGE_MODE: ${{ parameters.mode }}
-      MESSAGES_FILE: ${{ parameters.messagesFile }}
-      SOURCES_DIRECTORY: ${{ parameters.sourcesDirectory }}
-      TEMPLATES_DIRECTORY: ${{ parameters.templatesDirectory }}

@@ -3,6 +3,7 @@
 // Verifies that every scenario declared in the .feature files on disk was executed and passed,
 // reading the Cucumber Messages (NDJSON) written by the BDD runner during the test run.
 // Exit codes: 0 verified, 1 not verified, 2 invalid invocation or unreadable input.
+// --mode warn turns 1 and 2 into 0, flagging the Azure Pipelines step as SucceededWithIssues.
 
 using System.Text;
 using System.Text.Json;
@@ -10,50 +11,109 @@ using Gherkin;
 
 Console.OutputEncoding = Encoding.UTF8;
 
+CoverageOptions options;
 try
 {
-    var options = CoverageOptions.Parse(args);
-    var corpus = FeatureCorpus.Load(options.Root);
-    var runs = RunLog.Load(options.Root, options.MessagesFile, corpus);
-    var report = CoverageReport.Compare(corpus, runs);
-    report.Print(options.Root);
-    if (options.SummaryPath is not null)
-        File.WriteAllText(options.SummaryPath, report.ToMarkdown(options.Root));
-    return report.IsVerified ? 0 : 1;
+    options = CoverageOptions.Parse(args);
 }
-catch (InvalidInputException error)
+catch (InvalidUsageException error)
 {
     Console.Error.WriteLine($"ERRORE {error.Message}");
     return 2;
 }
 
+try
+{
+    var corpus = FeatureCorpus.Load(options.Root);
+    var runs = RunLog.Load(options.Root, options.MessagesFile, corpus);
+    var report = CoverageReport.Compare(corpus, runs);
+    report.Print(options.Root);
+    PublishSummary(options, report);
+    return Verdict.Conclude(options.Mode, report.IsVerified ? 0 : 1, report.Headline);
+}
+catch (InvalidInputException error)
+{
+    Console.Error.WriteLine($"ERRORE {error.Message}");
+    return Verdict.Conclude(options.Mode, 2, error.Message);
+}
+
+static void PublishSummary(CoverageOptions options, CoverageReport report)
+{
+    if (options.SummaryPath is null)
+        return;
+    File.WriteAllText(options.SummaryPath, report.ToMarkdown(options.Root));
+    AzurePipelines.Command($"task.uploadsummary]{Path.GetFullPath(options.SummaryPath)}");
+}
+
+sealed class InvalidUsageException(string message) : Exception(message);
+
 sealed class InvalidInputException(string message) : Exception(message);
 
-sealed record CoverageOptions(string Root, string MessagesFile, string? SummaryPath)
+enum CoverageMode { Warn, Enforce }
+
+static class Verdict
 {
-    const string Usage = "uso: ScenarioCoverage.cs --root <cartella> --messages-file <suffisso/del/file.ndjson> [--summary <file.md>]";
+    public static int Conclude(CoverageMode mode, int exitCode, string reason)
+    {
+        if (exitCode == 0)
+            return 0;
+        if (mode == CoverageMode.Enforce)
+        {
+            AzurePipelines.Command($"task.logissue type=error]Copertura scenari non verificata: {reason}");
+            return exitCode;
+        }
+        AzurePipelines.Command($"task.logissue type=warning]Copertura scenari non verificata (modalità warn, la run non si blocca): {reason}");
+        AzurePipelines.Command("task.complete result=SucceededWithIssues;]");
+        return 0;
+    }
+}
+
+static class AzurePipelines
+{
+    // Azure Pipelines sets TF_BUILD on every agent: elsewhere the logging commands would only be noise.
+    static readonly bool IsAgent = Environment.GetEnvironmentVariable("TF_BUILD") is not null;
+
+    public static void Command(string command)
+    {
+        if (IsAgent)
+            Console.WriteLine($"##vso[{command}");
+    }
+}
+
+sealed record CoverageOptions(string Root, string MessagesFile, string? SummaryPath, CoverageMode Mode)
+{
+    const string Usage = "uso: ScenarioCoverage.cs --root <cartella> --messages-file <suffisso/del/file.ndjson> [--summary <file.md>] [--mode warn|enforce]";
+    static readonly string[] Names = ["--root", "--messages-file", "--summary", "--mode"];
 
     public static CoverageOptions Parse(string[] args)
     {
         var values = ReadPairs(args);
         var root = Required(values, "--root");
         if (!Directory.Exists(root))
-            throw new InvalidInputException($"la cartella --root non esiste: {root}");
+            throw new InvalidUsageException($"la cartella --root non esiste: {root}");
         return new CoverageOptions(
             Paths.Normalize(Path.GetFullPath(root)),
             Paths.Normalize(Required(values, "--messages-file")).TrimStart('/'),
-            values.GetValueOrDefault("--summary"));
+            values.GetValueOrDefault("--summary"),
+            ParseMode(values.GetValueOrDefault("--mode", "enforce")));
     }
+
+    static CoverageMode ParseMode(string mode) => mode switch
+    {
+        "warn" => CoverageMode.Warn,
+        "enforce" => CoverageMode.Enforce,
+        _ => throw new InvalidUsageException($"--mode vale warn o enforce, non {mode}. {Usage}"),
+    };
 
     static Dictionary<string, string> ReadPairs(string[] args)
     {
         if (args.Length % 2 != 0)
-            throw new InvalidInputException(Usage);
+            throw new InvalidUsageException(Usage);
         var values = new Dictionary<string, string>();
         for (var i = 0; i < args.Length; i += 2)
         {
-            if (args[i] is not ("--root" or "--messages-file" or "--summary"))
-                throw new InvalidInputException($"opzione sconosciuta {args[i]}. {Usage}");
+            if (!Names.Contains(args[i]))
+                throw new InvalidUsageException($"opzione sconosciuta {args[i]}. {Usage}");
             values[args[i]] = args[i + 1];
         }
         return values;
@@ -62,7 +122,7 @@ sealed record CoverageOptions(string Root, string MessagesFile, string? SummaryP
     static string Required(Dictionary<string, string> values, string name) =>
         values.TryGetValue(name, out var value) && value.Length > 0
             ? value
-            : throw new InvalidInputException($"manca {name}. {Usage}");
+            : throw new InvalidUsageException($"manca {name}. {Usage}");
 }
 
 static class Paths
@@ -410,7 +470,7 @@ sealed class CoverageReport
     static Finding Finding(ExpectedScenario scenario, string reason) =>
         new(scenario.Key.FeaturePath, scenario.Key.Line, scenario.Name, reason);
 
-    string Headline => FeatureCount == 0
+    public string Headline => FeatureCount == 0
         ? "Copertura scenari: nessun file .feature, niente da verificare"
         : $"Copertura scenari: {Expected} attesi, {Verified} verificati, {Pending.Count} in attesa (@ignore), {Problems.Count} problemi — {FeatureCount} file .feature, {MessagesFileCount} file di messages";
 
