@@ -20,6 +20,12 @@
 # Una sola riga senza variabili di shell: gira uguale in bash (Linux/macOS) e
 # in cmd (Windows). La modalità la applica lo script stesso.
 #
+# SonarQubeExclude=true tiene lo script fuori dall'analisi SonarCloud del
+# repository: senza, dopo 'SonarCloud Prepare' la build dello script riceve
+# l'ErrorLog di Sonar in .sonarqube/out/<N>/ e fallisce con CS0016 quando
+# quella cartella non esiste, oltre a mescolare i rilievi dello script con
+# quelli del repository.
+#
 # ─────────────────────────────────────────────────────────────────────────────
 
 parameters:
@@ -43,7 +49,8 @@ parameters:
 
 steps:
   - script: >-
-      dotnet run "${{ parameters.templatesDirectory }}/V3/CI/Scripts/ScenarioCoverage.cs" --
+      dotnet run "${{ parameters.templatesDirectory }}/V3/CI/Scripts/ScenarioCoverage.cs"
+      -p:SonarQubeExclude=true --
       --root "${{ parameters.sourcesDirectory }}"
       --messages-file "${{ parameters.messagesFile }}"
       --summary "$(Agent.TempDirectory)/scenario-coverage.md"
