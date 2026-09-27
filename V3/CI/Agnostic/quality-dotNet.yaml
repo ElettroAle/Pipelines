@@ -56,6 +56,13 @@ parameters:
     default: 'none'
     values: ['none', 'outputs', 'resources', 'all']
 
+  # Copertura degli scenari Gherkin: 'warn' pubblica il report senza bloccare,
+  # per misurare un corpus prima di renderlo vincolante con 'enforce'.
+  - name: scenarioCoverage
+    type: string
+    default: 'off'
+    values: ['off', 'warn', 'enforce']
+
   - name: pool
     type: object
     default:
@@ -66,6 +73,10 @@ variables:
     value: '10.0.x'
   - name: buildConfiguration
     value: 'Release'
+  # Il BuildId nel nome esclude i messages di run precedenti rimasti in bin/
+  # sugli agent persistenti.
+  - name: scenarioMessagesFile
+    value: 'scenario-coverage/$(Build.BuildId).ndjson'
   - group: "common-quality"
 
 stages:
@@ -74,6 +85,7 @@ stages:
       checkoutRepository: ${{ parameters.checkoutRepository }}
       pool: ${{ parameters.pool }}
       workspaceClean: ${{ parameters.workspaceClean }}
+      checkoutPipelineTemplates: ${{ ne(parameters.scenarioCoverage, 'off') }}
       buildAndTestSteps:
         # SonarCloud Prepare invoca dotnet direttamente: su agent senza SDK di sistema
         # (self-hosted) va installato prima, non nello step dotnet-build successivo.
@@ -99,6 +111,12 @@ stages:
         - template: ../Common/Steps/dotnet-test.yaml
           parameters:
             testProjects: ${{ parameters.testProjects }}
+            ${{ if ne(parameters.scenarioCoverage, 'off') }}:
+              cucumberMessagesFile: '$(scenarioMessagesFile)'
+        - ${{ if ne(parameters.scenarioCoverage, 'off') }}:
+          - template: ../Common/Steps/gherkin-scenario-coverage.yaml
+            parameters:
+              mode: ${{ parameters.scenarioCoverage }}
         - template: ../Common/Steps/dotnet-sonar.yaml
           parameters:
             enableSonar: ${{ parameters.enableSonar }}

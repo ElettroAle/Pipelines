@@ -16,6 +16,8 @@
 #   freeDiskSpace      → rimuove toolchain non usate    (default: true)
 #   timeoutInMinutes   → timeout del job                (default: 30)
 #   workspaceClean     → pulizia workspace prima del job (default: 'none', nessuna)
+#   checkoutPipelineTemplates → checkout anche del repo 'infrastructure' in
+#                        $(Pipeline.Workspace)/pipeline-templates (default: false)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -59,6 +61,12 @@ parameters:
     default: 'none'
     values: ['none', 'outputs', 'resources', 'all']
 
+  # Per gli step che eseguono script del repo dei template. Il repo applicativo
+  # resta in 's' e i template finiscono fuori: glob e Gitleaks non li vedono.
+  - name: checkoutPipelineTemplates
+    type: boolean
+    default: false
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 jobs:
@@ -89,6 +97,13 @@ jobs:
 
       - checkout: ${{ parameters.checkoutRepository }}
         fetchDepth: 0
+        ${{ if eq(parameters.checkoutPipelineTemplates, true) }}:
+          path: s
+
+      - ${{ if eq(parameters.checkoutPipelineTemplates, true) }}:
+        - checkout: infrastructure
+          path: pipeline-templates
+          fetchDepth: 1
 
       - template: ../Steps/gitleaks.yaml
         parameters:

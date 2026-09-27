@@ -14,6 +14,9 @@
 # ─────────
 #   buildConfiguration → configurazione build   (default: variabile $(buildConfiguration))
 #   testProjects       → glob pattern test proj  (default: variabile $(testProjects))
+#   cucumberMessagesFile → se valorizzato, Reqnroll scrive i Cucumber Messages
+#                          in quel path relativo all'output di ogni progetto
+#                          (default: '', formatter non attivato)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -33,6 +36,10 @@ parameters:
     type: string
     default: '--no-build --no-restore'
 
+  - name: cucumberMessagesFile
+    type: string
+    default: ''
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
@@ -42,6 +49,11 @@ steps:
       command: 'test'
       projects: '${{ parameters.testProjects }}'
       arguments: '--configuration ${{ parameters.buildConfiguration }} ${{ parameters.buildArguments }} --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura'
+    # La variabile d'ambiente sostituisce solo la sezione 'message' dei formatter:
+    # il reqnroll.json del repo applicativo resta com'e'.
+    ${{ if ne(parameters.cucumberMessagesFile, '') }}:
+      env:
+        REQNROLL_FORMATTERS: '{"formatters":{"message":{"outputFilePath":"${{ parameters.cucumberMessagesFile }}"}}}'
 
   - task: PublishCodeCoverageResults@2
     displayName: 'Publish Code Coverage'

@@ -1,0 +1,62 @@
+# ── CI Step: Gherkin Scenario Coverage ────────────────────────────────────────
+#
+# Verifica che ogni scenario dei file .feature del repository sia stato
+# eseguito e superato, confrontando i .feature su disco con i Cucumber Messages
+# scritti dal runner BDD durante i test (V3/CI/Scripts/ScenarioCoverage.cs).
+# Senza file .feature lo step passa senza verificare nulla.
+#
+# Riusato da:
+#   CI/Agnostic/quality-dotNet.yaml
+#   CI/GitFlow/quality-dotNet.yaml
+#
+# Parametri
+# ─────────
+#   mode              → 'warn' segnala senza bloccare, 'enforce' fa fallire la run
+#   messagesFile      → suffisso del path dei Cucumber Messages (default: $(scenarioMessagesFile))
+#   sourcesDirectory  → radice in cui cercare .feature e messages (default: $(Build.SourcesDirectory))
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# Richiede un .NET SDK >= 10 già installato: lo script è una file-based app.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: mode
+    type: string
+    values: ['warn', 'enforce']
+
+  - name: messagesFile
+    type: string
+    default: '$(scenarioMessagesFile)'
+
+  - name: sourcesDirectory
+    type: string
+    default: '$(Build.SourcesDirectory)'
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - script: |
+      summary="$(Agent.TempDirectory)/scenario-coverage.md"
+      dotnet run "$TEMPLATES_DIRECTORY/V3/CI/Scripts/ScenarioCoverage.cs" -- \
+        --root "$SOURCES_DIRECTORY" --messages-file "$MESSAGES_FILE" --summary "$summary"
+      status=$?
+      if [ -f "$summary" ]; then echo "##vso[task.uploadsummary]$summary"; fi
+      if [ "$status" -eq 0 ]; then exit 0; fi
+      if [ "$COVERAGE_MODE" = "warn" ]; then
+        echo "##vso[task.logissue type=warning]Copertura scenari non verificata (exit $status): modalita' warn, la run non si blocca"
+        echo "##vso[task.complete result=SucceededWithIssues;]"
+        exit 0
+      fi
+      echo "##vso[task.logissue type=error]Copertura scenari non verificata (exit $status)"
+      exit "$status"
+    displayName: 'Scenario coverage (${{ parameters.mode }})'
+    env:
+      COVERAGE_MODE: ${{ parameters.mode }}
+      MESSAGES_FILE: ${{ parameters.messagesFile }}
+      SOURCES_DIRECTORY: ${{ parameters.sourcesDirectory }}
+      TEMPLATES_DIRECTORY: ${{ parameters.templatesDirectory }}

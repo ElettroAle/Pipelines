@@ -15,6 +15,7 @@
 #   buildAndTestSteps  → stepList iniettata nel job BuildAndTest dopo Gitleaks
 #   checkoutRepository → repository da fare checkout [REQUIRED]
 #   gitLeaksNoGit      → passa --no-git a Gitleaks (default: true)
+#   checkoutPipelineTemplates → checkout del repo 'infrastructure' nel job BuildAndTest (default: false)
 #   timeoutInMinutes   → timeout del job BuildAndTest (default: 30)
 #   workspaceClean     → pulizia workspace prima del job (default: 'none', nessuna)
 #
@@ -49,6 +50,10 @@ parameters:
     type: string
     default: 'none'
     values: ['none', 'outputs', 'resources', 'all']
+
+  - name: checkoutPipelineTemplates
+    type: boolean
+    default: false
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -88,5 +93,6 @@ stages:
           pool: ${{ parameters.pool }}
           timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
           workspaceClean: ${{ parameters.workspaceClean }}
+          checkoutPipelineTemplates: ${{ parameters.checkoutPipelineTemplates }}
           dependsOn: [ValidatePRTitle]
           condition: and(not(canceled()), in(dependencies.ValidatePRTitle.result, 'Succeeded', 'Skipped'))
