@@ -20,11 +20,14 @@
 # Una sola riga senza variabili di shell: gira uguale in bash (Linux/macOS) e
 # in cmd (Windows). La modalità la applica lo script stesso.
 #
-# SonarQubeExclude=true tiene lo script fuori dall'analisi SonarCloud del
-# repository: senza, dopo 'SonarCloud Prepare' la build dello script riceve
-# l'ErrorLog di Sonar in .sonarqube/out/<N>/ e fallisce con CS0016 quando
-# quella cartella non esiste, oltre a mescolare i rilievi dello script con
-# quelli del repository.
+# -p:SonarQubeExclude=true serve a due cose:
+#   - tiene lo script fuori dall'analisi SonarCloud del repository, che
+#     altrimenti ne mescola i rilievi con quelli del codice sotto analisi;
+#   - essendo una proprietà globale, obbliga 'dotnet run' a passare sempre da
+#     MSBuild. Senza, sugli agent persistenti il checkout rinnova la data del
+#     .cs e l'SDK ricompila riusando gli argomenti csc della run precedente,
+#     compreso l'ErrorLog di Sonar in .sonarqube/out/<N>/ che 'SonarCloud
+#     Prepare' ha ormai cancellato: la build fallisce con CS0016 a run alterne.
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
