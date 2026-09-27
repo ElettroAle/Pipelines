@@ -1,0 +1,51 @@
+# ── CI Step: Gherkin Scenario Coverage ────────────────────────────────────────
+#
+# Verifica che ogni scenario dei file .feature del repository sia stato
+# eseguito e superato, confrontando i .feature su disco con i Cucumber Messages
+# scritti dal runner BDD durante i test (V3/CI/Scripts/ScenarioCoverage.cs).
+# Senza file .feature lo step passa senza verificare nulla.
+#
+# Riusato da:
+#   CI/Agnostic/quality-dotNet.yaml
+#   CI/GitFlow/quality-dotNet.yaml
+#
+# Parametri
+# ─────────
+#   mode              → 'warn' segnala senza bloccare, 'enforce' fa fallire la run
+#   messagesFile      → suffisso del path dei Cucumber Messages (default: $(scenarioMessagesFile))
+#   sourcesDirectory  → radice in cui cercare .feature e messages (default: $(Build.SourcesDirectory))
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# Richiede un .NET SDK >= 10 già installato: lo script è una file-based app.
+# Una sola riga senza variabili di shell: gira uguale in bash (Linux/macOS) e
+# in cmd (Windows). La modalità la applica lo script stesso.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: mode
+    type: string
+    values: ['warn', 'enforce']
+
+  - name: messagesFile
+    type: string
+    default: '$(scenarioMessagesFile)'
+
+  - name: sourcesDirectory
+    type: string
+    default: '$(Build.SourcesDirectory)'
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - script: >-
+      dotnet run "${{ parameters.templatesDirectory }}/V3/CI/Scripts/ScenarioCoverage.cs" --
+      --root "${{ parameters.sourcesDirectory }}"
+      --messages-file "${{ parameters.messagesFile }}"
+      --summary "$(Agent.TempDirectory)/scenario-coverage.md"
+      --mode ${{ parameters.mode }}
+    displayName: 'Scenario coverage (${{ parameters.mode }})'

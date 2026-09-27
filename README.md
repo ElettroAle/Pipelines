@@ -17,7 +17,7 @@ Pipelines/
 ├── V2/   ← Seconda generazione (legacy, non modificare)
 └── V3/   ← Versione corrente
     ├── CI/
-    │   ├── Scripts/                    Powershell condivisi (SemVer, versioning)
+    │   ├── Scripts/                    Script condivisi (SemVer, versioning, copertura scenari)
     │   ├── Modules/                    Moduli atomici agnostici (stages/jobs)
     │   ├── quality-dotNet.yaml         Quality gate agnostica — .NET
     │   ├── quality-angular.yaml        Quality gate agnostica — Angular
@@ -161,6 +161,41 @@ extends:
     ciPipelineResourceAlias: 'ci_be'
 ```
 
+### Copertura degli scenari Gherkin (quality-dotNet)
+
+Con `scenarioCoverage` diverso da `'off'` la quality verifica, in modo deterministico,
+che ogni scenario dei file `.feature` del repo applicativo sia stato eseguito e superato
+durante i test. Ogni riga di `Esempi` conta come uno scenario a sé.
+
+```yaml
+extends:
+  template: V3/CI/GitFlow/quality-dotNet.yaml@infrastructure
+  parameters:
+    checkoutRepository: app_repo
+    testProjects: '**/*.slnx'        # deve includere i progetti BDD
+    scenarioCoverage: 'warn'         # 'off' (default) | 'warn' | 'enforce'
+```
+
+| Valore | Effetto |
+|---|---|
+| `off` | Nessun controllo (default) |
+| `warn` | Report nella tab *Extensions* della run, esito *Succeeded with issues*, nessun blocco |
+| `enforce` | La run fallisce se anche un solo scenario non risulta verificato |
+
+- **Come funziona.** `dotnet-test.yaml` attiva il formatter Cucumber Messages di Reqnroll
+  (variabile `REQNROLL_FORMATTERS`, file `scenario-coverage/$(Build.BuildId).ndjson` nell'output
+  di ogni progetto). `gherkin-scenario-coverage.yaml` esegue `CI/Scripts/ScenarioCoverage.cs`, che
+  legge i `.feature` su disco con il parser Gherkin ufficiale e li confronta con i messages.
+  Lo step è una sola riga `dotnet run` senza sintassi di shell: gira su agent Linux e Windows.
+- **Cosa fa fallire.** Scenario mai eseguito (feature fuori da ogni progetto di test o esclusa da
+  `testProjects`), frase senza binding, step pending o ambiguo, scenario saltato a runtime, fallito,
+  eseguito senza step, Gherkin non valido, messages non allineati ai sorgenti.
+- **`@ignore`.** Uno scenario (o una Funzionalità) `@ignore` non fa fallire il controllo: è contato
+  ed elencato come *in attesa*.
+- **Requisiti.** Il repo applicativo dichiara il repository resource con alias `infrastructure`: il
+  job BuildAndTest ne fa il checkout in `$(Pipeline.Workspace)/pipeline-templates`, fuori dai sorgenti.
+  Senza file `.feature` lo step passa senza verificare nulla.
+
 ---
 
 ## Test Suite
@@ -170,7 +205,7 @@ La libreria include una suite di test a 2 livelli che gira su GitHub Actions sen
 | Livello | Tool | Cosa verifica |
 |---|---|---|
 | 1 — Static Analysis | Python (`yamllint`, script custom) | Sintassi YAML, riferimenti a template esistenti, contratti parametri |
-| 2 — Script Unit Tests | PowerShell Pester 5 | Logica di `Set-Versioning.ps1` e `Verify-SemVer.ps1` |
+| 2 — Script Unit Tests | PowerShell Pester 5 | Logica di `Set-Versioning.ps1`, `Verify-SemVer.ps1` e `ScenarioCoverage.cs` |
 
 ### Esecuzione locale
 
@@ -206,6 +241,7 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 |---|---|
 | `CI/Scripts/Verify-SemVer.ps1` | Verifica che l'ultimo commit rispetti Conventional Commits verso branch protetti |
 | `CI/Scripts/Set-Versioning.ps1` | Calcola la versione SemVer da commit history, crea il tag Git e setta le variabili ADO (`currentTag`, `gitHash`, `computedArtifactName`) |
+| `CI/Scripts/ScenarioCoverage.cs` | File-based app .NET 10: verifica che ogni scenario dei `.feature` sia stato eseguito e superato, leggendo i Cucumber Messages del runner BDD |
 
 ---
 

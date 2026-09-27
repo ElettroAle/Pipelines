@@ -16,10 +16,12 @@ Tests/
 │   └── check-parameters.py     # Verifica contratti parametri (unknown + required)
 ├── scripts/                    # Livello 2: unit test PowerShell (Pester)
 │   ├── Set-Versioning.Tests.ps1
-│   └── Verify-SemVer.Tests.ps1
+│   ├── Verify-SemVer.Tests.ps1
+│   └── ScenarioCoverage.Tests.ps1
 ├── fixtures/
 │   ├── valid-commits.txt       # Messaggi commit validi — usati da Verify-SemVer.Tests
-│   └── invalid-commits.txt     # Messaggi commit non validi — usati da Verify-SemVer.Tests
+│   ├── invalid-commits.txt     # Messaggi commit non validi — usati da Verify-SemVer.Tests
+│   └── scenario-coverage/      # .feature + Cucumber Messages reali (Reqnroll 3.3.4) — usati da ScenarioCoverage.Tests
 └── preview/                    # Livello 3: pipeline ADO per az pipelines run --preview
     ├── quality-dotNet.yaml
     └── publish-dotNet.yaml
@@ -64,6 +66,7 @@ python Tests/static/check-parameters.py
 - PowerShell 7+
 - Pester 5+: `Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -Scope CurrentUser`
 - `git` installato e disponibile nel PATH
+- .NET SDK 10+ (solo per `ScenarioCoverage.Tests.ps1`: lo script è una file-based app, `dotnet run` scarica il pacchetto `Gherkin` da nuget.org)
 
 ### Esecuzione locale
 
@@ -97,6 +100,32 @@ Ogni test crea un repository git reale con un **bare repo locale come fake remot
 | Branch protetti (main, staging) | Commit validi/invalidi; merge commit (usa `--no-merges`) |
 | Branch non protetti | Check skippato su `dev`, `feature/x`, ecc. |
 | `ADDITIONAL_TAG_BRANCHES` | Branch extra protetti via env var |
+
+#### `ScenarioCoverage.Tests.ps1` (14 suite, 25 test)
+
+Lo script gira come processo (`dotnet run`), come in pipeline. Le fixture `green` e `red` sono l'output
+reale di una run Reqnroll + xUnit con `BUILD_BUILDID=4242`; i casi con corpus diversi copiano una
+fixture in `TestDrive` e la alterano. Il workflow esegue la suite su `ubuntu-latest` e `windows-latest`.
+
+| Suite | Scenario testato |
+|---|---|
+| Corpus verificato | Righe di `Esempi` e scenari dentro una `Regola` contati uno per uno; `@ignore` su scenario e su Funzionalità in attesa |
+| Scenari non superati | Riga di esempio fallita nominata per riga; frase senza binding distinta dal fallimento |
+| Feature non eseguita | `.feature` che nessun progetto di test compila |
+| Run diversa | Messages di un altro BuildId ignorati |
+| Sorgenti disallineati | Righe spostate dopo la build: scenario non eseguito + esecuzione senza scenario |
+| Esecuzione orfana | Messages di un `.feature` rimosso |
+| Gherkin non valido | Problema del corpus (exit 1), non errore di invocazione |
+| Nessun `.feature` | Exit 0 senza verificare nulla |
+| Riepilogo markdown | Tabelle problemi / in attesa |
+| CRLF | `.feature` con fine riga Windows: stesse righe di un checkout LF |
+| Modalità `warn` | Exit 0 con problemi; `##vso` solo con `TF_BUILD`; SucceededWithIssues anche su messages illeggibili |
+| Modalità `enforce` su agent | Exit 1 con `logissue type=error`, `task.uploadsummary` del riepilogo |
+| Invocazione non valida | Exit 2: opzioni mancanti o sconosciute, modalità sconosciuta (anche in pipeline), root assente, messages illeggibili |
+
+Per rigenerare le fixture: un progetto xUnit con `Reqnroll.xUnit` 3.3.4, i `.feature` della fixture e
+`BUILD_BUILDID=4242`, `REQNROLL_FORMATTERS={"formatters":{"message":{"outputFilePath":"scenario-coverage/{env:BUILD_BUILDID}.ndjson"}}}`
+durante `dotnet test -c Release`.
 
 ---
 
