@@ -340,6 +340,8 @@ Describe "Set-Versioning — REQUIRE_TAG=true, vince l'incremento piu' alto dall
         @{ Commits = @("feat!: rompe il contratto", "fix: correzione successiva");     Expected = "2.0.0" }
         @{ Commits = @("feat!: rompe il contratto", "feat: feature successiva");       Expected = "2.0.0" }
         @{ Commits = @("fix: uno", "feat(api): due", "fix(v2): tre", "chore: quattro"); Expected = "1.3.0" }
+        @{ Commits = @("fix: uno", "Merged PR 7: feat(api): squash di ADO");          Expected = "1.3.0" }
+        @{ Commits = @("feat: uno", "Merged PR 8: feat!: squash breaking");           Expected = "2.0.0" }
     ) {
         param([string[]]$Commits, [string]$Expected)
         $tr = New-TestRepo -Commits (@("chore: base") + $Commits) -Tags @{ "1.2.3" = 0 }

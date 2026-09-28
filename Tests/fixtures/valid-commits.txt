@@ -15,3 +15,5 @@ feat(api): aggiunge endpoint di salute
 feat(api)!: rimuove il campo deprecato
 fix!: cambia il formato della risposta
 fix(scenario-coverage): step indipendente dalla shell
+Merged PR 1049: fix(v2): address SonarCloud findings
+Merged PR 12: feat!: rimuove il parametro deprecato

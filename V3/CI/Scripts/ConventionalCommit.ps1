@@ -1,8 +1,10 @@
 # Riconoscimento dei titoli Conventional Commits, condiviso da Verify-SemVer.ps1 e
 # Set-Versioning.ps1: la validazione del titolo e il calcolo dell'incremento non
 # possono divergere. Il match di -match e' case-insensitive: 'FEAT:' e' valido.
+# 'Merged PR <id>: ' e' il messaggio di default di Azure DevOps al completamento di
+# una PR, anche in squash: il titolo convenzionale segue il prefisso.
 
-$ConventionalCommitPattern = '^(?:(?<type>feat|fix)(?:\([^()\r\n]+\))?(?<breaking>!)?|(?<breakingChange>BREAKING CHANGE)):'
+$ConventionalCommitPattern = '^(?:Merged PR \d+: )?(?:(?<type>feat|fix)(?:\([^()\r\n]+\))?(?<breaking>!)?|(?<breakingChange>BREAKING CHANGE)):'
 
 function Get-ConventionalCommitIncrement {
     param([string]$Subject)
