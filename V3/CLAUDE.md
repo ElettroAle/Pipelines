@@ -152,6 +152,7 @@ I test usano un **bare repo locale** come fake remote, quindi non richiedono acc
 | Qualsiasi file in `V3/` | Livello 1 |
 | `CI/Scripts/Set-Versioning.ps1` | Livello 1 + Livello 2 (`Set-Versioning.Tests.ps1`) |
 | `CI/Scripts/Verify-SemVer.ps1` | Livello 1 + Livello 2 (`Verify-SemVer.Tests.ps1`) |
+| `CI/Scripts/ConventionalCommit.ps1` | Livello 1 + Livello 2 (`Verify-SemVer.Tests.ps1` + `Set-Versioning.Tests.ps1`) |
 | `CI/Scripts/ScenarioCoverage.cs` | Livello 1 + Livello 2 (`ScenarioCoverage.Tests.ps1`, richiede .NET SDK 10) |
 
 I workflow GitHub Actions replicano questi stessi check automaticamente su ogni push.

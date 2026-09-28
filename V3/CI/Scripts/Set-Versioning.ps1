@@ -4,6 +4,8 @@
 # Dipendenze: Variabili d'ambiente impostate da Azure DevOps
 # ====================================================================
 
+. "$PSScriptRoot/ConventionalCommit.ps1"
+
 $envName = $env:TARGET_ENV.ToLower()
 $isRequireTag = $env:REQUIRE_TAG
 $safeProjName = $env:PROJECT_NAME.ToLower() -replace '\.', '-'
@@ -54,9 +56,8 @@ if ($isRequireTag -eq "true") {
             foreach ($msg in $commitList) {
                 $trimmedMsg = $msg.Trim()
                 if (-not $foundValid) {
-                    if ($trimmedMsg -match "^feat!:") { $autoIncrement = "major"; $foundValid = $true }
-                    elseif ($trimmedMsg -match "^feat:") { $autoIncrement = "minor"; $foundValid = $true }
-                    elseif ($trimmedMsg -match "^fix:") { $autoIncrement = "patch"; $foundValid = $true }
+                    $increment = Get-ConventionalCommitIncrement $trimmedMsg
+                    if ($increment) { $autoIncrement = $increment; $foundValid = $true }
                 }
             }
         }

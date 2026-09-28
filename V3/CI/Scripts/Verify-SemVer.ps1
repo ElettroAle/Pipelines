@@ -1,3 +1,5 @@
+. "$PSScriptRoot/ConventionalCommit.ps1"
+
 $targetBranch = $env:TARGET_BRANCH -replace 'refs/heads/', ''
 
 $coreProtectedBranches = @('main', 'staging')
@@ -17,10 +19,10 @@ if ($protectedList -contains $targetBranch) {
     
     Write-Host "Last real commit identified: '$lastCommitMessage'"
 
-    if ($lastCommitMessage -match "^fix:|feat:|feat!:|BREAKING CHANGE:") {
+    if (Get-ConventionalCommitIncrement $lastCommitMessage) {
         Write-Host "##[section]Validation successful: Conventional Commit found."
     } else {
-        Write-Host "##[error]MISSING CONVENTIONAL COMMIT: Your last commit must start with 'fix:', 'feat:', or 'feat!:'"
+        Write-Host "##[error]MISSING CONVENTIONAL COMMIT: Your last commit must start with 'fix:', 'feat:' or 'BREAKING CHANGE:', optionally with a scope and '!' for breaking changes (e.g. 'fix(api):', 'feat(api)!:')"
         Write-Host "Current message: '$lastCommitMessage'"
         exit 1
     }

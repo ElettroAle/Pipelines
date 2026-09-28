@@ -313,6 +313,29 @@ Describe "Set-Versioning — REQUIRE_TAG=true, incremento SemVer" {
 }
 
 
+Describe "Set-Versioning — REQUIRE_TAG=true, Conventional Commits con scope e breaking" {
+
+    # Lo script prende il commit convenzionale piu' recente: il commit piu' vecchio
+    # fissa un incremento diverso, cosi' un titolo non riconosciuto cambia l'esito.
+    It "'<Newest>' dopo '<Older>' su tag 1.2.3 → <Expected>" -TestCases @(
+        @{ Older = "feat: precedente"; Newest = "fix(v2): address SonarCloud findings"; Expected = "1.2.4" }
+        @{ Older = "fix: precedente";  Newest = "feat(api): nuovo endpoint";           Expected = "1.3.0" }
+        @{ Older = "fix: precedente";  Newest = "feat(api)!: rimuove un campo";        Expected = "2.0.0" }
+        @{ Older = "feat: precedente"; Newest = "fix!: cambia il formato";             Expected = "2.0.0" }
+        @{ Older = "fix: precedente";  Newest = "BREAKING CHANGE: rimuove un campo";   Expected = "2.0.0" }
+        @{ Older = "feat: precedente"; Newest = "chore(deps): aggiorna pacchetti";     Expected = "1.3.0" }
+    ) {
+        param([string]$Older, [string]$Newest, [string]$Expected)
+        $tr = New-TestRepo -Commits @("chore: base", $Older, $Newest) -Tags @{ "1.2.3" = 0 }
+        $res = Invoke-SetVersioning -RepoDir $tr.Repo -RequireTag "true"
+        Remove-TestRepo $tr
+
+        $res.ExitCode | Should -Be 0
+        (Get-VsoVariable $res.Output "currentTag") | Should -Be $Expected
+    }
+}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # SUITE 3: REQUIRE_TAG=true — HEAD identico al tag (nessun incremento)
 # ─────────────────────────────────────────────────────────────────────────────
