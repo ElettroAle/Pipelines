@@ -15,3 +15,7 @@ fix(): scope vuoto
 docs: spiega come usare feat: nel titolo
 chore: rimuove fix: temporaneo
 refactor(core)!: breaking su un tipo che non incrementa
+Merged PR 1049: chore: aggiorna dipendenze
+Merged PR abc: fix: identificativo non numerico
+Merged PR 1049 fix: prefisso senza due punti
+Merged PR 1049: aggiornamento senza tipo
