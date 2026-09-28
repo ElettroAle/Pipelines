@@ -90,6 +90,7 @@ Invoke-Pester Tests/scripts/Verify-SemVer.Tests.ps1 -Output Detailed
 | `REQUIRE_TAG=true, incremento` | `fix:`→patch, `feat:`→minor, `feat!:`→major; nessun tag→parte da 0.0.0 |
 | `REQUIRE_TAG=true, HEAD=tag` | Nessun incremento se il tree è identico all'ultimo tag |
 | Scope e breaking | `fix(scope):`→patch, `feat(scope):`→minor, `feat(scope)!:`/`fix!:`/`BREAKING CHANGE:`→major, `chore(scope):` ignorato |
+| Incremento più alto | Tra i commit dall'ultimo tag vince il più alto: `feat:` poi `fix:` → minor, `feat!:` poi `fix:` → major |
 | Sanitizzazione PROJECT_NAME | Punti→trattini, lowercase |
 
 Ogni test crea un repository git reale con un **bare repo locale come fake remote** (`git init --bare`), così `git push origin <tag>` funziona senza rete.

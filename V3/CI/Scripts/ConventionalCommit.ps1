@@ -12,3 +12,17 @@ function Get-ConventionalCommitIncrement {
     if ($Matches['type'] -eq 'feat') { return 'minor' }
     return 'patch'
 }
+
+# La release contiene tutti i commit dall'ultimo tag: conta il piu' alto, non il piu'
+# recente. Senza commit convenzionali resta patch.
+function Get-HighestConventionalIncrement {
+    param([string[]]$Subjects)
+
+    $rank = @{ patch = 1; minor = 2; major = 3 }
+    $highest = 'patch'
+    foreach ($subject in $Subjects) {
+        $increment = Get-ConventionalCommitIncrement $subject.Trim()
+        if ($increment -and $rank[$increment] -gt $rank[$highest]) { $highest = $increment }
+    }
+    return $highest
+}

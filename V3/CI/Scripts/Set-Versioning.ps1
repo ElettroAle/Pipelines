@@ -47,20 +47,8 @@ if ($isRequireTag -eq "true") {
             $commitsRaw = git log "$lastTag..HEAD" --pretty=format:"%s"
         }
 
-        $autoIncrement = "patch"
-        if ($commitsRaw) {
-            $commitList = $commitsRaw -split "`n"
-            $foundValid = $false
-
-            Write-Host "--- Analyzing commit history (newest first) ---"
-            foreach ($msg in $commitList) {
-                $trimmedMsg = $msg.Trim()
-                if (-not $foundValid) {
-                    $increment = Get-ConventionalCommitIncrement $trimmedMsg
-                    if ($increment) { $autoIncrement = $increment; $foundValid = $true }
-                }
-            }
-        }
+        $autoIncrement = Get-HighestConventionalIncrement ($commitsRaw -split "`n")
+        Write-Host "Highest increment since last tag: $autoIncrement"
 
         $v = [version]($lastTag.TrimStart('v'))
         $major = $v.Major; $minor = $v.Minor; $patch = $v.Build
