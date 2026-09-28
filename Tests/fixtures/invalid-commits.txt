@@ -10,3 +10,8 @@ hotfix: patch critica produzione
 merge branch 'feature/xyz' into main
 WIP: lavori in corso
 Corregge bug nel calcolo SemVer
+chore(deps): aggiorna pacchetti
+fix(): scope vuoto
+docs: spiega come usare feat: nel titolo
+chore: rimuove fix: temporaneo
+refactor(core)!: breaking su un tipo che non incrementa

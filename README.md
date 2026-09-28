@@ -240,6 +240,7 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | Script | Scopo |
 |---|---|
 | `CI/Scripts/Verify-SemVer.ps1` | Verifica che l'ultimo commit rispetti Conventional Commits verso branch protetti |
+| `CI/Scripts/ConventionalCommit.ps1` | Riconoscimento condiviso dei titoli (`feat`/`fix`, scope opzionale, `!`, `BREAKING CHANGE:`) usato da `Verify-SemVer.ps1` e `Set-Versioning.ps1` |
 | `CI/Scripts/Set-Versioning.ps1` | Calcola la versione SemVer da commit history, crea il tag Git e setta le variabili ADO (`currentTag`, `gitHash`, `computedArtifactName`) |
 | `CI/Scripts/ScenarioCoverage.cs` | File-based app .NET 10: verifica che ogni scenario dei `.feature` sia stato eseguito e superato, leggendo i Cucumber Messages del runner BDD |
 

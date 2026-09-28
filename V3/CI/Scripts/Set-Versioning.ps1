@@ -4,6 +4,8 @@
 # Dipendenze: Variabili d'ambiente impostate da Azure DevOps
 # ====================================================================
 
+. "$PSScriptRoot/ConventionalCommit.ps1"
+
 $envName = $env:TARGET_ENV.ToLower()
 $isRequireTag = $env:REQUIRE_TAG
 $safeProjName = $env:PROJECT_NAME.ToLower() -replace '\.', '-'
@@ -45,21 +47,8 @@ if ($isRequireTag -eq "true") {
             $commitsRaw = git log "$lastTag..HEAD" --pretty=format:"%s"
         }
 
-        $autoIncrement = "patch"
-        if ($commitsRaw) {
-            $commitList = $commitsRaw -split "`n"
-            $foundValid = $false
-
-            Write-Host "--- Analyzing commit history (newest first) ---"
-            foreach ($msg in $commitList) {
-                $trimmedMsg = $msg.Trim()
-                if (-not $foundValid) {
-                    if ($trimmedMsg -match "^feat!:") { $autoIncrement = "major"; $foundValid = $true }
-                    elseif ($trimmedMsg -match "^feat:") { $autoIncrement = "minor"; $foundValid = $true }
-                    elseif ($trimmedMsg -match "^fix:") { $autoIncrement = "patch"; $foundValid = $true }
-                }
-            }
-        }
+        $autoIncrement = Get-HighestConventionalIncrement ($commitsRaw -split "`n")
+        Write-Host "Highest increment since last tag: $autoIncrement"
 
         $v = [version]($lastTag.TrimStart('v'))
         $major = $v.Major; $minor = $v.Minor; $patch = $v.Build

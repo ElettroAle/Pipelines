@@ -10,3 +10,8 @@ fix: corregge indentazione YAML in terraform-apply
 feat: aggiunge supporto .NET 12
 FEAT: nuova funzionalità (uppercase accettato)
 FIX: correzione urgente uppercase
+fix(v2): address SonarCloud findings on PR 1049
+feat(api): aggiunge endpoint di salute
+feat(api)!: rimuove il campo deprecato
+fix!: cambia il formato della risposta
+fix(scenario-coverage): step indipendente dalla shell

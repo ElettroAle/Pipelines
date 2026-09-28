@@ -313,6 +313,45 @@ Describe "Set-Versioning — REQUIRE_TAG=true, incremento SemVer" {
 }
 
 
+Describe "Set-Versioning — REQUIRE_TAG=true, Conventional Commits con scope e breaking" {
+
+    It "<Commits> su tag 1.2.3 → <Expected>" -TestCases @(
+        @{ Commits = @("fix(v2): address SonarCloud findings");              Expected = "1.2.4" }
+        @{ Commits = @("fix: precedente", "feat(api): nuovo endpoint");      Expected = "1.3.0" }
+        @{ Commits = @("fix: precedente", "feat(api)!: rimuove un campo");   Expected = "2.0.0" }
+        @{ Commits = @("feat: precedente", "fix!: cambia il formato");       Expected = "2.0.0" }
+        @{ Commits = @("fix: precedente", "BREAKING CHANGE: rimuove campo"); Expected = "2.0.0" }
+        @{ Commits = @("chore(deps): aggiorna", "docs(readme): spiega");     Expected = "1.2.4" }
+    ) {
+        param([string[]]$Commits, [string]$Expected)
+        $tr = New-TestRepo -Commits (@("chore: base") + $Commits) -Tags @{ "1.2.3" = 0 }
+        $res = Invoke-SetVersioning -RepoDir $tr.Repo -RequireTag "true"
+        Remove-TestRepo $tr
+
+        $res.ExitCode | Should -Be 0
+        (Get-VsoVariable $res.Output "currentTag") | Should -Be $Expected
+    }
+}
+
+Describe "Set-Versioning — REQUIRE_TAG=true, vince l'incremento piu' alto dall'ultimo tag" {
+
+    It "<Commits> su tag 1.2.3 → <Expected>" -TestCases @(
+        @{ Commits = @("feat: nuova feature", "fix: correzione successiva");          Expected = "1.3.0" }
+        @{ Commits = @("feat!: rompe il contratto", "fix: correzione successiva");     Expected = "2.0.0" }
+        @{ Commits = @("feat!: rompe il contratto", "feat: feature successiva");       Expected = "2.0.0" }
+        @{ Commits = @("fix: uno", "feat(api): due", "fix(v2): tre", "chore: quattro"); Expected = "1.3.0" }
+    ) {
+        param([string[]]$Commits, [string]$Expected)
+        $tr = New-TestRepo -Commits (@("chore: base") + $Commits) -Tags @{ "1.2.3" = 0 }
+        $res = Invoke-SetVersioning -RepoDir $tr.Repo -RequireTag "true"
+        Remove-TestRepo $tr
+
+        $res.ExitCode | Should -Be 0
+        (Get-VsoVariable $res.Output "currentTag") | Should -Be $Expected
+    }
+}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # SUITE 3: REQUIRE_TAG=true — HEAD identico al tag (nessun incremento)
 # ─────────────────────────────────────────────────────────────────────────────
