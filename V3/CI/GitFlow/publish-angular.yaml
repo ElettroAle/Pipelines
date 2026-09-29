@@ -38,6 +38,12 @@ parameters:
     type: string
     default: ''
 
+  # Alias della repository resource del wiki, necessario se il progetto limita il
+  # token ai repository referenziati dalla pipeline.
+  - name: releaseNotesWikiRepository
+    type: string
+    default: ''
+
   - name: pool
     type: object
     default:
@@ -86,6 +92,7 @@ stages:
       checkoutRepository: ${{ parameters.checkoutRepository }}
       pool: ${{ parameters.pool }}
       releaseNotesWikiPath: ${{ parameters.releaseNotesWikiPath }}
+      releaseNotesWikiRepository: ${{ parameters.releaseNotesWikiRepository }}
       buildSteps:
         - template: ../Common/Steps/angular-build.yaml
         - template: ../Common/Steps/angular-sonar.yaml

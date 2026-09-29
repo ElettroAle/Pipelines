@@ -26,6 +26,8 @@
 #   pool           → pool di Compile e PublishArtifact (default: hosted ubuntu-latest)
 #   releaseNotesWikiPath → pagina del wiki di progetto in cui anteporre le release
 #                          notes delle run su main (default: '' → nessuna pagina)
+#   releaseNotesWikiRepository → alias della repository resource del wiki dichiarata dal
+#                          caller (default: '' → nessuna)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -54,6 +56,10 @@ parameters:
     type: string
     default: ''
 
+  - name: releaseNotesWikiRepository
+    type: string
+    default: ''
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 stages:
@@ -78,6 +84,12 @@ stages:
         displayName: 'Release Promotion'
         pool: ${{ parameters.pool }}
         environment: '$(targetEnvironment)'
+        # Con "Protect access to repositories in YAML pipelines" il System.AccessToken
+        # vale solo per i repository referenziati: il wiki va dichiarato per scriverlo.
+        ${{ if ne(parameters.releaseNotesWikiRepository, '') }}:
+          uses:
+            repositories:
+              - ${{ parameters.releaseNotesWikiRepository }}
         strategy:
           runOnce:
             deploy:
