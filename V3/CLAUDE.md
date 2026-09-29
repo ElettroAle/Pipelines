@@ -152,7 +152,7 @@ I test usano un **bare repo locale** come fake remote. L'unico accesso di rete Ã
 | Qualsiasi file in `V3/` | Livello 1 |
 | `CI/Scripts/Set-Versioning.ps1` | Livello 1 + Livello 2 (`Set-Versioning.Tests.ps1`) |
 | `CI/Scripts/Verify-SemVer.ps1` | Livello 1 + Livello 2 (`Verify-SemVer.Tests.ps1`) |
-| `CI/Scripts/cliff.toml`, `CI/Scripts/GitCliff.ps1` | Livello 1 + Livello 2 (`Verify-SemVer.Tests.ps1` + `Set-Versioning.Tests.ps1` + `New-ReleaseNotes.Tests.ps1`) |
+| `CI/Scripts/cliff.toml`, `CI/Scripts/GitCliff.ps1` | Livello 1 + Livello 2 (`GitCliff.Tests.ps1` + `Verify-SemVer.Tests.ps1` + `Set-Versioning.Tests.ps1` + `New-ReleaseNotes.Tests.ps1`) |
 | `CI/Scripts/New-ReleaseNotes.ps1` | Livello 1 + Livello 2 (`New-ReleaseNotes.Tests.ps1`) |
 | `CI/Scripts/ScenarioCoverage.cs` | Livello 1 + Livello 2 (`ScenarioCoverage.Tests.ps1`, richiede .NET SDK 10) |
 
