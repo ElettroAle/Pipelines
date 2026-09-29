@@ -121,6 +121,7 @@ nessun loader dinamico `ld-linux`. La cache è separata per archivio.
 |---|---|
 | Contenuto | Gruppi per tipo con scope e PR, messaggi liberi in "Altre modifiche", range dal tag del primo parent con salto dei merge, link alla PR per remote ADO e GitHub |
 | Pubblicazione | Upload nel summary, wiki non toccato fuori da main, errore di generazione che non ferma il publish |
+| Note di rilascio del repository AI | Su un wiki locale finto: la prima publish crea la sezione della versione, la seconda publish della stessa versione (Engine e Worker) non la duplica |
 
 #### `ScenarioCoverage.Tests.ps1` (14 suite, 25 test)
 
