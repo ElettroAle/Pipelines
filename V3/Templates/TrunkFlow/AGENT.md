@@ -114,9 +114,9 @@ extends:
           targetEnvironment: 'Staging'
           versionArgs: >-
             /p:Version=$(currentTag)
-            /p:AssemblyVersion=$(currentTag)
-            /p:FileVersion=$(currentTag)
-            /p:InformationalVersion="$(currentTag)-$(gitHash)"
+            /p:AssemblyVersion=$(assemblyVersion)
+            /p:FileVersion=$(assemblyVersion)
+            /p:InformationalVersion="$(currentTag)+$(gitHash)"
 
     # Staging: il binario è appena prodotto — si legge da ArtifactStagingDirectory
     stagingDeploySteps:

@@ -4,6 +4,7 @@
 #
 # Rispetto alla versione agnostica (CI/Modules/publish.yaml), aggiunge:
 #   - Set-Versioning: calcolo SemVer da commit history e tagging Git
+#   - Release notes (git-cliff) nel summary della run e, su main, nel wiki
 #   - Branch-conditional logic (requireTag, targetEnvironment) gestita dai caller
 #   - Il nome dell'artifact è calcolato dallo script (computedArtifactName)
 #
@@ -23,6 +24,8 @@
 #   publishSteps   → stepList iniettata nel job PublishArtifact dopo Set-Versioning
 #   checkoutRepository → repository da fare checkout [REQUIRED]
 #   pool           → pool di Compile e PublishArtifact (default: hosted ubuntu-latest)
+#   releaseNotesWikiPath → pagina del wiki di progetto in cui anteporre le release
+#                          notes delle run su main (default: '' → nessuna pagina)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -46,6 +49,10 @@ parameters:
     type: object
     default:
       vmImage: 'ubuntu-latest'
+
+  - name: releaseNotesWikiPath
+    type: string
+    default: ''
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -94,6 +101,18 @@ stages:
                     REQUIRE_TAG: $(requireTag)
                     BUILD_ID: $(Build.BuildId)
                     PROJECT_NAME: ${{ parameters.projectName }}
+
+                - task: PowerShell@2
+                  displayName: 'Release Notes'
+                  condition: and(succeeded(), eq(variables['requireTag'], 'true'))
+                  inputs:
+                    filePath: '$(Build.SourcesDirectory)/infrastructure/V3/CI/Scripts/New-ReleaseNotes.ps1'
+                    workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
+                  env:
+                    RELEASE_TAG: $(currentTag)
+                    OUTPUT_DIR: $(Agent.TempDirectory)/release-notes
+                    WIKI_PAGE_PATH: ${{ parameters.releaseNotesWikiPath }}
+                    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
                 - ${{ parameters.publishSteps }}
 

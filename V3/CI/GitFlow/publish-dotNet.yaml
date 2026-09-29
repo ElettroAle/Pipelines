@@ -4,6 +4,7 @@
 #
 # Rispetto alla versione agnostica (CI/Agnostic/publish-dotNet.yaml), aggiunge:
 #   - Set-Versioning: calcolo SemVer da commit e tagging Git
+#   - Release notes (git-cliff) nel summary della run e, su main, nel wiki
 #   - Branch-conditional variable groups (dev/staging/main/feature)
 #   - Versione applicata alla build DotNet (/p:Version, /p:AssemblyVersion, ecc.)
 #
@@ -61,6 +62,11 @@ parameters:
     type: string
     default: '**/*.UnitTest*.csproj'
 
+  # Pagina del wiki di progetto in cui anteporre le release notes delle run su main.
+  - name: releaseNotesWikiPath
+    type: string
+    default: ''
+
   - name: pool
     type: object
     default:
@@ -95,6 +101,7 @@ stages:
       projectName: ${{ parameters.projectName }}
       checkoutRepository: ${{ parameters.checkoutRepository }}
       pool: ${{ parameters.pool }}
+      releaseNotesWikiPath: ${{ parameters.releaseNotesWikiPath }}
       buildSteps:
         - template: ../Common/Steps/dotnet-sonar-prepare.yaml
           parameters:
@@ -130,6 +137,6 @@ stages:
             outputDirectory: '$(Build.ArtifactStagingDirectory)/publish'
             targetRuntime: '${{ parameters.targetRuntime }}'
             selfContained: '${{ parameters.selfContained }}'
-            versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(currentTag) /p:FileVersion=$(currentTag) /p:InformationalVersion="$(currentTag)-$(gitHash)"'
+            versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(assemblyVersion) /p:FileVersion=$(assemblyVersion) /p:InformationalVersion="$(currentTag)+$(gitHash)"'
             variableSubstitution: ${{ parameters.variableSubstitution }}
             substitutionFolder: '${{ parameters.substitutionFolder }}'

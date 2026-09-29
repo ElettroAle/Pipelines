@@ -205,7 +205,7 @@ La libreria include una suite di test a 2 livelli che gira su GitHub Actions sen
 | Livello | Tool | Cosa verifica |
 |---|---|---|
 | 1 — Static Analysis | Python (`yamllint`, script custom) | Sintassi YAML, riferimenti a template esistenti, contratti parametri |
-| 2 — Script Unit Tests | PowerShell Pester 5 | Logica di `Set-Versioning.ps1`, `Verify-SemVer.ps1` e `ScenarioCoverage.cs` |
+| 2 — Script Unit Tests | PowerShell Pester 5 | Logica di `Set-Versioning.ps1`, `Verify-SemVer.ps1`, `New-ReleaseNotes.ps1` e `ScenarioCoverage.cs` |
 
 ### Esecuzione locale
 
@@ -239,9 +239,11 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 
 | Script | Scopo |
 |---|---|
-| `CI/Scripts/Verify-SemVer.ps1` | Verifica che l'ultimo commit rispetti Conventional Commits verso branch protetti |
-| `CI/Scripts/ConventionalCommit.ps1` | Riconoscimento condiviso dei titoli (`feat`/`fix`, scope opzionale, `!`, `BREAKING CHANGE:`, prefisso ADO `Merged PR <id>: `) usato da `Verify-SemVer.ps1` e `Set-Versioning.ps1` |
-| `CI/Scripts/Set-Versioning.ps1` | Calcola la versione SemVer da commit history, crea il tag Git e setta le variabili ADO (`currentTag`, `gitHash`, `computedArtifactName`) |
+| `CI/Scripts/cliff.toml` | Unica sorgente delle regole Conventional Commits: tipi ammessi, gruppi delle release notes, prefisso ADO `Merged PR <id>: `, regole di bump |
+| `CI/Scripts/GitCliff.ps1` | Scarica git-cliff (versione fissata, SHA-256 verificato) e lo espone a `Set-Versioning.ps1`, `Verify-SemVer.ps1` e `New-ReleaseNotes.ps1` |
+| `CI/Scripts/Verify-SemVer.ps1` | Gate sul titolo della PR (o sull'ultimo commit non-merge) verso i branch configurati, modalità `off`/`warn`/`enforce` |
+| `CI/Scripts/Set-Versioning.ps1` | Calcola la versione con `git cliff --bumped-version`: tag Git su staging/main, prerelease `x.y.z-dev.<BuildId>` senza tag altrove; setta `currentTag`, `assemblyVersion`, `gitHash`, `computedArtifactName` |
+| `CI/Scripts/New-ReleaseNotes.ps1` | Release notes dal tag del rilascio precedente sullo stesso ramo: summary della run e, su main, pagina wiki |
 | `CI/Scripts/ScenarioCoverage.cs` | File-based app .NET 10: verifica che ogni scenario dei `.feature` sia stato eseguito e superato, leggendo i Cucumber Messages del runner BDD |
 
 ---

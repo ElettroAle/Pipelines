@@ -4,11 +4,12 @@
 # Dipendenze: Variabili d'ambiente impostate da Azure DevOps
 # ====================================================================
 
-. "$PSScriptRoot/ConventionalCommit.ps1"
+. "$PSScriptRoot/GitCliff.ps1"
 
 $envName = $env:TARGET_ENV.ToLower()
 $isRequireTag = $env:REQUIRE_TAG
 $safeProjName = $env:PROJECT_NAME.ToLower() -replace '\.', '-'
+$prereleaseLabel = if ($env:PRERELEASE_LABEL) { $env:PRERELEASE_LABEL } else { 'dev' }
 
 $shortSha = git rev-parse --short HEAD
 if ($LASTEXITCODE -ne 0) { $shortSha = "unknown" }
@@ -34,56 +35,37 @@ if ($isRequireTag -eq "true") {
         $global:LASTEXITCODE = 0
     }
     else {
-        $global:LASTEXITCODE = 0 
+        $global:LASTEXITCODE = 0
 
-        $lastTag = git describe --tags --abbrev=0 2>$null
-        if ($LASTEXITCODE -eq 128) { 
-            $lastTag = "0.0.0"
-            $global:LASTEXITCODE = 0 
-            Write-Host "No tags found. Analyzing full history."
-            $commitsRaw = git log --pretty=format:"%s"
-        } else {
-            Write-Host "Last tag found: $lastTag. Analyzing commits since then."
-            $commitsRaw = git log "$lastTag..HEAD" --pretty=format:"%s"
-        }
-
-        $autoIncrement = Get-HighestConventionalIncrement ($commitsRaw -split "`n")
-        Write-Host "Highest increment since last tag: $autoIncrement"
-
-        $v = [version]($lastTag.TrimStart('v'))
-        $major = $v.Major; $minor = $v.Minor; $patch = $v.Build
-
-        if ($autoIncrement -eq "major") { $major++; $minor = 0; $patch = 0 }
-        elseif ($autoIncrement -eq "minor") { $minor++; $patch = 0 }
-        else { $patch++ }
-
-        $newTag = "$major.$minor.$patch"
+        $newTag = Get-NextReleaseVersion
+        Write-Host "Next release version from git-cliff: $newTag"
 
         git tag $newTag
         git push origin $newTag
         Write-Host "##[section]Successfully tagged: $newTag"
     }
-
-    Write-Host "##vso[task.setvariable variable=currentTag]$newTag"
-    Write-Host "##vso[task.setvariable variable=gitHash]$shortSha"
-    Write-Host "##vso[task.setvariable variable=computedArtifactName]$safeProjName-$envName-$newTag"
 }
 else {
-    Write-Host "##[warning]Tagging is DISABLED - versione calcolata da ultimo tag git"
+    Write-Host "##[warning]Tagging is DISABLED - prerelease della prossima versione, nessun tag"
 
+    $nextRelease = Get-NextReleaseVersion
     $lastTag = git describe --tags --abbrev=0 2>$null
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($lastTag)) {
-        $baseVer = "0.0.0"
-        Write-Host "Nessun tag trovato. Versione base: $baseVer"
-    } else {
-        $baseVer = $lastTag.TrimStart('v')
-        Write-Host "Ultimo tag trovato: $lastTag. Versione base: $baseVer"
-    }
     $global:LASTEXITCODE = 0
+    # Senza commit dall'ultimo tag git-cliff restituisce il tag stesso: un prerelease
+    # di quella versione ordinerebbe prima del rilascio gia' uscito.
+    if ($lastTag -and $nextRelease -eq $lastTag.TrimStart('v')) {
+        $v = [version]$nextRelease
+        $nextRelease = "$($v.Major).$($v.Minor).$($v.Build + 1)"
+    }
 
-    $ver = "$baseVer.$($env:BUILD_ID)"
-
-    Write-Host "##vso[task.setvariable variable=currentTag]$ver"
-    Write-Host "##vso[task.setvariable variable=gitHash]$shortSha"
-    Write-Host "##vso[task.setvariable variable=computedArtifactName]$safeProjName-$envName-$ver"
+    $newTag = "$nextRelease-$prereleaseLabel.$($env:BUILD_ID)"
+    Write-Host "Prerelease version: $newTag"
 }
+
+# AssemblyVersion e FileVersion accettano solo quattro numeri <= 65535: il prerelease
+# e il build id restano in Version e InformationalVersion.
+$releaseCore = [version](($newTag -replace '-.*$', '').TrimStart('v'))
+Write-Host "##vso[task.setvariable variable=currentTag]$newTag"
+Write-Host "##vso[task.setvariable variable=assemblyVersion]$($releaseCore.Major).$($releaseCore.Minor).$($releaseCore.Build).0"
+Write-Host "##vso[task.setvariable variable=gitHash]$shortSha"
+Write-Host "##vso[task.setvariable variable=computedArtifactName]$safeProjName-$envName-$newTag"
