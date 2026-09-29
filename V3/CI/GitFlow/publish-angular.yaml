@@ -4,6 +4,7 @@
 #
 # Rispetto alla versione agnostica (CI/Agnostic/publish-angular.yaml), aggiunge:
 #   - Set-Versioning: calcolo SemVer da commit e tagging Git
+#   - Release notes (git-cliff) nel summary della run e, su main, nel wiki
 #   - Branch-conditional variable groups (dev/staging/main/feature)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -29,6 +30,17 @@ parameters:
     default: ''
 
   - name: sonarProjectKey
+    type: string
+    default: ''
+
+  # Pagina del wiki di progetto in cui anteporre le release notes delle run su main.
+  - name: releaseNotesWikiPath
+    type: string
+    default: ''
+
+  # Alias della repository resource del wiki, necessario se il progetto limita il
+  # token ai repository referenziati dalla pipeline.
+  - name: releaseNotesWikiRepository
     type: string
     default: ''
 
@@ -79,6 +91,8 @@ stages:
       projectName: ${{ parameters.projectName }}
       checkoutRepository: ${{ parameters.checkoutRepository }}
       pool: ${{ parameters.pool }}
+      releaseNotesWikiPath: ${{ parameters.releaseNotesWikiPath }}
+      releaseNotesWikiRepository: ${{ parameters.releaseNotesWikiRepository }}
       buildSteps:
         - template: ../Common/Steps/angular-build.yaml
         - template: ../Common/Steps/angular-sonar.yaml
@@ -92,3 +106,5 @@ stages:
         - template: ../Common/Steps/angular-publish.yaml
           parameters:
             projectName: ${{ parameters.projectName }}
+            version: '$(currentTag)'
+            commit: '$(gitHash)'

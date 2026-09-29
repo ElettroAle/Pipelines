@@ -3,8 +3,8 @@
 # Template riusabile per la Quality gate con governance GitFlow.
 #
 # Rispetto alla versione agnostica (CI/Common/quality.yaml), aggiunge:
-#   - Job ValidatePRTitle: verifica Conventional Commits / SemVer sulle PR
-#     verso branch protetti (main, staging + eventuali additional)
+#   - Job ValidatePRTitle: verifica con git-cliff che il titolo della PR rispetti
+#     i Conventional Commits, sulle PR verso i branch di titleGateBranches
 #
 # I passi tech-specific (build, test, coverage) vengono iniettati
 # tramite il parametro `buildAndTestSteps`.
@@ -18,6 +18,8 @@
 #   checkoutPipelineTemplates → checkout del repo 'infrastructure' nel job BuildAndTest (default: false)
 #   timeoutInMinutes   → timeout del job BuildAndTest (default: 30)
 #   workspaceClean     → pulizia workspace prima del job (default: 'none', nessuna)
+#   titleGateMode      → off | warn | enforce (default: warn)
+#   titleGateBranches  → branch target, separati da virgola, su cui gira il gate (default: dev)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -55,6 +57,17 @@ parameters:
     type: boolean
     default: false
 
+  # Gate sul titolo della PR, che con lo squash diventa il messaggio del commit.
+  # 'warn' segnala senza bloccare il merge, 'enforce' fa fallire la build validation.
+  - name: titleGateMode
+    type: string
+    default: 'warn'
+    values: ['off', 'warn', 'enforce']
+
+  - name: titleGateBranches
+    type: string
+    default: 'dev'
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 stages:
@@ -67,7 +80,7 @@ stages:
       - job: ValidatePRTitle
         displayName: 'Validate SemVer Title'
         pool: ${{ parameters.pool }}
-        condition: and(not(canceled()), eq(variables['Build.Reason'], 'PullRequest'))
+        condition: and(not(canceled()), eq(variables['Build.Reason'], 'PullRequest'), ne('${{ parameters.titleGateMode }}', 'off'))
         steps:
           - checkout: ${{ parameters.checkoutRepository }}
             path: s/${{ parameters.projectName }}
@@ -77,13 +90,17 @@ stages:
             path: s/infrastructure
 
           - task: PowerShell@2
-            displayName: 'Verify SemVer in PR Commits'
+            displayName: 'Verify Conventional PR Title'
             inputs:
               filePath: '$(Build.SourcesDirectory)/infrastructure/V3/CI/Scripts/Verify-SemVer.ps1'
               workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
             env:
               TARGET_BRANCH: $(System.PullRequest.TargetBranch)
+              GATED_BRANCHES: ${{ parameters.titleGateBranches }}
               ADDITIONAL_TAG_BRANCHES: $(additionalRequiredTaggingBranches)
+              GATE_MODE: ${{ parameters.titleGateMode }}
+              PR_ID: $(System.PullRequest.PullRequestId)
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
       - template: ../../Common/Jobs/quality-build-and-test.yaml
         parameters:
@@ -95,4 +112,4 @@ stages:
           workspaceClean: ${{ parameters.workspaceClean }}
           checkoutPipelineTemplates: ${{ parameters.checkoutPipelineTemplates }}
           dependsOn: [ValidatePRTitle]
-          condition: and(not(canceled()), in(dependencies.ValidatePRTitle.result, 'Succeeded', 'Skipped'))
+          condition: and(not(canceled()), in(dependencies.ValidatePRTitle.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))

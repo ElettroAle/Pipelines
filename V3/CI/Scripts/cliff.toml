@@ -1,0 +1,48 @@
+# Unica sorgente delle regole Conventional Commits: da qui derivano il bump della
+# versione (Set-Versioning.ps1), il gate sul titolo (Verify-SemVer.ps1) e le release
+# notes (New-ReleaseNotes.ps1). Il gate respinge i commit che cadono nel gruppo
+# finale "Altre modifiche": il suo nome e' ripetuto in GitCliff.ps1.
+
+[changelog]
+header = ""
+body = """
+## {{ version | default(value="Unreleased") | trim_start_matches(pat="v") }}{% if timestamp %} — {{ timestamp | date(format="%Y-%m-%d") }}{% endif %}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim }}
+{% for commit in commits %}
+- {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.message | split(pat="\n") | first | trim }}
+{%- endfor %}
+{% endfor %}
+
+"""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+split_commits = false
+# 'Merged PR <id>: ' e' il messaggio di default di Azure DevOps al completamento di
+# una PR, anche in squash: si sposta in coda per non nascondere il tipo.
+# 'BREAKING CHANGE:' come titolo non e' Conventional (lo e' solo come footer), ma e'
+# stato accettato come major finora: lo si riconduce a 'feat!:'.
+commit_preprocessors = [
+  { pattern = '^Merged PR (\d+): (.*)', replace = "${2} (PR ${1})" },
+  { pattern = '^BREAKING CHANGE: (.*)', replace = "feat!: ${1}" },
+]
+commit_parsers = [
+  { field = "merge_commit", pattern = "true", skip = true },
+  { field = "breaking", pattern = "true", group = "<!-- 0 -->Breaking" },
+  { message = '(?i)^feat(\(.+\))?:', group = "<!-- 1 -->Feature" },
+  { message = '(?i)^fix(\(.+\))?:', group = "<!-- 2 -->Fix" },
+  { message = '(?i)^(chore|docs|refactor|perf|test|ci|build|style|revert)(\(.+\))?:', group = "<!-- 3 -->Manutenzione" },
+  { message = ".*", group = "<!-- 9 -->Altre modifiche" },
+]
+filter_commits = false
+tag_pattern = '^v?[0-9]+\.[0-9]+\.[0-9]+$'
+topo_order = false
+sort_commits = "newest"
+
+[bump]
+features_always_bump_minor = true
+breaking_always_bump_major = true
+initial_tag = "0.1.0"

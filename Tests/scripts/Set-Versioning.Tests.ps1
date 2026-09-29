@@ -79,7 +79,8 @@ BeforeAll {
             [string]$TargetEnv    = "Development",
             [string]$RequireTag   = "false",
             [string]$ProjectName  = "MyApp",
-            [string]$BuildId      = "99"
+            [string]$BuildId      = "99",
+            [string]$PrereleaseLabel = ""
         )
 
         Push-Location $RepoDir
@@ -88,6 +89,7 @@ BeforeAll {
             $env:REQUIRE_TAG  = $RequireTag
             $env:PROJECT_NAME = $ProjectName
             $env:BUILD_ID     = $BuildId
+            $env:PRERELEASE_LABEL = $PrereleaseLabel
 
             $output = & pwsh -NoProfile -NonInteractive -File $ScriptPath 2>&1
             $exitCode = $LASTEXITCODE
@@ -97,7 +99,7 @@ BeforeAll {
         }
         finally {
             Pop-Location
-            $env:TARGET_ENV = $env:REQUIRE_TAG = $env:PROJECT_NAME = $env:BUILD_ID = $null
+            $env:TARGET_ENV = $env:REQUIRE_TAG = $env:PROJECT_NAME = $env:BUILD_ID = $env:PRERELEASE_LABEL = $null
         }
     }
 
@@ -128,18 +130,18 @@ BeforeAll {
 # SUITE 1: REQUIRE_TAG=false
 # ─────────────────────────────────────────────────────────────────────────────
 
-Describe "Set-Versioning — REQUIRE_TAG=false" {
+Describe "Set-Versioning — REQUIRE_TAG=false, prerelease senza tag" {
 
-    It "Nessun tag: currentTag = 0.0.0.{BuildId}" {
+    It "Nessun tag: prerelease della versione iniziale 0.1.0" {
         $tr = New-TestRepo -Commits @("feat: primo commit")
         $res = Invoke-SetVersioning -RepoDir $tr.Repo -RequireTag "false" -BuildId "42"
         Remove-TestRepo $tr
 
         $res.ExitCode | Should -Be 0
-        (Get-VsoVariable $res.Output "currentTag") | Should -Be "0.0.0.42"
+        (Get-VsoVariable $res.Output "currentTag") | Should -Be "0.1.0-dev.42"
     }
 
-    It "Tag esistente 1.2.3: currentTag = 1.2.3.{BuildId}" {
+    It "Tag 1.2.3 + 'fix:': prerelease della prossima patch 1.2.4-dev.{BuildId}" {
         $tr = New-TestRepo `
             -Commits @("feat: primo", "fix: secondo") `
             -Tags @{ "1.2.3" = 0 }
@@ -147,10 +149,20 @@ Describe "Set-Versioning — REQUIRE_TAG=false" {
         Remove-TestRepo $tr
 
         $res.ExitCode | Should -Be 0
-        (Get-VsoVariable $res.Output "currentTag") | Should -Be "1.2.3.7"
+        (Get-VsoVariable $res.Output "currentTag") | Should -Be "1.2.4-dev.7"
     }
 
-    It "Tag con prefisso 'v': v2.0.1 → currentTag = 2.0.1.{BuildId}" {
+    It "Tag 1.2.3 + 'feat:': prerelease della prossima minor 1.3.0-dev.{BuildId}" {
+        $tr = New-TestRepo `
+            -Commits @("fix: primo", "feat: secondo") `
+            -Tags @{ "1.2.3" = 0 }
+        $res = Invoke-SetVersioning -RepoDir $tr.Repo -RequireTag "false" -BuildId "3"
+        Remove-TestRepo $tr
+
+        (Get-VsoVariable $res.Output "currentTag") | Should -Be "1.3.0-dev.3"
+    }
+
+    It "HEAD sul tag v2.0.1, nessun commit nuovo: prerelease della patch successiva 2.0.2" {
         $tr = New-TestRepo `
             -Commits @("feat: commit") `
             -Tags @{ "v2.0.1" = 0 }
@@ -158,7 +170,37 @@ Describe "Set-Versioning — REQUIRE_TAG=false" {
         Remove-TestRepo $tr
 
         $res.ExitCode | Should -Be 0
-        (Get-VsoVariable $res.Output "currentTag") | Should -Be "2.0.1.5"
+        (Get-VsoVariable $res.Output "currentTag") | Should -Be "2.0.2-dev.5"
+    }
+
+    It "PRERELEASE_LABEL sostituisce l'etichetta di default 'dev'" {
+        $tr = New-TestRepo -Commits @("feat: primo", "fix: secondo") -Tags @{ "1.0.0" = 0 }
+        $res = Invoke-SetVersioning -RepoDir $tr.Repo -RequireTag "false" -BuildId "8" -PrereleaseLabel "ci"
+        Remove-TestRepo $tr
+
+        (Get-VsoVariable $res.Output "currentTag") | Should -Be "1.0.1-ci.8"
+    }
+
+    It "Nessun tag creato ne' pushato" {
+        $tr = New-TestRepo -Commits @("feat: primo", "fix: secondo") -Tags @{ "1.0.0" = 0 }
+        $res = Invoke-SetVersioning -RepoDir $tr.Repo -RequireTag "false"
+        Push-Location $tr.Repo
+        $localTags = @(git tag)
+        $remoteTags = @(git ls-remote --tags origin)
+        Pop-Location
+        Remove-TestRepo $tr
+
+        $res.ExitCode | Should -Be 0
+        $localTags.Count | Should -Be 1
+        $remoteTags.Count | Should -Be 1
+    }
+
+    It "assemblyVersion e' numerico: x.y.z.0 senza prerelease" {
+        $tr = New-TestRepo -Commits @("fix: primo", "feat: secondo") -Tags @{ "1.2.3" = 0 }
+        $res = Invoke-SetVersioning -RepoDir $tr.Repo -RequireTag "false" -BuildId "4741"
+        Remove-TestRepo $tr
+
+        (Get-VsoVariable $res.Output "assemblyVersion") | Should -Be "1.3.0.0"
     }
 
     It "computedArtifactName = {projectName-sanitizzato}-{env}-{version}" {
@@ -167,7 +209,7 @@ Describe "Set-Versioning — REQUIRE_TAG=false" {
             -ProjectName "My.App" -TargetEnv "Development" -BuildId "10"
         Remove-TestRepo $tr
 
-        (Get-VsoVariable $res.Output "computedArtifactName") | Should -Be "my-app-development-0.0.0.10"
+        (Get-VsoVariable $res.Output "computedArtifactName") | Should -Be "my-app-development-0.1.0-dev.10"
     }
 
     It "gitHash è valorizzato (short SHA, almeno 7 caratteri alfanumerici)" {
@@ -236,31 +278,18 @@ Describe "Set-Versioning — REQUIRE_TAG=true, incremento SemVer" {
         (Get-VsoVariable $res.Output "currentTag") | Should -Be "2.0.0"
     }
 
-    It "Nessun tag precedente: parte da 0.0.0, 'feat:' → 0.1.0" {
-        $tr = New-TestRepo -Commits @("feat: primo commit")
+    It "Nessun tag precedente: la prima release e' 0.1.0 (initial_tag di cliff.toml), '<Commit>'" -TestCases @(
+        @{ Commit = "feat: primo commit" }
+        @{ Commit = "fix: primo bugfix" }
+        @{ Commit = "feat!: breaking iniziale" }
+    ) {
+        param([string]$Commit)
+        $tr = New-TestRepo -Commits @($Commit)
         $res = Invoke-SetVersioning -RepoDir $tr.Repo -RequireTag "true"
         Remove-TestRepo $tr
 
         $res.ExitCode | Should -Be 0
         (Get-VsoVariable $res.Output "currentTag") | Should -Be "0.1.0"
-    }
-
-    It "Nessun tag precedente: 'fix:' → 0.0.1" {
-        $tr = New-TestRepo -Commits @("fix: primo bugfix")
-        $res = Invoke-SetVersioning -RepoDir $tr.Repo -RequireTag "true"
-        Remove-TestRepo $tr
-
-        $res.ExitCode | Should -Be 0
-        (Get-VsoVariable $res.Output "currentTag") | Should -Be "0.0.1"
-    }
-
-    It "Nessun tag precedente: 'feat!:' → 1.0.0" {
-        $tr = New-TestRepo -Commits @("feat!: breaking iniziale")
-        $res = Invoke-SetVersioning -RepoDir $tr.Repo -RequireTag "true"
-        Remove-TestRepo $tr
-
-        $res.ExitCode | Should -Be 0
-        (Get-VsoVariable $res.Output "currentTag") | Should -Be "1.0.0"
     }
 
     It "minor bump azzera la patch: 1.2.9 + 'feat:' → 1.3.0 (non 1.3.9)" {
@@ -322,6 +351,7 @@ Describe "Set-Versioning — REQUIRE_TAG=true, Conventional Commits con scope e 
         @{ Commits = @("feat: precedente", "fix!: cambia il formato");       Expected = "2.0.0" }
         @{ Commits = @("fix: precedente", "BREAKING CHANGE: rimuove campo"); Expected = "2.0.0" }
         @{ Commits = @("chore(deps): aggiorna", "docs(readme): spiega");     Expected = "1.2.4" }
+        @{ Commits = @("aggiornamento senza tipo", "Merged PR 9: altro");    Expected = "1.2.4" }
     ) {
         param([string[]]$Commits, [string]$Expected)
         $tr = New-TestRepo -Commits (@("chore: base") + $Commits) -Tags @{ "1.2.3" = 0 }
@@ -395,6 +425,7 @@ Describe "Set-Versioning — REQUIRE_TAG=true, HEAD uguale all'ultimo tag" {
 
         $res.ExitCode | Should -Be 0
         (Get-VsoVariable $res.Output "currentTag") | Should -Be "2.3.4"
+        (Get-VsoVariable $res.Output "assemblyVersion") | Should -Be "2.3.4.0"
         # Deve esserci esattamente un tag nel remote (quello originale, non un nuovo)
         ($remoteTags | Select-String "refs/tags").Count | Should -Be 1
     }

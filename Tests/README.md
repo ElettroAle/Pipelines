@@ -17,6 +17,7 @@ Tests/
 ├── scripts/                    # Livello 2: unit test PowerShell (Pester)
 │   ├── Set-Versioning.Tests.ps1
 │   ├── Verify-SemVer.Tests.ps1
+│   ├── New-ReleaseNotes.Tests.ps1
 │   └── ScenarioCoverage.Tests.ps1
 ├── fixtures/
 │   ├── valid-commits.txt       # Messaggi commit validi — usati da Verify-SemVer.Tests
@@ -86,23 +87,32 @@ Invoke-Pester Tests/scripts/Verify-SemVer.Tests.ps1 -Output Detailed
 
 | Suite | Scenario testato |
 |---|---|
-| `REQUIRE_TAG=false` | Versione `{lastTag}.{BuildId}`, fallback a `0.0.0.{BuildId}` |
-| `REQUIRE_TAG=true, incremento` | `fix:`→patch, `feat:`→minor, `feat!:`→major; nessun tag→parte da 0.0.0 |
+| `REQUIRE_TAG=false` | Prerelease `{prossima versione}-dev.{BuildId}` senza tag, `PRERELEASE_LABEL`, patch successiva se HEAD è sul tag, `assemblyVersion` numerico |
+| `REQUIRE_TAG=true, incremento` | `fix:`→patch, `feat:`→minor, `feat!:`→major; nessun tag→prima release `0.1.0` (`initial_tag`) |
 | `REQUIRE_TAG=true, HEAD=tag` | Nessun incremento se il tree è identico all'ultimo tag |
-| Scope e breaking | `fix(scope):`→patch, `feat(scope):`→minor, `feat(scope)!:`/`fix!:`/`BREAKING CHANGE:`→major, `chore(scope):` ignorato |
+| Scope e breaking | `fix(scope):`→patch, `feat(scope):`→minor, `feat(scope)!:`/`fix!:`/`BREAKING CHANGE:`→major, `chore(scope):` e messaggi liberi→patch |
 | Incremento più alto | Tra i commit dall'ultimo tag vince il più alto: `feat:` poi `fix:` → minor, `feat!:` poi `fix:` → major |
 | Prefisso ADO | `Merged PR <id>: <titolo convenzionale>` (messaggio di default di Azure DevOps, anche in squash) riconosciuto come il titolo senza prefisso |
 | Sanitizzazione PROJECT_NAME | Punti→trattini, lowercase |
 
 Ogni test crea un repository git reale con un **bare repo locale come fake remote** (`git init --bare`), così `git push origin <tag>` funziona senza rete.
 
-#### `Verify-SemVer.Tests.ps1` (3 suite, ~15 test)
+#### `Verify-SemVer.Tests.ps1`
 
 | Suite | Scenario testato |
 |---|---|
-| Branch protetti (main, staging) | Commit validi/invalidi; merge commit (usa `--no-merges`) |
+| Branch protetti (main, staging) | Tipi ammessi da `cliff.toml` accettati, tipi ignoti e messaggi liberi rifiutati; merge commit (usa `--no-merges`) |
 | Branch non protetti | Check skippato su `dev`, `feature/x`, ecc. |
 | `ADDITIONAL_TAG_BRANCHES` | Branch extra protetti via env var |
+| Titolo della PR | `PR_TITLE` validato come `Merged PR <id>: <titolo>` al posto dell'ultimo commit, HEAD invariato, `GATED_BRANCHES` |
+| `GATE_MODE` | `warn` (warning + SucceededWithIssues), `off`, `enforce` di default |
+
+#### `New-ReleaseNotes.Tests.ps1`
+
+| Suite | Scenario testato |
+|---|---|
+| Contenuto | Gruppi per tipo con scope e PR, messaggi liberi in "Altre modifiche", range dal tag del primo parent con salto dei merge, link alla PR per remote ADO e GitHub |
+| Pubblicazione | Upload nel summary, wiki non toccato fuori da main, errore di generazione che non ferma il publish |
 
 #### `ScenarioCoverage.Tests.ps1` (14 suite, 25 test)
 

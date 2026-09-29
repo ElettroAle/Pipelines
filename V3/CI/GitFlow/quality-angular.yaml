@@ -46,6 +46,17 @@ parameters:
     default: 'none'
     values: ['none', 'outputs', 'resources', 'all']
 
+  # Gate sul titolo della PR, che con lo squash diventa il messaggio del commit.
+  # 'warn' segnala senza bloccare il merge, 'enforce' fa fallire la build validation.
+  - name: titleGateMode
+    type: string
+    default: 'warn'
+    values: ['off', 'warn', 'enforce']
+
+  - name: titleGateBranches
+    type: string
+    default: 'dev'
+
   - name: pool
     type: object
     default:
@@ -63,6 +74,8 @@ stages:
       checkoutRepository: ${{ parameters.checkoutRepository }}
       pool: ${{ parameters.pool }}
       workspaceClean: ${{ parameters.workspaceClean }}
+      titleGateMode: ${{ parameters.titleGateMode }}
+      titleGateBranches: ${{ parameters.titleGateBranches }}
       buildAndTestSteps:
         - template: ../Common/Steps/angular-quality.yaml
         - template: ../Common/Steps/angular-sonar.yaml

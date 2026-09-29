@@ -28,8 +28,8 @@ V3/
 │   │
 │   ├── GitFlow/                # Entry point con governance GitFlow
 │   │   ├── Modules/            # Orchestratori specifici GitFlow
-│   │   │   ├── publish.yaml    # Aggiunge Set-Versioning con requireTag da branch
-│   │   │   └── quality.yaml    # Aggiunge validazione PR title (Conventional Commits)
+│   │   │   ├── publish.yaml    # Aggiunge Set-Versioning con requireTag da branch e release notes
+│   │   │   └── quality.yaml    # Aggiunge validazione PR title (Conventional Commits, git-cliff)
 │   │   ├── publish-dotNet.yaml
 │   │   ├── publish-angular.yaml
 │   │   ├── quality-dotNet.yaml
@@ -41,6 +41,9 @@ V3/
 │   │   └── publish-dotNet.yaml
 │   │
 │   └── Scripts/
+│       ├── cliff.toml          # Regole Conventional Commits condivise
+│       ├── GitCliff.ps1
+│       ├── New-ReleaseNotes.ps1
 │       ├── Set-Versioning.ps1
 │       └── Verify-SemVer.ps1
 │
@@ -222,7 +225,7 @@ extends:
         parameters:
           projectName: 'MyApp.BackEnd'
           targetEnvironment: 'Staging'
-          versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(currentTag) /p:FileVersion=$(currentTag) /p:InformationalVersion="$(currentTag)-$(gitHash)"'
+          versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(assemblyVersion) /p:FileVersion=$(assemblyVersion) /p:InformationalVersion="$(currentTag)+$(gitHash)"'
     stagingDeploySteps:
       - template: V3/CD/Common/Steps/appService-deploy.yaml@infrastructure
         parameters:

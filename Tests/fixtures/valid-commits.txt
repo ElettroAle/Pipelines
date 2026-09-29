@@ -17,3 +17,15 @@ fix!: cambia il formato della risposta
 fix(scenario-coverage): step indipendente dalla shell
 Merged PR 1049: fix(v2): address SonarCloud findings
 Merged PR 12: feat!: rimuove il parametro deprecato
+chore: aggiorna versione Node
+refactor: rinomina variabile interna
+docs: aggiorna documentazione parametri
+style: formattazione codice
+test: aggiunge unit test
+ci: modifica workflow GitHub Actions
+chore(deps): aggiorna pacchetti
+docs: spiega come usare feat: nel titolo
+chore: rimuove fix: temporaneo
+refactor(core)!: breaking su un tipo che non incrementa
+Merged PR 1049: chore: aggiorna dipendenze
+BREAKING CHANGE: rimuove il campo deprecato

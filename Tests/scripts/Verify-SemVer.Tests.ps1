@@ -9,8 +9,8 @@
     le variabili d'ambiente che lo script si aspetta, esegue lo script e verifica
     l'exit code e i messaggi di output.
 
-    Lo script non ha dipendenze esterne oltre a 'git', quindi non sono necessari
-    altri mock.
+    Lo script delega il riconoscimento a git-cliff (GitCliff.ps1), che scarica
+    alla prima esecuzione se GIT_CLIFF_PATH non e' impostata.
 #>
 
 BeforeAll {
@@ -79,13 +79,21 @@ BeforeAll {
         param(
             [string]$RepoDir,
             [string]$TargetBranch,
-            [string]$AdditionalBranches = ""
+            [string]$AdditionalBranches = "",
+            [string]$GatedBranches = "",
+            [string]$Mode = "",
+            [string]$PrTitle = "",
+            [string]$PrId = ""
         )
 
         Push-Location $RepoDir
         try {
             $env:TARGET_BRANCH = $TargetBranch
             $env:ADDITIONAL_TAG_BRANCHES = $AdditionalBranches
+            $env:GATED_BRANCHES = $GatedBranches
+            $env:GATE_MODE = $Mode
+            $env:PR_TITLE = $PrTitle
+            $env:PR_ID = $PrId
 
             $output = & pwsh -NoProfile -NonInteractive -File $ScriptPath 2>&1
             $exitCode = $LASTEXITCODE
@@ -96,6 +104,7 @@ BeforeAll {
             Pop-Location
             $env:TARGET_BRANCH = $null
             $env:ADDITIONAL_TAG_BRANCHES = $null
+            $env:GATED_BRANCHES = $env:GATE_MODE = $env:PR_TITLE = $env:PR_ID = $null
         }
     }
 
@@ -171,8 +180,8 @@ Describe "Verify-SemVer — Branch protetti (main, staging)" {
 
     Context "Commit NON validi su 'main'" {
 
-        It "Rifiuta 'chore: ...' su main" {
-            $repo = New-TempGitRepo -CommitMessage "chore: aggiorna dipendenze"
+        It "Rifiuta un tipo non ammesso da cliff.toml: 'update: ...'" {
+            $repo = New-TempGitRepo -CommitMessage "update: aggiorna dipendenze"
             $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
             Remove-TempRepo $repo
 
@@ -188,8 +197,8 @@ Describe "Verify-SemVer — Branch protetti (main, staging)" {
             $result.ExitCode | Should -Be 1
         }
 
-        It "Rifiuta 'docs: ...' su main" {
-            $repo = New-TempGitRepo -CommitMessage "docs: aggiorna README"
+        It "Rifiuta 'WIP: ...': sintassi Conventional ma tipo non ammesso" {
+            $repo = New-TempGitRepo -CommitMessage "WIP: lavori in corso"
             $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
             Remove-TempRepo $repo
 
@@ -204,12 +213,17 @@ Describe "Verify-SemVer — Branch protetti (main, staging)" {
             $result.ExitCode | Should -Be 0
         }
 
-        It "Rifiuta 'refactor: ...' su main" {
-            $repo = New-TempGitRepo -CommitMessage "refactor: rinomina variabile"
+        It "Accetta i tipi di manutenzione: '<Msg>'" -TestCases @(
+            @{ Msg = "chore: aggiorna dipendenze" }
+            @{ Msg = "docs: aggiorna README" }
+            @{ Msg = "refactor(core): rinomina variabile" }
+        ) {
+            param([string]$Msg)
+            $repo = New-TempGitRepo -CommitMessage $Msg
             $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
             Remove-TempRepo $repo
 
-            $result.ExitCode | Should -Be 1
+            $result.ExitCode | Should -Be 0
         }
 
         It "Mostra il messaggio del commit nel testo dell'errore" {
@@ -234,8 +248,8 @@ Describe "Verify-SemVer — Branch protetti (main, staging)" {
             $result.ExitCode | Should -Be 0
         }
 
-        It "Vede il commit non-merge sottostante: 'chore:' → FAIL" {
-            $repo = New-TempGitRepo -CommitMessage "chore: manutenzione sotto il merge" -WithMergeCommit
+        It "Vede il commit non-merge sottostante: messaggio libero → FAIL" {
+            $repo = New-TempGitRepo -CommitMessage "manutenzione sotto il merge" -WithMergeCommit
             $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
             Remove-TempRepo $repo
 
@@ -278,7 +292,7 @@ Describe "Verify-SemVer — Branch non protetti" {
     }
 
     It "Branch 'main' con prefisso 'refs/heads/' viene trattato come protetto" {
-        $repo = New-TempGitRepo -CommitMessage "chore: non convenzionale"
+        $repo = New-TempGitRepo -CommitMessage "messaggio non convenzionale"
         $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "refs/heads/main"
         Remove-TempRepo $repo
 
@@ -301,16 +315,16 @@ Describe "Verify-SemVer — ADDITIONAL_TAG_BRANCHES" {
         $result.ExitCode | Should -Be 0
     }
 
-    It "Branch 'release' aggiunto → commit 'chore:' rifiutato" {
-        $repo = New-TempGitRepo -CommitMessage "chore: pulizia su release"
+    It "Branch 'release' aggiunto → messaggio libero rifiutato" {
+        $repo = New-TempGitRepo -CommitMessage "pulizia su release"
         $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "release" -AdditionalBranches "release"
         Remove-TempRepo $repo
 
         $result.ExitCode | Should -Be 1
     }
 
-    It "Branch 'release' NON aggiunto → chore accettato (non protetto)" {
-        $repo = New-TempGitRepo -CommitMessage "chore: pulizia"
+    It "Branch 'release' NON aggiunto → messaggio libero accettato (non protetto)" {
+        $repo = New-TempGitRepo -CommitMessage "pulizia"
         $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "release" -AdditionalBranches ""
         Remove-TempRepo $repo
 
@@ -318,7 +332,7 @@ Describe "Verify-SemVer — ADDITIONAL_TAG_BRANCHES" {
     }
 
     It "Lista multipla: 'hotfix,release' → entrambi protetti" {
-        $repo = New-TempGitRepo -CommitMessage "docs: non valido"
+        $repo = New-TempGitRepo -CommitMessage "non valido"
         $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "hotfix" -AdditionalBranches "hotfix,release"
         Remove-TempRepo $repo
 
@@ -326,7 +340,7 @@ Describe "Verify-SemVer — ADDITIONAL_TAG_BRANCHES" {
     }
 
     It "Lista multipla: branch non in lista → skip" {
-        $repo = New-TempGitRepo -CommitMessage "docs: non valido"
+        $repo = New-TempGitRepo -CommitMessage "non valido"
         $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "develop" -AdditionalBranches "hotfix,release"
         Remove-TempRepo $repo
 
@@ -371,6 +385,100 @@ Describe "Verify-SemVer — Fixture: commit non validi su main" {
         param([string]$Msg)
         $repo = New-TempGitRepo -CommitMessage $Msg
         $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 1
+    }
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SUITE: Titolo della PR e modalita' del gate
+# ─────────────────────────────────────────────────────────────────────────────
+
+Describe "Verify-SemVer — Titolo della PR" {
+
+    It "Valida il titolo della PR, non l'ultimo commit del ramo" {
+        $repo = New-TempGitRepo -CommitMessage "wip non convenzionale"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "refs/heads/dev" -GatedBranches "dev" `
+            -PrTitle "feat(api): nuovo endpoint" -PrId "42"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "Merged PR 42: feat\(api\): nuovo endpoint"
+    }
+
+    It "Rifiuta un titolo non convenzionale anche se i commit del ramo lo sono" {
+        $repo = New-TempGitRepo -CommitMessage "fix: commit corretto"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "dev" `
+            -PrTitle "Sistemato il login" -PrId "43"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "Sistemato il login"
+    }
+
+    It "La validazione non sposta HEAD e non crea commit sul ramo" {
+        $repo = New-TempGitRepo -CommitMessage "fix: commit corretto"
+        Push-Location $repo
+        $headBefore = git rev-parse HEAD
+        Pop-Location
+
+        $null = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "dev" -PrTitle "feat: titolo" -PrId "44"
+
+        Push-Location $repo
+        $headAfter = git rev-parse HEAD
+        $status = git status --porcelain
+        Pop-Location
+        Remove-TempRepo $repo
+
+        $headAfter | Should -Be $headBefore
+        $status | Should -BeNullOrEmpty
+    }
+
+    It "GATED_BRANCHES sostituisce main,staging: una PR verso main non viene validata" {
+        $repo = New-TempGitRepo -CommitMessage "fix: commit"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main" -GatedBranches "dev" -PrTitle "Release 2.1"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "Skipping check"
+    }
+}
+
+Describe "Verify-SemVer — GATE_MODE" {
+
+    It "warn: titolo non valido → exit 0, warning e SucceededWithIssues" {
+        $repo = New-TempGitRepo -CommitMessage "fix: commit"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "dev" -Mode "warn" -PrTitle "titolo libero"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "##vso\[task\.logissue type=warning\]MISSING CONVENTIONAL COMMIT"
+        $result.Output | Should -Match "##vso\[task\.complete result=SucceededWithIssues;\]"
+    }
+
+    It "warn: titolo valido → nessun warning" {
+        $repo = New-TempGitRepo -CommitMessage "fix: commit"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "dev" -Mode "warn" -PrTitle "fix: titolo"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Not -Match "SucceededWithIssues"
+    }
+
+    It "off: nessuna validazione" {
+        $repo = New-TempGitRepo -CommitMessage "fix: commit"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "dev" -Mode "off" -PrTitle "titolo libero"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "Gate disabled"
+    }
+
+    It "enforce e' il default quando GATE_MODE non e' impostata" {
+        $repo = New-TempGitRepo -CommitMessage "fix: commit"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "dev" -PrTitle "titolo libero"
         Remove-TempRepo $repo
 
         $result.ExitCode | Should -Be 1

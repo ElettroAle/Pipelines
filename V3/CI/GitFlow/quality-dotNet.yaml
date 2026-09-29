@@ -70,6 +70,17 @@ parameters:
     default: 'off'
     values: ['off', 'warn', 'enforce']
 
+  # Gate sul titolo della PR, che con lo squash diventa il messaggio del commit.
+  # 'warn' segnala senza bloccare il merge, 'enforce' fa fallire la build validation.
+  - name: titleGateMode
+    type: string
+    default: 'warn'
+    values: ['off', 'warn', 'enforce']
+
+  - name: titleGateBranches
+    type: string
+    default: 'dev'
+
   - name: pool
     type: object
     default:
@@ -95,6 +106,8 @@ stages:
       gitLeaksNoGit: ${{ parameters.gitLeaksNoGit }}
       timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
       workspaceClean: ${{ parameters.workspaceClean }}
+      titleGateMode: ${{ parameters.titleGateMode }}
+      titleGateBranches: ${{ parameters.titleGateBranches }}
       checkoutPipelineTemplates: ${{ ne(parameters.scenarioCoverage, 'off') }}
       buildAndTestSteps:
         # SonarCloud Prepare invoca dotnet direttamente: su agent senza SDK di sistema

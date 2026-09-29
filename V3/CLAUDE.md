@@ -87,7 +87,7 @@ parameters:
 - **Agnostico** → non passare `versionArgs` (o passare `''`): nessuna versione embedded nel binario.
 - **GitFlow / TrunkFlow / CD Promote** → passare:
   ```
-  versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(currentTag) /p:FileVersion=$(currentTag) /p:InformationalVersion="$(currentTag)-$(gitHash)"'
+  versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(assemblyVersion) /p:FileVersion=$(assemblyVersion) /p:InformationalVersion="$(currentTag)+$(gitHash)"'
   ```
 
 Non aggiungere mai i `/p:Version` direttamente nell'entry point: passali sempre tramite `versionArgs`.
@@ -143,7 +143,7 @@ Eseguire solo se hai modificato `CI/Scripts/`:
 Invoke-Pester Tests/scripts/ -Output Detailed
 ```
 
-I test usano un **bare repo locale** come fake remote, quindi non richiedono accesso di rete.
+I test usano un **bare repo locale** come fake remote. L'unico accesso di rete è il download di git-cliff alla prima esecuzione, evitabile puntando `GIT_CLIFF_PATH` a un binario locale.
 
 ### Quando eseguire cosa
 
@@ -152,7 +152,8 @@ I test usano un **bare repo locale** come fake remote, quindi non richiedono acc
 | Qualsiasi file in `V3/` | Livello 1 |
 | `CI/Scripts/Set-Versioning.ps1` | Livello 1 + Livello 2 (`Set-Versioning.Tests.ps1`) |
 | `CI/Scripts/Verify-SemVer.ps1` | Livello 1 + Livello 2 (`Verify-SemVer.Tests.ps1`) |
-| `CI/Scripts/ConventionalCommit.ps1` | Livello 1 + Livello 2 (`Verify-SemVer.Tests.ps1` + `Set-Versioning.Tests.ps1`) |
+| `CI/Scripts/cliff.toml`, `CI/Scripts/GitCliff.ps1` | Livello 1 + Livello 2 (`Verify-SemVer.Tests.ps1` + `Set-Versioning.Tests.ps1` + `New-ReleaseNotes.Tests.ps1`) |
+| `CI/Scripts/New-ReleaseNotes.ps1` | Livello 1 + Livello 2 (`New-ReleaseNotes.Tests.ps1`) |
 | `CI/Scripts/ScenarioCoverage.cs` | Livello 1 + Livello 2 (`ScenarioCoverage.Tests.ps1`, richiede .NET SDK 10) |
 
 I workflow GitHub Actions replicano questi stessi check automaticamente su ogni push.
@@ -231,6 +232,7 @@ Queste variabili devono essere definite nell'entry point (come `variables:` o tr
 | `testProjects` | **parametro entry point** | quality-dotNet.yaml, publish-dotNet.yaml → `dotnet-test.yaml` |
 | `appLocation` | stringa | `staticWebApp-deploy.yaml` |
 | `currentTag` | stringa | `versionArgs` (esposto da Set-Versioning) |
+| `assemblyVersion` | stringa | `versionArgs` (esposto da Set-Versioning, `x.y.z.0`) |
 | `gitHash` | stringa | `versionArgs` (esposto da Set-Versioning) |
 | `sonarServiceConnection` | **parametro entry point** | quality-dotNet.yaml, quality-angular.yaml → `dotnet-sonar.yaml`, `angular-sonar.yaml` |
 | `sonarOrganization` | **parametro entry point** | quality-dotNet.yaml, quality-angular.yaml → `dotnet-sonar.yaml`, `angular-sonar.yaml` |

@@ -125,6 +125,6 @@ stages:
             outputDirectory: '$(Build.ArtifactStagingDirectory)/publish'
             targetRuntime: '${{ parameters.targetRuntime }}'
             selfContained: '${{ parameters.selfContained }}'
-            versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(currentTag) /p:FileVersion=$(currentTag) /p:InformationalVersion="$(currentTag)-$(gitHash)"'
+            versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(assemblyVersion) /p:FileVersion=$(assemblyVersion) /p:InformationalVersion="$(currentTag)+$(gitHash)"'
             variableSubstitution: ${{ parameters.variableSubstitution }}
             substitutionFolder: '${{ parameters.substitutionFolder }}'

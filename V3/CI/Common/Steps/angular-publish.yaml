@@ -13,6 +13,8 @@
 #   nodeVersion        → versione Node.js        (default: variabile $(nodeVersion))
 #   outputDirectory    → path output artifact    (default: variabile $(outputDirectory))
 #   buildConfiguration → configurazione Angular  (default: variabile $(buildConfiguration))
+#   version            → versione SemVer da scrivere in package.json e version.json (default: '' → nessuna)
+#   commit             → short SHA riportato in version.json (default: '')
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -32,6 +34,14 @@ parameters:
     type: string
     default: '$(buildConfiguration)'
 
+  - name: version
+    type: string
+    default: ''
+
+  - name: commit
+    type: string
+    default: ''
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
@@ -43,6 +53,11 @@ steps:
   - script: npm ci
     displayName: 'Install Dependencies'
     workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}
+
+  - ${{ if ne(parameters.version, '') }}:
+    - script: npm version ${{ parameters.version }} --no-git-tag-version --allow-same-version
+      displayName: 'Set package.json version'
+      workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}
 
   - script: npx ng build --configuration=${{ parameters.buildConfiguration }}
     displayName: 'Angular Build'
@@ -59,3 +74,13 @@ steps:
       Copy-Item -Path (Join-Path $realOutput '*') -Destination '${{ parameters.outputDirectory }}' -Recurse -Force
     displayName: 'Copy dist to Artifact Staging'
     workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}
+
+  # version.json nell'output e non nei sorgenti: l'app lo legge a runtime se le serve,
+  # senza dipendere da come ogni progetto gestisce gli environment.
+  - ${{ if ne(parameters.version, '') }}:
+    - powershell: |
+        $info = [ordered]@{ version = '${{ parameters.version }}'; commit = '${{ parameters.commit }}'; buildId = '$(Build.BuildId)' }
+        $path = Join-Path '${{ parameters.outputDirectory }}' 'version.json'
+        [IO.File]::WriteAllText($path, ($info | ConvertTo-Json), (New-Object Text.UTF8Encoding $false))
+        Write-Host "Scritto $path"
+      displayName: 'Write version.json'
