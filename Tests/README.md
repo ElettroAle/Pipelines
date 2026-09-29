@@ -93,6 +93,7 @@ Invoke-Pester Tests/scripts/Verify-SemVer.Tests.ps1 -Output Detailed
 | `REQUIRE_TAG=true, HEAD=tag` | Nessun incremento se il tree è identico all'ultimo tag |
 | Scope e breaking | `fix(scope):`→patch, `feat(scope):`→minor, `feat(scope)!:`/`fix!:`/`BREAKING CHANGE:`→major, `chore(scope):` e messaggi liberi→patch |
 | Incremento più alto | Tra i commit dall'ultimo tag vince il più alto: `feat:` poi `fix:` → minor, `feat!:` poi `fix:` → major |
+| Versione nel run di publish | Build number uguale alla versione calcolata (rilascio, rilascio senza modifiche, prerelease); tag `release` solo sulle publish di rilascio |
 | Prefisso ADO | `Merged PR <id>: <titolo convenzionale>` (messaggio di default di Azure DevOps, anche in squash) riconosciuto come il titolo senza prefisso |
 | Sanitizzazione PROJECT_NAME | Punti→trattini, lowercase |
 

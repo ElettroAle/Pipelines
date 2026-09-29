@@ -113,6 +113,18 @@ BeforeAll {
         return $null
     }
 
+    function Get-BuildNumber {
+        param([string]$Output)
+        $m = [regex]::Match($Output, "##vso\[build\.updatebuildnumber\](.+)")
+        if ($m.Success) { return $m.Groups[1].Value.Trim() }
+        return $null
+    }
+
+    function Get-BuildTags {
+        param([string]$Output)
+        return @([regex]::Matches($Output, "##vso\[build\.addbuildtag\](.+)") | ForEach-Object { $_.Groups[1].Value.Trim() })
+    }
+
     # ---------------------------------------------------------------------------
     # Helper: pulizia
     # ---------------------------------------------------------------------------
@@ -428,6 +440,62 @@ Describe "Set-Versioning — REQUIRE_TAG=true, HEAD uguale all'ultimo tag" {
         (Get-VsoVariable $res.Output "assemblyVersion") | Should -Be "2.3.4.0"
         # Deve esserci esattamente un tag nel remote (quello originale, non un nuovo)
         ($remoteTags | Select-String "refs/tags").Count | Should -Be 1
+    }
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Funzionalità: Versione nel run di publish
+# ─────────────────────────────────────────────────────────────────────────────
+
+Describe "Funzionalità: Versione nel run di publish" {
+
+    Context "Scenario: publish di rilascio" {
+        BeforeAll {
+            $tr = New-TestRepo -Commits @("feat: base", "feat: nuova feature") -Tags @{ "1.3.0" = 0 }
+            $res = Invoke-SetVersioning -RepoDir $tr.Repo -RequireTag "true"
+            Remove-TestRepo $tr
+        }
+
+        It "Allora il build number del run è '1.4.0'" {
+            Get-BuildNumber $res.Output | Should -Be "1.4.0"
+        }
+
+        It "E il run porta il tag 'release'" {
+            Get-BuildTags $res.Output | Should -Contain "release"
+        }
+    }
+
+    Context "Scenario: publish di rilascio senza modifiche dall'ultimo tag" {
+        BeforeAll {
+            $tr = New-TestRepo -Commits @("feat: base") -Tags @{ "1.3.0" = 0 }
+            $res = Invoke-SetVersioning -RepoDir $tr.Repo -RequireTag "true"
+            Remove-TestRepo $tr
+        }
+
+        It "Allora il build number del run è '1.3.0'" {
+            Get-BuildNumber $res.Output | Should -Be "1.3.0"
+        }
+
+        It "E il run porta il tag 'release'" {
+            Get-BuildTags $res.Output | Should -Contain "release"
+        }
+    }
+
+    Context "Scenario: publish non di rilascio" {
+        BeforeAll {
+            $tr = New-TestRepo -Commits @("feat: base", "feat: nuova feature") -Tags @{ "1.3.0" = 0 }
+            $res = Invoke-SetVersioning -RepoDir $tr.Repo -RequireTag "false" -BuildId "4815"
+            Remove-TestRepo $tr
+        }
+
+        It "Allora il build number del run è '1.4.0-dev.4815'" {
+            Get-BuildNumber $res.Output | Should -Be "1.4.0-dev.4815"
+        }
+
+        It "E il run non porta il tag 'release'" {
+            Get-BuildTags $res.Output | Should -Not -Contain "release"
+        }
     }
 }
 
