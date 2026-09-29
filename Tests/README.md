@@ -18,6 +18,7 @@ Tests/
 │   ├── Set-Versioning.Tests.ps1
 │   ├── Verify-SemVer.Tests.ps1
 │   ├── New-ReleaseNotes.Tests.ps1
+│   ├── GitCliff.Tests.ps1
 │   └── ScenarioCoverage.Tests.ps1
 ├── fixtures/
 │   ├── valid-commits.txt       # Messaggi commit validi — usati da Verify-SemVer.Tests
@@ -106,6 +107,12 @@ Ogni test crea un repository git reale con un **bare repo locale come fake remot
 | `ADDITIONAL_TAG_BRANCHES` | Branch extra protetti via env var |
 | Titolo della PR | `PR_TITLE` validato come `Merged PR <id>: <titolo>` al posto dell'ultimo commit, HEAD invariato, `GATED_BRANCHES` |
 | `GATE_MODE` | `warn` (warning + SucceededWithIssues), `off`, `enforce` di default |
+
+#### `GitCliff.Tests.ps1`
+
+Il binario scaricato risponde con la versione fissata e non dipende da runtime assenti sugli agent: su Windows nessun
+`VCRUNTIME*.dll`/`MSVCP*.dll` importato (i runner GitHub hanno il Visual C++ Redistributable, gli agent no), su Linux
+nessun loader dinamico `ld-linux`. La cache è separata per archivio.
 
 #### `New-ReleaseNotes.Tests.ps1`
 

@@ -4,10 +4,12 @@
 
 $GitCliffVersion = '2.14.2'
 # SHA-256 calcolati sugli archivi della release: la release pubblica checksum solo
-# per Linux, e fissarli qui vale per entrambe le piattaforme.
+# per Linux, e fissarli qui vale per entrambe le piattaforme. Build senza runtime
+# esterni: su Windows gnu (la msvc richiede VCRUNTIME140.dll, assente sugli agent
+# senza Visual C++ Redistributable), su Linux musl statica (nessun vincolo di glibc).
 $GitCliffArchives = @{
-    'Windows' = @{ Name = "git-cliff-$GitCliffVersion-x86_64-pc-windows-msvc.zip"; Sha256 = '6ECE2112B3F4AF462190ECBEA4AEB1315FFF6AF415629B597F84319073C31131'; Exe = 'git-cliff.exe' }
-    'Linux'   = @{ Name = "git-cliff-$GitCliffVersion-x86_64-unknown-linux-gnu.tar.gz"; Sha256 = '24F397C733ADD5390FDCEEE3A2088588AB0D5F944CE00D34CB7029B888CF2DB4'; Exe = 'git-cliff' }
+    'Windows' = @{ Name = "git-cliff-$GitCliffVersion-x86_64-pc-windows-gnu.zip"; Sha256 = 'AB802A72A1FBDD1E06F17001728CB801D04A180F320EFB0EC94AF84D2F6ADBC7'; Exe = 'git-cliff.exe' }
+    'Linux'   = @{ Name = "git-cliff-$GitCliffVersion-x86_64-unknown-linux-musl.tar.gz"; Sha256 = 'FA21E2FC70046FCFD0E43E5E4613873AB799AFF3D9DC8559C00D31B270E417D0'; Exe = 'git-cliff' }
 }
 $GitCliffConfig = Join-Path $PSScriptRoot 'cliff.toml'
 $UnclassifiedCommitGroup = '<!-- 9 -->Altre modifiche'
@@ -22,7 +24,7 @@ function Get-GitCliffPath {
 
     $archive = $GitCliffArchives[(Get-GitCliffPlatform)]
     $toolsRoot = if ($env:AGENT_TOOLSDIRECTORY) { $env:AGENT_TOOLSDIRECTORY } else { [IO.Path]::GetTempPath() }
-    $installDir = Join-Path $toolsRoot "git-cliff/$GitCliffVersion"
+    $installDir = Join-Path $toolsRoot "git-cliff/$($archive.Name -replace '(\.zip|\.tar\.gz)$', '')"
     $exePath = Join-Path $installDir "git-cliff-$GitCliffVersion/$($archive.Exe)"
     if (Test-Path $exePath) { return $exePath }
 
