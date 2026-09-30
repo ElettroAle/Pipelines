@@ -19,8 +19,8 @@
 #   checkoutPipelineTemplates → checkout del repo 'infrastructure' nel job BuildAndTest (default: false)
 #   timeoutInMinutes   → timeout del job BuildAndTest (default: 30)
 #   workspaceClean     → pulizia workspace prima del job (default: 'none', nessuna)
-#   titleGateMode      → off | warn | enforce (default: warn)
-#   titleGateBranches  → branch target, separati da virgola, su cui gira il gate (default: dev)
+#   titleGateMode      → off | warn | enforce (default: enforce)
+#   titleGateBranches  → branch target, separati da virgola, su cui gira il gate (default: dev,staging,main)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -58,16 +58,16 @@ parameters:
     type: boolean
     default: false
 
-  # Gate sul titolo della PR, che con lo squash diventa il messaggio del commit.
-  # 'warn' segnala senza bloccare il merge, 'enforce' fa fallire la build validation.
+  # Gate sui Conventional Commits della PR: fallisce solo se né il titolo né alcun
+  # commit lo è. 'warn' segnala senza bloccare, per un consumer che non lo vuole bloccante.
   - name: titleGateMode
     type: string
-    default: 'warn'
+    default: 'enforce'
     values: ['off', 'warn', 'enforce']
 
   - name: titleGateBranches
     type: string
-    default: 'dev'
+    default: 'dev,staging,main'
 
 # ─────────────────────────────────────────────────────────────────────────────
 

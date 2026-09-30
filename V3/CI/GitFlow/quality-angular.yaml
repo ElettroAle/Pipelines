@@ -46,16 +46,16 @@ parameters:
     default: 'none'
     values: ['none', 'outputs', 'resources', 'all']
 
-  # Gate sul titolo della PR, che con lo squash diventa il messaggio del commit.
-  # 'warn' segnala senza bloccare il merge, 'enforce' fa fallire la build validation.
+  # Gate sui Conventional Commits della PR: fallisce solo se né il titolo né alcun
+  # commit lo è. 'warn' segnala senza bloccare, per un consumer che non lo vuole bloccante.
   - name: titleGateMode
     type: string
-    default: 'warn'
+    default: 'enforce'
     values: ['off', 'warn', 'enforce']
 
   - name: titleGateBranches
     type: string
-    default: 'dev'
+    default: 'dev,staging,main'
 
   - name: pool
     type: object

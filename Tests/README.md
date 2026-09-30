@@ -109,6 +109,7 @@ Ogni test crea un repository git reale con un **bare repo locale come fake remot
 | Titolo della PR | `PR_TITLE` validato come `Merged PR <id>: <titolo>` al posto dell'ultimo commit, HEAD invariato, `GATED_BRANCHES` |
 | `GATE_MODE` | `warn` (warning + SucceededWithIssues), `off`, `enforce` di default |
 | Avviso sui Conventional Commits di una PR | Sul merge ref della PR: nessun avviso se il titolo o almeno un commit è convenzionale (squash, promozione, back-merge), avviso con l'elenco dei messaggi valutati se nessuno lo è |
+| Gate bloccante per default | Con i default letti dai tre template di quality GitFlow la PR senza messaggi convenzionali fallisce verso `dev`, `staging` e `main`, passa verso un ramo non gated; `warn` scelto dal consumer avvisa senza fallire; lo script senza `GATED_BRANCHES` protegge gli stessi rami |
 
 #### `GitCliff.Tests.ps1`
 
