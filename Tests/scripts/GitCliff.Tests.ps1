@@ -47,3 +47,33 @@ Describe "GitCliff — binario scaricato" {
         $GitCliffExe | Should -Match ([regex]::Escape(($archive.Name -replace '(\.zip|\.tar\.gz)$', '')))
     }
 }
+
+Describe "GitCliff — classificazione dei commit" {
+
+    BeforeAll {
+        $repo = Join-Path ([IO.Path]::GetTempPath()) "pester-gitcliff-repo-$(New-Guid)"
+        New-Item -ItemType Directory -Path $repo | Out-Null
+        Push-Location $repo
+        git init -q -b main
+        git config user.email "test@pester.local"
+        git config user.name "Pester Test"
+        git commit -q --allow-empty -m "chore: base"
+        git commit -q --allow-empty -m "feat(api): nuovo endpoint"
+        git commit -q --allow-empty -m "wip"
+        $classified = Get-ClassifiedCommits "HEAD~2..HEAD"
+        Pop-Location
+        Remove-Item -Recurse -Force $repo -ErrorAction SilentlyContinue
+    }
+
+    It "Restituisce un elemento per commit del range" {
+        $classified.Count | Should -Be 2
+    }
+
+    It "Un tipo ammesso da cliff.toml e' convenzionale" {
+        ($classified | Where-Object Message -eq 'feat(api): nuovo endpoint').Conventional | Should -BeTrue
+    }
+
+    It "Un messaggio libero non e' convenzionale" {
+        ($classified | Where-Object Message -eq 'wip').Conventional | Should -BeFalse
+    }
+}

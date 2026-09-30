@@ -235,13 +235,13 @@ in Azure DevOps (Settings → Pipelines), non il path del file yaml.
 
 ## Conventional Commits — regola sulle PR
 
-Il quality gate valida il titolo della PR. Solo i seguenti prefissi sono accettati:
+Il quality gate segnala una PR solo se né il titolo né alcuno dei suoi commit inizia con un tipo ammesso da `cliff.toml`: con lo squash il titolo diventa il commit su `dev`, con un merge (promozioni, back-merge) contano i commit.
 
 | Prefisso | Version bump |
 |---|---|
-| `fix:` | patch (1.2.3 → 1.2.4) |
+| `fix:` e tipi di manutenzione (`chore:`, `docs:`, `refactor:`, …) | patch (1.2.3 → 1.2.4) |
 | `feat:` | minor (1.2.3 → 1.3.0) |
-| `feat!:` | major (1.2.3 → 2.0.0) |
+| `feat!:`, `fix!:`, `BREAKING CHANGE:` | major (1.2.3 → 2.0.0) |
 
 La CI fallisce su `staging` e `main` se il commit non ha un tag SemVer corrispondente.
 

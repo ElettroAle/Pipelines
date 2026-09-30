@@ -108,6 +108,7 @@ Ogni test crea un repository git reale con un **bare repo locale come fake remot
 | `ADDITIONAL_TAG_BRANCHES` | Branch extra protetti via env var |
 | Titolo della PR | `PR_TITLE` validato come `Merged PR <id>: <titolo>` al posto dell'ultimo commit, HEAD invariato, `GATED_BRANCHES` |
 | `GATE_MODE` | `warn` (warning + SucceededWithIssues), `off`, `enforce` di default |
+| Avviso sui Conventional Commits di una PR | Sul merge ref della PR: nessun avviso se il titolo o almeno un commit è convenzionale (squash, promozione, back-merge), avviso con l'elenco dei messaggi valutati se nessuno lo è |
 
 #### `GitCliff.Tests.ps1`
 

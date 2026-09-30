@@ -74,13 +74,17 @@ function Get-NextReleaseVersion {
 }
 
 # Commit del range che non rientrano in alcun tipo ammesso da cliff.toml.
-function Get-UnclassifiedCommitMessages {
+function Get-ClassifiedCommits {
     param([string]$Range)
 
     $releases = Invoke-GitCliff @($Range, '--context') | ConvertFrom-Json
-    return @($releases | ForEach-Object { $_.commits } |
-        Where-Object { $_ -and $_.group -eq $UnclassifiedCommitGroup } |
-        ForEach-Object { $_.raw_message.Split("`n")[0].Trim() })
+    return @($releases | ForEach-Object { $_.commits } | Where-Object { $_ } |
+        ForEach-Object {
+            [pscustomobject]@{
+                Message      = $_.raw_message.Split("`n")[0].Trim()
+                Conventional = $_.group -ne $UnclassifiedCommitGroup
+            }
+        })
 }
 
 function Get-ReleaseNotesMarkdown {

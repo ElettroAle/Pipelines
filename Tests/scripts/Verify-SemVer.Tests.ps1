@@ -74,6 +74,26 @@ BeforeAll {
         return $repoDir
     }
 
+    # Il merge ref di una PR in ADO: HEAD e' un merge con il ramo di destinazione come
+    # primo parent e il ramo sorgente della PR come secondo.
+    function New-PullRequestMergeRepo {
+        param([string[]]$Commits)
+
+        $repoDir = Join-Path ([System.IO.Path]::GetTempPath()) "pester-verify-pr-$(New-Guid)"
+        New-Item -ItemType Directory -Path $repoDir | Out-Null
+        Push-Location $repoDir
+        git init -q -b dev
+        git config user.email "test@pester.local"
+        git config user.name "Pester Test"
+        git commit -q --allow-empty -m "chore: initial commit" | Out-Null
+        git checkout -q -b pr-source
+        foreach ($message in $Commits) { git commit -q --allow-empty -m $message | Out-Null }
+        git checkout -q --detach dev
+        git merge -q --no-ff pr-source -m "Merge pull request into dev" | Out-Null
+        Pop-Location
+        return $repoDir
+    }
+
     # Helper: esegue lo script nel repo indicato e restituisce exit code + output
     function Invoke-VerifySemVer {
         param(
@@ -408,7 +428,7 @@ Describe "Verify-SemVer — Titolo della PR" {
         $result.Output | Should -Match "Merged PR 42: feat\(api\): nuovo endpoint"
     }
 
-    It "Rifiuta un titolo non convenzionale anche se i commit del ramo lo sono" {
+    It "Fuori dal merge ref di una PR vale il solo titolo, anche se l'ultimo commit e' convenzionale" {
         $repo = New-TempGitRepo -CommitMessage "fix: commit corretto"
         $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "dev" `
             -PrTitle "Sistemato il login" -PrId "43"
@@ -482,5 +502,42 @@ Describe "Verify-SemVer — GATE_MODE" {
         Remove-TempRepo $repo
 
         $result.ExitCode | Should -Be 1
+    }
+}
+
+Describe "Funzionalità: Avviso sui Conventional Commits di una PR" {
+
+    Context "Schema dello scenario: PR verso dev con titolo '<Title>' e commit <Commits>" -ForEach @(
+        @{ Title = 'feat: nuova capacità'; Commits = @('wip'); Warns = $false }
+        @{ Title = 'Staging'; Commits = @('fix: correzione', 'wip'); Warns = $false }
+        @{ Title = 'Staging'; Commits = @('Merged PR 12: feat(api): nuovo endpoint'); Warns = $false }
+        @{ Title = 'Aggiornamenti'; Commits = @('wip', 'aggiornamento'); Warns = $true }
+    ) {
+        BeforeAll {
+            $repo = New-PullRequestMergeRepo -Commits $Commits
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "refs/heads/dev" -GatedBranches "dev" -Mode "warn" -PrTitle $Title -PrId "1208"
+            Remove-TempRepo $repo
+        }
+
+        It "Allora l'avviso 'MISSING CONVENTIONAL COMMIT' compare solo se nessun messaggio e' convenzionale" {
+            if ($Warns) { $result.Output | Should -Match "MISSING CONVENTIONAL COMMIT" }
+            else { $result.Output | Should -Not -Match "MISSING CONVENTIONAL COMMIT" }
+        }
+    }
+
+    Context "Scenario: l'avviso elenca i messaggi valutati" {
+        BeforeAll {
+            $repo = New-PullRequestMergeRepo -Commits @('wip')
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "dev" -Mode "warn" -PrTitle "Aggiornamenti" -PrId "1209"
+            Remove-TempRepo $repo
+        }
+
+        It "Allora l'avviso riporta il titolo 'Aggiornamenti'" {
+            $result.Output | Should -Match "(?m)^- Aggiornamenti \(PR 1209\)"
+        }
+
+        It "E l'avviso riporta il commit 'wip'" {
+            $result.Output | Should -Match "(?m)^- wip$"
+        }
     }
 }
