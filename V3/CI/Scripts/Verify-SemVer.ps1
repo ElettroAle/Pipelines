@@ -3,7 +3,7 @@
 $targetBranch = $env:TARGET_BRANCH -replace 'refs/heads/', ''
 $gateMode = if ($env:GATE_MODE) { $env:GATE_MODE.ToLower() } else { 'enforce' }
 
-$coreGatedBranches = if ($env:GATED_BRANCHES) { $env:GATED_BRANCHES.Split(',').Trim() } else { @('main', 'staging') }
+$coreGatedBranches = if ($env:GATED_BRANCHES) { $env:GATED_BRANCHES.Split(',').Trim() } else { @('dev', 'staging', 'main') }
 $rawAdditionalBranches = $env:ADDITIONAL_TAG_BRANCHES
 $additionalGatedList = if ($rawAdditionalBranches) { $rawAdditionalBranches.Split(',').Trim() } else { @() }
 $gatedList = @($coreGatedBranches) + $additionalGatedList

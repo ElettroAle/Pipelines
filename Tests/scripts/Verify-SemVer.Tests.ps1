@@ -285,9 +285,9 @@ Describe "Verify-SemVer — Branch protetti (main, staging)" {
 
 Describe "Verify-SemVer — Branch non protetti" {
 
-    It "Skip su 'dev' con commit non convenzionale" {
+    It "Skip su 'dev' quando GATED_BRANCHES non lo include" {
         $repo = New-TempGitRepo -CommitMessage "WIP: lavori in corso"
-        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "staging,main"
         Remove-TempRepo $repo
 
         $result.ExitCode | Should -Be 0
@@ -539,5 +539,65 @@ Describe "Funzionalità: Avviso sui Conventional Commits di una PR" {
         It "E l'avviso riporta il commit 'wip'" {
             $result.Output | Should -Match "(?m)^- wip$"
         }
+    }
+}
+
+Describe "Funzionalità: Gate sui Conventional Commits bloccante per default" {
+
+    BeforeAll {
+        # Il default che un consumer eredita quando non passa il parametro al template.
+        function Get-TemplateDefault([string]$Template, [string]$Parameter) {
+            $content = Get-Content -Raw (Join-Path "$PSScriptRoot/../../V3/CI/GitFlow" $Template)
+            $block = [regex]::Match($content, "(?s)- name: $Parameter\s*\n(.*?)(?=\n\s*- name:|\n\S)")
+            return [regex]::Match($block.Groups[1].Value, "default:\s*'([^']*)'").Groups[1].Value
+        }
+
+        function Invoke-DefaultGate([string]$Template, [string]$TargetBranch, [string]$Mode) {
+            if (-not $Mode) { $Mode = Get-TemplateDefault $Template 'titleGateMode' }
+            $repo = New-PullRequestMergeRepo -Commits @('wip', 'aggiornamento')
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "refs/heads/$TargetBranch" `
+                -GatedBranches (Get-TemplateDefault $Template 'titleGateBranches') -Mode $Mode -PrTitle "Aggiornamenti" -PrId "7"
+            Remove-TempRepo $repo
+            return $result
+        }
+    }
+
+    Context "Schema dello scenario: PR senza messaggi convenzionali verso '<Branch>' (<Template>)" -ForEach @(
+        foreach ($template in 'Modules/quality.yaml', 'quality-dotNet.yaml', 'quality-angular.yaml') {
+            foreach ($branch in 'dev', 'staging', 'main') { @{ Template = $template; Branch = $branch } }
+        }
+    ) {
+        It "Allora la build validation della PR fallisce" {
+            (Invoke-DefaultGate $Template $Branch).ExitCode | Should -Be 1
+        }
+    }
+
+    Context "Scenario: PR verso un ramo non gated (<Template>)" -ForEach @(
+        @{ Template = 'Modules/quality.yaml' }, @{ Template = 'quality-dotNet.yaml' }, @{ Template = 'quality-angular.yaml' }
+    ) {
+        It "Allora la build validation della PR non fallisce" {
+            (Invoke-DefaultGate $Template 'feature/x').ExitCode | Should -Be 0
+        }
+    }
+
+    Context "Scenario: consumer che sceglie l'avviso" {
+        BeforeAll { $result = Invoke-DefaultGate 'Modules/quality.yaml' 'dev' 'warn' }
+
+        It "Allora la build validation della PR non fallisce" {
+            $result.ExitCode | Should -Be 0
+        }
+
+        It "E la PR riceve l'avviso 'MISSING CONVENTIONAL COMMIT'" {
+            $result.Output | Should -Match "##vso\[task\.logissue type=warning\]MISSING CONVENTIONAL COMMIT"
+        }
+    }
+
+    It "Senza GATED_BRANCHES lo script protegge gli stessi rami dei template" {
+        $repo = New-PullRequestMergeRepo -Commits @('wip')
+        $results = foreach ($branch in 'dev', 'staging', 'main') {
+            (Invoke-VerifySemVer -RepoDir $repo -TargetBranch $branch -PrTitle "Aggiornamenti" -PrId "8").ExitCode
+        }
+        Remove-TempRepo $repo
+        $results | Should -Be @(1, 1, 1)
     }
 }

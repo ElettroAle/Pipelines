@@ -235,7 +235,7 @@ in Azure DevOps (Settings → Pipelines), non il path del file yaml.
 
 ## Conventional Commits — regola sulle PR
 
-Il quality gate segnala una PR solo se né il titolo né alcuno dei suoi commit inizia con un tipo ammesso da `cliff.toml`: con lo squash il titolo diventa il commit su `dev`, con un merge (promozioni, back-merge) contano i commit.
+Il quality gate segnala una PR solo se né il titolo né alcuno dei suoi commit inizia con un tipo ammesso da `cliff.toml`: con lo squash il titolo diventa il commit su `dev`, con un merge (promozioni, back-merge) contano i commit. Di default la build validation fallisce sulle PR verso `dev`, `staging` e `main`; `titleGateMode: warn` la rende un avviso, `off` la disattiva.
 
 | Prefisso | Version bump |
 |---|---|
