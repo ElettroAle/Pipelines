@@ -69,3 +69,5 @@ Write-Host "##vso[task.setvariable variable=currentTag]$newTag"
 Write-Host "##vso[task.setvariable variable=assemblyVersion]$($releaseCore.Major).$($releaseCore.Minor).$($releaseCore.Build).0"
 Write-Host "##vso[task.setvariable variable=gitHash]$shortSha"
 Write-Host "##vso[task.setvariable variable=computedArtifactName]$safeProjName-$envName-$newTag"
+Write-Host "##vso[build.updatebuildnumber]$newTag"
+if ($isRequireTag -eq "true") { Write-Host "##vso[build.addbuildtag]release" }

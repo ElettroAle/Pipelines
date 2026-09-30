@@ -8,8 +8,8 @@
     Ogni test costruisce un repository git temporaneo con la storia GitFlow
     desiderata (tag su staging, merge di promozione su main), esegue lo script e
     verifica il file delle note, il comando di upload del summary e l'esito.
-    Il wiki non viene mai contattato: i test coprono solo i casi in cui lo script
-    non deve scriverlo o in cui la scrittura fallisce senza fermare il publish.
+    Il wiki e' un HttpListener locale che tiene le pagine in memoria: nessuna
+    chiamata esce dalla macchina.
 #>
 
 BeforeAll {
@@ -202,5 +202,98 @@ Describe "New-ReleaseNotes — pubblicazione" {
         $res.ExitCode | Should -Be 0
         $res.Output | Should -Match "##vso\[task\.logissue type=warning\]Release notes non pubblicate"
         $res.Output | Should -Match "##vso\[task\.complete result=SucceededWithIssues;\]"
+    }
+}
+
+
+Describe "Funzionalità: Note di rilascio del repository AI" {
+
+    BeforeAll {
+        $probe = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+        $probe.Start(); $port = $probe.LocalEndpoint.Port; $probe.Stop()
+
+        $WikiPages = [hashtable]::Synchronized(@{})
+        $WikiListener = [System.Net.HttpListener]::new()
+        $WikiListener.Prefixes.Add("http://localhost:$port/")
+        $WikiListener.Start()
+        $WikiServer = Start-ThreadJob -ArgumentList $WikiListener, $WikiPages -ScriptBlock {
+            param($listener, $pages)
+            while ($listener.IsListening) {
+                try { $context = $listener.GetContext() } catch { break }
+                $pagePath = [uri]::UnescapeDataString(($context.Request.Url.Query -replace '^.*[?&]path=([^&]*).*$', '$1'))
+                $response = $context.Response
+                if ($context.Request.HttpMethod -eq 'PUT') {
+                    $body = [IO.StreamReader]::new($context.Request.InputStream).ReadToEnd() | ConvertFrom-Json
+                    $pages[$pagePath] = $body.content
+                    $response.StatusCode = 201
+                }
+                elseif ($pages.ContainsKey($pagePath)) {
+                    $bytes = [Text.Encoding]::UTF8.GetBytes((@{ content = $pages[$pagePath] } | ConvertTo-Json))
+                    $response.Headers['ETag'] = '"1"'
+                    $response.ContentType = 'application/json'
+                    $response.OutputStream.Write($bytes, 0, $bytes.Length)
+                }
+                else {
+                    $response.StatusCode = 404
+                }
+                $response.Close()
+            }
+        }
+
+        function Invoke-ProdPublish([string]$RepoDir) {
+            $env:SYSTEM_COLLECTIONURI = "http://localhost:$port/"
+            $env:SYSTEM_TEAMPROJECT = 'Aidea.Dxp'
+            $env:SYSTEM_ACCESSTOKEN = 'token-di-test'
+            try {
+                return Invoke-ReleaseNotes -RepoDir $RepoDir -Tag "1.4.0" -WikiPagePath "/Release notes/AI" -SourceBranch "refs/heads/main"
+            }
+            finally {
+                $env:SYSTEM_COLLECTIONURI = $env:SYSTEM_TEAMPROJECT = $env:SYSTEM_ACCESSTOKEN = $null
+            }
+        }
+
+        function Get-VersionSectionCount([string]$Version) {
+            return ([regex]::Matches([string]$WikiPages['/Release notes/AI'], "(?m)^## $([regex]::Escape($Version))( |$)")).Count
+        }
+
+        $AiRepo = New-TestRepo
+        Add-Commit $AiRepo "feat: nuova capacità"
+    }
+
+    AfterAll {
+        $WikiListener.Stop()
+        $WikiServer | Wait-Job -Timeout 10 | Remove-Job -Force
+        Remove-TestRepo $AiRepo
+    }
+
+    Context "Scenario: prima publish della versione" {
+        BeforeAll {
+            $WikiPages.Clear()
+            $EngineRun = Invoke-ProdPublish $AiRepo
+        }
+
+        It "Quando la publish di prod di Engine rilascia '1.4.0', la pubblicazione riesce" {
+            $EngineRun.Output | Should -Not -Match "SucceededWithIssues"
+        }
+
+        It "Allora la pagina '/Release notes/AI' contiene la sezione '1.4.0'" {
+            Get-VersionSectionCount "1.4.0" | Should -Be 1
+        }
+    }
+
+    Context "Scenario: seconda publish della stessa versione" {
+        BeforeAll {
+            $WikiPages.Clear()
+            Invoke-ProdPublish $AiRepo | Out-Null
+            $WorkerRun = Invoke-ProdPublish $AiRepo
+        }
+
+        It "Dato la pagina '/Release notes/AI' con la sezione '1.4.0', la publish di Worker riesce" {
+            $WorkerRun.Output | Should -Not -Match "SucceededWithIssues"
+        }
+
+        It "Allora la pagina '/Release notes/AI' contiene una sola sezione '1.4.0'" {
+            Get-VersionSectionCount "1.4.0" | Should -Be 1
+        }
     }
 }

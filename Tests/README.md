@@ -93,6 +93,7 @@ Invoke-Pester Tests/scripts/Verify-SemVer.Tests.ps1 -Output Detailed
 | `REQUIRE_TAG=true, HEAD=tag` | Nessun incremento se il tree è identico all'ultimo tag |
 | Scope e breaking | `fix(scope):`→patch, `feat(scope):`→minor, `feat(scope)!:`/`fix!:`/`BREAKING CHANGE:`→major, `chore(scope):` e messaggi liberi→patch |
 | Incremento più alto | Tra i commit dall'ultimo tag vince il più alto: `feat:` poi `fix:` → minor, `feat!:` poi `fix:` → major |
+| Versione nel run di publish | Build number uguale alla versione calcolata (rilascio, rilascio senza modifiche, prerelease); tag `release` solo sulle publish di rilascio |
 | Prefisso ADO | `Merged PR <id>: <titolo convenzionale>` (messaggio di default di Azure DevOps, anche in squash) riconosciuto come il titolo senza prefisso |
 | Sanitizzazione PROJECT_NAME | Punti→trattini, lowercase |
 
@@ -120,6 +121,7 @@ nessun loader dinamico `ld-linux`. La cache è separata per archivio.
 |---|---|
 | Contenuto | Gruppi per tipo con scope e PR, messaggi liberi in "Altre modifiche", range dal tag del primo parent con salto dei merge, link alla PR per remote ADO e GitHub |
 | Pubblicazione | Upload nel summary, wiki non toccato fuori da main, errore di generazione che non ferma il publish |
+| Note di rilascio del repository AI | Su un wiki locale finto: la prima publish crea la sezione della versione, la seconda publish della stessa versione (Engine e Worker) non la duplica |
 
 #### `ScenarioCoverage.Tests.ps1` (14 suite, 25 test)
 
