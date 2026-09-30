@@ -38,18 +38,28 @@ function New-DetachedCommit {
     return (git commit-tree 'HEAD^{tree}' -p HEAD -m $Message).Trim()
 }
 
-function Complete-Rejected {
-    param([string]$Subject)
+# Sul merge ref di una PR HEAD^1 e' il ramo di destinazione: il range porta il titolo e
+# i commit della PR. Con un merge commit contano i commit, con lo squash il titolo.
+function Get-EvaluatedRange {
+    param([string]$TitleCommit)
 
-    $reason = "MISSING CONVENTIONAL COMMIT: il titolo deve iniziare con un tipo ammesso da cliff.toml (feat, fix, chore, docs, refactor, perf, test, ci, build, style, revert), con scope opzionale e '!' per le breaking change (es. 'fix(api):', 'feat(api)!:')"
+    $parents = @((git rev-list --parents -n 1 HEAD).Trim().Split(' '))
+    if ($parents.Count -eq 3) { return "HEAD^1..$TitleCommit" }
+    return "$TitleCommit^..$TitleCommit"
+}
+
+function Complete-Rejected {
+    param([string[]]$Messages)
+
+    $reason = "MISSING CONVENTIONAL COMMIT: ne' il titolo ne' alcun commit della PR inizia con un tipo ammesso da cliff.toml (feat, fix, chore, docs, refactor, perf, test, ci, build, style, revert), con scope opzionale e '!' per le breaking change (es. 'fix(api):', 'feat(api)!:')"
+    $level = if ($gateMode -eq 'warn') { 'warning' } else { 'error' }
+    Write-Host "##vso[task.logissue type=$level]$reason"
+    Write-Host "Messaggi valutati:"
+    $Messages | ForEach-Object { Write-Host "- $_" }
     if ($gateMode -eq 'warn') {
-        Write-Host "##vso[task.logissue type=warning]$reason"
-        Write-Host "Current message: '$Subject'"
         Write-Host "##vso[task.complete result=SucceededWithIssues;]"
         exit 0
     }
-    Write-Host "##[error]$reason"
-    Write-Host "Current message: '$Subject'"
     exit 1
 }
 
@@ -74,9 +84,9 @@ else {
 }
 
 $commit = New-DetachedCommit $subject
-$unclassified = Get-UnclassifiedCommitMessages "$commit^..$commit"
-if ($unclassified.Count -gt 0) {
-    Complete-Rejected $subject
+$evaluated = Get-ClassifiedCommits (Get-EvaluatedRange $commit)
+if (-not ($evaluated | Where-Object Conventional)) {
+    Complete-Rejected $evaluated.Message
 }
 
 Write-Host "##[section]Validation successful: Conventional Commit found."

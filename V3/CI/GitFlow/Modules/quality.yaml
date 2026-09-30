@@ -3,8 +3,9 @@
 # Template riusabile per la Quality gate con governance GitFlow.
 #
 # Rispetto alla versione agnostica (CI/Common/quality.yaml), aggiunge:
-#   - Job ValidatePRTitle: verifica con git-cliff che il titolo della PR rispetti
-#     i Conventional Commits, sulle PR verso i branch di titleGateBranches
+#   - Job ValidatePRTitle: verifica con git-cliff che il titolo della PR o almeno uno
+#     dei suoi commit rispetti i Conventional Commits, sulle PR verso i branch di
+#     titleGateBranches
 #
 # I passi tech-specific (build, test, coverage) vengono iniettati
 # tramite il parametro `buildAndTestSteps`.
@@ -97,7 +98,6 @@ stages:
             env:
               TARGET_BRANCH: $(System.PullRequest.TargetBranch)
               GATED_BRANCHES: ${{ parameters.titleGateBranches }}
-              ADDITIONAL_TAG_BRANCHES: $(additionalRequiredTaggingBranches)
               GATE_MODE: ${{ parameters.titleGateMode }}
               PR_ID: $(System.PullRequest.PullRequestId)
               SYSTEM_ACCESSTOKEN: $(System.AccessToken)
