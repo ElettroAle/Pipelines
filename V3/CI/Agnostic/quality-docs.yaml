@@ -1,0 +1,46 @@
+# ── CI Agnostic: Quality Docs ─────────────────────────────────────────────────
+#
+# Quality gate per i repository di documentazione: Gitleaks e verifica del
+# corpus degli Architecture Decision Records.
+#
+# Il repo consumer dichiara il repository resource con alias `infrastructure`:
+# lo script di verifica vive in questo repo.
+#
+# Parametri
+# ─────────
+#   checkoutRepository → repository da fare checkout [REQUIRED]
+#   adrMode            → off | warn | enforce (default: enforce)
+#   decisionsDirectory → cartella degli ADR (default: docs/decisions)
+#   pool               → pool del job (default: hosted ubuntu-latest, richiesto da Gitleaks via docker)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: checkoutRepository
+    type: string
+
+  - name: adrMode
+    type: string
+    default: 'enforce'
+    values: ['off', 'warn', 'enforce']
+
+  - name: decisionsDirectory
+    type: string
+    default: 'docs/decisions'
+
+  - name: pool
+    type: object
+    default:
+      vmImage: 'ubuntu-latest'
+
+stages:
+  - template: ../Common/quality.yaml
+    parameters:
+      checkoutRepository: ${{ parameters.checkoutRepository }}
+      pool: ${{ parameters.pool }}
+      checkoutPipelineTemplates: true
+      buildAndTestSteps:
+        - template: ../Common/Steps/adr-verify.yaml
+          parameters:
+            mode: ${{ parameters.adrMode }}
+            decisionsDirectory: ${{ parameters.decisionsDirectory }}

@@ -1,0 +1,44 @@
+# ── CI Step: Architecture Decision Records ────────────────────────────────────
+#
+# Verifica il corpus degli ADR del repository (V3/CI/Scripts/Test-AdrCorpus.ps1):
+# nome NNNN-titolo.md, stato ammesso, sezioni obbligatorie, sostituzioni reciproche,
+# ADR accepted non modificati rispetto al ramo di destinazione della PR.
+#
+# Riusato da:
+#   CI/Agnostic/quality-docs.yaml
+#
+# Parametri
+# ─────────
+#   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
+#   decisionsDirectory → cartella degli ADR, relativa ai sorgenti (default: docs/decisions)
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: mode
+    type: string
+    default: 'enforce'
+    values: ['off', 'warn', 'enforce']
+
+  - name: decisionsDirectory
+    type: string
+    default: 'docs/decisions'
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: PowerShell@2
+    displayName: 'Architecture decisions (${{ parameters.mode }})'
+    inputs:
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Test-AdrCorpus.ps1'
+      workingDirectory: '$(Build.SourcesDirectory)'
+      pwsh: true
+    env:
+      GATE_MODE: ${{ parameters.mode }}
+      DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}
+      TARGET_BRANCH: $(System.PullRequest.TargetBranch)
