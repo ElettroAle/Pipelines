@@ -78,10 +78,16 @@ function Get-ComparableContent($Decision) {
     return ($kept -join "`n").Trim()
 }
 
+function Test-TargetBranchReadable {
+    git rev-parse --verify --quiet "origin/$targetBranch^{commit}" > $null
+    $isReadable = $LASTEXITCODE -eq 0
+    $global:LASTEXITCODE = 0
+    return $isReadable
+}
+
 function Get-BaseDecisions {
     $baseRef = "origin/$targetBranch"
-    $paths = git ls-tree -r --name-only $baseRef -- $decisionsDirectory 2>$null
-    if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0; return $null }
+    $paths = git ls-tree -r --name-only $baseRef -- $decisionsDirectory
     return @($paths | Where-Object { (Split-Path $_ -Leaf) -match $DecisionFilePattern } | ForEach-Object {
             ConvertFrom-Decision -Id ([IO.Path]::GetFileNameWithoutExtension($_)) -Content ((git show "${baseRef}:$_") -join "`n")
         })
@@ -89,13 +95,12 @@ function Get-BaseDecisions {
 
 function Test-AcceptedUnchanged([hashtable]$ById) {
     if (-not $targetBranch) { return }
-    $baseDecisions = Get-BaseDecisions
-    if ($null -eq $baseDecisions) {
+    if (-not (Test-TargetBranchReadable)) {
         Write-Host "##[warning]Ramo di destinazione origin/$targetBranch non leggibile: immutabilita' non verificata"
         return
     }
 
-    $baseDecisions | Where-Object { $_.Fields['status'] -eq 'accepted' } | ForEach-Object {
+    Get-BaseDecisions | Where-Object { $_.Fields['status'] -eq 'accepted' } | ForEach-Object {
         $current = $ById[$_.Id]
         if (-not $current -or (Get-ComparableContent $current) -ne (Get-ComparableContent $_)) {
             "$($_.Id): decisione accettata non modificabile, si sostituisce con una nuova decisione"
