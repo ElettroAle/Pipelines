@@ -196,6 +196,30 @@ extends:
   job BuildAndTest ne fa il checkout in `$(Pipeline.Workspace)/pipeline-templates`, fuori dai sorgenti.
   Senza file `.feature` lo step passa senza verificare nulla.
 
+### Verifica degli Architecture Decision Records (quality-docs)
+
+Per un repository di documentazione con gli ADR in formato MADR, con le intestazioni in italiano.
+
+```yaml
+extends:
+  template: V3/CI/Agnostic/quality-docs.yaml@infrastructure
+  parameters:
+    checkoutRepository: self
+    adrMode: 'enforce'                  # 'off' | 'warn' | 'enforce' (default)
+    decisionsDirectory: 'docs/decisions'
+```
+
+- **Decisione ben formata.** File `NNNN-titolo.md` con numero univoco, frontmatter con `status` fra
+  `proposed`, `accepted`, `rejected`, `deprecated`, `superseded`, sezioni `## Contesto e problema`,
+  `## Opzioni considerate`, `## Esito della decisione`. Gli altri file della cartella (README, template)
+  non si verificano.
+- **Sostituzione.** La nuova decisione dichiara `supersedes: <id>`; la sostituita passa a
+  `status: superseded` con `superseded-by: <id>`. Ognuna deve nominare l'altra.
+- **Immutabilità.** Sulle PR un ADR `accepted` sul ramo di destinazione non si modifica né si
+  elimina: cambiano solo `status` e `superseded-by`.
+- **Requisiti.** Il repo dichiara il repository resource con alias `infrastructure`; pool Linux
+  (Gitleaks gira in docker).
+
 ---
 
 ## Test Suite
@@ -205,7 +229,7 @@ La libreria include una suite di test a 2 livelli che gira su GitHub Actions sen
 | Livello | Tool | Cosa verifica |
 |---|---|---|
 | 1 — Static Analysis | Python (`yamllint`, script custom) | Sintassi YAML, riferimenti a template esistenti, contratti parametri |
-| 2 — Script Unit Tests | PowerShell Pester 5 | Logica di `Set-Versioning.ps1`, `Verify-SemVer.ps1`, `New-ReleaseNotes.ps1`, `Test-PublishedArtifact.ps1` e `ScenarioCoverage.cs` |
+| 2 — Script Unit Tests | PowerShell Pester 5 | Logica di `Set-Versioning.ps1`, `Verify-SemVer.ps1`, `New-ReleaseNotes.ps1`, `Test-PublishedArtifact.ps1`, `Test-AdrCorpus.ps1` e `ScenarioCoverage.cs` |
 
 ### Esecuzione locale
 
@@ -245,6 +269,7 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | `CI/Scripts/Set-Versioning.ps1` | Calcola la versione con `git cliff --bumped-version`: tag Git su staging/main, prerelease `x.y.z-dev.<BuildId>` senza tag altrove; setta `currentTag`, `assemblyVersion`, `gitHash`, `computedArtifactName`; usa la versione come build number del run e marca con il tag `release` le publish di rilascio |
 | `CI/Scripts/New-ReleaseNotes.ps1` | Release notes dal tag del rilascio precedente sullo stesso ramo: summary della run e, su main, pagina wiki |
 | `CI/Scripts/Test-PublishedArtifact.ps1` | Prima dell'upload dell'artifact negli orchestratori GitFlow e TrunkFlow: se la run lo ha già pubblicato (rerun dello stage) setta `artifactAlreadyPublished` e l'upload si salta; se la verifica non riesce l'upload procede |
+| `CI/Scripts/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, sostituzioni reciproche, ADR `accepted` non modificati rispetto al ramo di destinazione della PR |
 | `CI/Scripts/ScenarioCoverage.cs` | File-based app .NET 10: verifica che ogni scenario dei `.feature` sia stato eseguito e superato, leggendo i Cucumber Messages del runner BDD |
 
 ---

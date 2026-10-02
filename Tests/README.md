@@ -19,6 +19,7 @@ Tests/
 │   ├── Verify-SemVer.Tests.ps1
 │   ├── New-ReleaseNotes.Tests.ps1
 │   ├── Test-PublishedArtifact.Tests.ps1
+│   ├── Test-AdrCorpus.Tests.ps1
 │   ├── GitCliff.Tests.ps1
 │   └── ScenarioCoverage.Tests.ps1
 ├── fixtures/
@@ -134,6 +135,15 @@ L'API Build è un HttpListener locale con gli artifact della run in memoria.
 |---|---|
 | Rerun dello stage di publish con artifact già pubblicato | Rerun dopo un caricamento riuscito: upload saltato e dichiarato nel log; prima esecuzione: upload; API in errore: upload con warning |
 | Interrogazione dell'API | Artifact della run corrente con il token della pipeline, nome esatto, step mai fallito |
+
+#### `Test-AdrCorpus.Tests.ps1`
+
+Ogni test costruisce un repository con un bare repo come origin: il corpus di partenza su `main`, la PR su un ramo.
+
+| Suite | Scenario testato |
+|---|---|
+| Verifica del corpus delle decisioni architetturali | Decisione ben formata; stato non ammesso, numero duplicato, sezione mancante, sostituzione non reciproca; ADR accepted riscritto e sostituito; modalità `warn` |
+| Regole del corpus | ADR accepted eliminato, ADR proposed riscrivibile, superseded-by verso una decisione inesistente, file senza frontmatter, file non numerati ignorati, run fuori da una PR, modalità `off`, una segnalazione per difetto |
 
 #### `ScenarioCoverage.Tests.ps1` (14 suite, 25 test)
 

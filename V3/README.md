@@ -24,7 +24,8 @@ V3/
 │   │   ├── publish-dotNet.yaml
 │   │   ├── publish-angular.yaml
 │   │   ├── quality-dotNet.yaml
-│   │   └── quality-angular.yaml
+│   │   ├── quality-angular.yaml
+│   │   └── quality-docs.yaml
 │   │
 │   ├── GitFlow/                # Entry point con governance GitFlow
 │   │   ├── Modules/            # Orchestratori specifici GitFlow
@@ -91,6 +92,7 @@ Nessuna governance Git. Usato per ambienti senza SemVer o tagging.
 | `CI/Agnostic/publish-angular.yaml` | Build + Publish Angular, artifact nominato `{progetto}-{env}` |
 | `CI/Agnostic/quality-dotNet.yaml` | Quality gate .NET (Gitleaks + Test + Coverage) |
 | `CI/Agnostic/quality-angular.yaml` | Quality gate Angular (Gitleaks + Build check) |
+| `CI/Agnostic/quality-docs.yaml` | Quality gate documentazione (Gitleaks + verifica degli ADR) |
 | `CD/Agnostic/deploy-azure-appService.yaml` | Download artifact CI + deploy su Azure App Service |
 | `CD/Agnostic/deploy-angular-staticWebApp.yaml` | Download artifact CI + deploy su Azure Static Web Apps |
 
