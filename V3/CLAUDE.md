@@ -154,6 +154,7 @@ I test usano un **bare repo locale** come fake remote. L'unico accesso di rete Ã
 | `CI/Scripts/Verify-SemVer.ps1` | Livello 1 + Livello 2 (`Verify-SemVer.Tests.ps1`) |
 | `CI/Scripts/cliff.toml`, `CI/Scripts/GitCliff.ps1` | Livello 1 + Livello 2 (`GitCliff.Tests.ps1` + `Verify-SemVer.Tests.ps1` + `Set-Versioning.Tests.ps1` + `New-ReleaseNotes.Tests.ps1`) |
 | `CI/Scripts/New-ReleaseNotes.ps1` | Livello 1 + Livello 2 (`New-ReleaseNotes.Tests.ps1`) |
+| `CI/Scripts/Test-PublishedArtifact.ps1` | Livello 1 + Livello 2 (`Test-PublishedArtifact.Tests.ps1`) |
 | `CI/Scripts/ScenarioCoverage.cs` | Livello 1 + Livello 2 (`ScenarioCoverage.Tests.ps1`, richiede .NET SDK 10) |
 
 I workflow GitHub Actions replicano questi stessi check automaticamente su ogni push.

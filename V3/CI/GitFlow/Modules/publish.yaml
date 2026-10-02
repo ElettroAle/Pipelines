@@ -128,8 +128,17 @@ stages:
 
                 - ${{ parameters.publishSteps }}
 
+                - task: PowerShell@2
+                  displayName: 'Check Published Artifact'
+                  inputs:
+                    filePath: '$(Build.SourcesDirectory)/infrastructure/V3/CI/Scripts/Test-PublishedArtifact.ps1'
+                  env:
+                    ARTIFACT_NAME: $(computedArtifactName)
+                    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
                 - task: PublishPipelineArtifact@1
                   displayName: 'Final Artifact Upload'
+                  condition: and(succeeded(), ne(variables['artifactAlreadyPublished'], 'true'))
                   inputs:
                     targetPath: '$(Build.ArtifactStagingDirectory)/publish'
                     artifact: '$(computedArtifactName)'
