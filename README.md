@@ -205,7 +205,7 @@ La libreria include una suite di test a 2 livelli che gira su GitHub Actions sen
 | Livello | Tool | Cosa verifica |
 |---|---|---|
 | 1 — Static Analysis | Python (`yamllint`, script custom) | Sintassi YAML, riferimenti a template esistenti, contratti parametri |
-| 2 — Script Unit Tests | PowerShell Pester 5 | Logica di `Set-Versioning.ps1`, `Verify-SemVer.ps1`, `New-ReleaseNotes.ps1` e `ScenarioCoverage.cs` |
+| 2 — Script Unit Tests | PowerShell Pester 5 | Logica di `Set-Versioning.ps1`, `Verify-SemVer.ps1`, `New-ReleaseNotes.ps1`, `Test-PublishedArtifact.ps1` e `ScenarioCoverage.cs` |
 
 ### Esecuzione locale
 
@@ -244,6 +244,7 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | `CI/Scripts/Verify-SemVer.ps1` | Gate sui Conventional Commits delle PR verso i branch configurati: segnala solo se né il titolo né alcun commit della PR è convenzionale (senza PR, l'ultimo commit non-merge); modalità `off`/`warn`/`enforce`, di default `enforce` su `dev`, `staging` e `main` |
 | `CI/Scripts/Set-Versioning.ps1` | Calcola la versione con `git cliff --bumped-version`: tag Git su staging/main, prerelease `x.y.z-dev.<BuildId>` senza tag altrove; setta `currentTag`, `assemblyVersion`, `gitHash`, `computedArtifactName`; usa la versione come build number del run e marca con il tag `release` le publish di rilascio |
 | `CI/Scripts/New-ReleaseNotes.ps1` | Release notes dal tag del rilascio precedente sullo stesso ramo: summary della run e, su main, pagina wiki |
+| `CI/Scripts/Test-PublishedArtifact.ps1` | Prima dell'upload dell'artifact negli orchestratori GitFlow e TrunkFlow: se la run lo ha già pubblicato (rerun dello stage) setta `artifactAlreadyPublished` e l'upload si salta; se la verifica non riesce l'upload procede |
 | `CI/Scripts/ScenarioCoverage.cs` | File-based app .NET 10: verifica che ogni scenario dei `.feature` sia stato eseguito e superato, leggendo i Cucumber Messages del runner BDD |
 
 ---

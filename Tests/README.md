@@ -18,6 +18,7 @@ Tests/
 │   ├── Set-Versioning.Tests.ps1
 │   ├── Verify-SemVer.Tests.ps1
 │   ├── New-ReleaseNotes.Tests.ps1
+│   ├── Test-PublishedArtifact.Tests.ps1
 │   ├── GitCliff.Tests.ps1
 │   └── ScenarioCoverage.Tests.ps1
 ├── fixtures/
@@ -124,6 +125,15 @@ nessun loader dinamico `ld-linux`. La cache è separata per archivio.
 | Contenuto | Gruppi per tipo con scope e PR, messaggi liberi in "Altre modifiche", range dal tag del primo parent con salto dei merge, link alla PR per remote ADO e GitHub |
 | Pubblicazione | Upload nel summary, wiki non toccato fuori da main, errore di generazione che non ferma il publish |
 | Note di rilascio del repository AI | Su un wiki locale finto: la prima publish crea la sezione della versione, la seconda publish della stessa versione (Engine e Worker) non la duplica |
+
+#### `Test-PublishedArtifact.Tests.ps1`
+
+L'API Build è un HttpListener locale con gli artifact della run in memoria.
+
+| Suite | Scenario testato |
+|---|---|
+| Rerun dello stage di publish con artifact già pubblicato | Rerun dopo un caricamento riuscito: upload saltato e dichiarato nel log; prima esecuzione: upload; API in errore: upload con warning |
+| Interrogazione dell'API | Artifact della run corrente con il token della pipeline, nome esatto, step mai fallito |
 
 #### `ScenarioCoverage.Tests.ps1` (14 suite, 25 test)
 
