@@ -232,6 +232,19 @@ Describe "Test-AdrCorpus — regole del corpus" {
         $res.Output | Should -Not -Match 'non leggibile'
     }
 
+    It "La prima decisione del corpus non fa segnalare il ramo di destinazione come non leggibile" {
+        $res = Invoke-AdrCheck -PullRequest @{ '0001-esempio' = (New-Decision -Status proposed) }
+
+        $res.ExitCode | Should -Be 0
+        $res.Output | Should -Not -Match 'non leggibile'
+    }
+
+    It "Un ramo di destinazione non recuperato dal checkout lascia l'immutabilita' non verificata" {
+        $res = Invoke-AdrCheck -TargetBranch 'refs/heads/inesistente' -PullRequest @{ '0001-esempio' = (New-Decision -Status proposed) }
+
+        $res.Output | Should -Match "origin/inesistente non leggibile"
+    }
+
     It "Con la modalita' 'off' non si verifica nulla" {
         $res = Invoke-AdrCheck -Mode off -PullRequest @{ '0008-esempio' = (New-Decision -Status approvata) }
 
