@@ -22,23 +22,104 @@ function Get-ReleaseRange {
     return "$previousTag..HEAD"
 }
 
-function Get-PullRequestUrlBase {
+$EntrySeparator = " $([char]0x00B7) "
+$workItemsReadable = $true
+
+function Get-RepositoryUrl {
     $remote = (git remote get-url origin 2>$null)
     $global:LASTEXITCODE = 0
     if (-not $remote) { return $null }
 
     $remote = $remote.Trim() -replace '://[^/@]+@', '://' -replace '\.git$', ''
-    if ($remote -match '/_git/') { return "$remote/pullrequest/" }
-    if ($remote -match '^https://github\.com/') { return "$remote/pull/" }
+    if ($remote -match '/_git/' -or $remote -match '^https://github\.com/') { return $remote }
     return $null
 }
 
-function Add-PullRequestLinks {
-    param([string]$Markdown)
+function Get-PullRequestUrl {
+    param([string]$RepositoryUrl, [string]$PullRequestId)
 
-    $urlBase = Get-PullRequestUrlBase
-    if (-not $urlBase) { return $Markdown }
-    return [regex]::Replace($Markdown, '\(PR (\d+)\)', { param($m) "([PR $($m.Groups[1].Value)]($urlBase$($m.Groups[1].Value)))" })
+    if (-not $RepositoryUrl) { return $null }
+    if ($RepositoryUrl -match '/_git/') { return "$RepositoryUrl/pullrequest/$PullRequestId" }
+    return "$RepositoryUrl/pull/$PullRequestId"
+}
+
+# Un commit appartiene alla prima PR che lo ha integrato: i merge si visitano dal
+# piu' vecchio, cosi' la promozione fra ambienti non prende il posto della PR di sviluppo.
+function Get-PullRequestsByCommit {
+    param([string]$Range)
+
+    $pullRequests = @{}
+    $revisions = if ($Range) { $Range } else { 'HEAD' }
+    foreach ($merge in (git log --merges --topo-order --reverse --format="%P`t%s" $revisions)) {
+        $parents, $subject = $merge -split "`t", 2
+        $parents = $parents.Split(' ')
+        if ($subject -notmatch '^Merged PR (\d+):' -or $parents.Count -ne 2) { continue }
+
+        $pullRequestId = $Matches[1]
+        foreach ($commit in (git rev-list "$($parents[0])..$($parents[1])")) {
+            if (-not $pullRequests.ContainsKey($commit)) { $pullRequests[$commit] = $pullRequestId }
+        }
+    }
+    $global:LASTEXITCODE = 0
+    return $pullRequests
+}
+
+# Al primo errore si smette di chiedere: una API irraggiungibile costerebbe un timeout per PR.
+function Get-PullRequestWorkItems {
+    param([string]$RepositoryUrl, [string]$PullRequestId)
+
+    if (-not $script:workItemsReadable -or -not $env:SYSTEM_ACCESSTOKEN -or -not $env:SYSTEM_COLLECTIONURI) { return @() }
+    if ($RepositoryUrl -notmatch '/([^/]+)/_git/([^/]+)$') { return @() }
+
+    $uri = "$($env:SYSTEM_COLLECTIONURI)$($Matches[1])/_apis/git/repositories/$($Matches[2])/pullRequests/$PullRequestId/workitems?api-version=7.1"
+    try {
+        $response = Invoke-RestMethod -Uri $uri -Headers @{ Authorization = "Bearer $($env:SYSTEM_ACCESSTOKEN)" } -TimeoutSec 15 -UseBasicParsing
+        return @($response.value | ForEach-Object { [string]$_.id })
+    }
+    catch {
+        $script:workItemsReadable = $false
+        Write-Host "##vso[task.logissue type=warning]Work item delle PR non letti, le note escono senza: $($_.Exception.Message)"
+        return @()
+    }
+}
+
+function Format-Link {
+    param([string]$Label, [string]$Url)
+
+    if ($Url) { return "[$Label]($Url)" }
+    return $Label
+}
+
+function Format-Entry {
+    param([string]$Text, [string]$Commit, [string]$PullRequestId, [string]$RepositoryUrl, [hashtable]$WorkItemsByPullRequest)
+
+    $commitUrl = if ($RepositoryUrl) { "$RepositoryUrl/commit/$Commit" } else { $null }
+    $parts = @($Text, (Format-Link $Commit.Substring(0, 7) $commitUrl))
+    if (-not $PullRequestId) { return $parts -join $EntrySeparator }
+
+    $parts += Format-Link "PR $PullRequestId" (Get-PullRequestUrl $RepositoryUrl $PullRequestId)
+    if (-not $WorkItemsByPullRequest.ContainsKey($PullRequestId)) {
+        $WorkItemsByPullRequest[$PullRequestId] = Get-PullRequestWorkItems $RepositoryUrl $PullRequestId
+    }
+    $workItems = @($WorkItemsByPullRequest[$PullRequestId] | Where-Object { $Text -notmatch "#$_\b" } | ForEach-Object { "#$_" })
+    if ($workItems.Count -gt 0) { $parts += $workItems -join ' ' }
+    return $parts -join $EntrySeparator
+}
+
+# Il template di cliff.toml chiude ogni voce con l'hash del commit in un commento
+# HTML; il '(PR N)' in coda e' quello del messaggio di squash di Azure DevOps.
+function Add-EntryLinks {
+    param([string]$Markdown, [string]$Range)
+
+    $repositoryUrl = Get-RepositoryUrl
+    $pullRequestsByCommit = Get-PullRequestsByCommit $Range
+    $workItemsByPullRequest = @{}
+    return [regex]::Replace($Markdown, '(?m)^(.*?)(?: \(PR (\d+)\))? <!-- commit:([0-9a-f]+) -->(\r?)$', {
+            param($m)
+            $commit = $m.Groups[3].Value
+            $pullRequestId = if ($m.Groups[2].Success) { $m.Groups[2].Value } else { $pullRequestsByCommit[$commit] }
+            (Format-Entry $m.Groups[1].Value $commit $pullRequestId $repositoryUrl $workItemsByPullRequest) + $m.Groups[4].Value
+        })
 }
 
 function Invoke-WikiRequest {
@@ -105,7 +186,7 @@ function Publish-WikiReleaseNotes {
 try {
     $range = Get-ReleaseRange
     Write-Host "Range delle release notes: $(if ($range) { $range } else { 'intera storia' })"
-    $markdown = Add-PullRequestLinks (Get-ReleaseNotesMarkdown -Range $range -Tag $releaseTag)
+    $markdown = Add-EntryLinks (Get-ReleaseNotesMarkdown -Range $range -Tag $releaseTag) $range
 
     New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
     $notesPath = Join-Path $outputDir 'Release notes.md'
