@@ -123,8 +123,9 @@ nessun loader dinamico `ld-linux`. La cache è separata per archivio.
 
 | Suite | Scenario testato |
 |---|---|
-| Contenuto | Gruppi per tipo con scope e PR, messaggi liberi in "Altre modifiche", range dal tag del primo parent con salto dei merge, link alla PR per remote ADO e GitHub |
+| Contenuto | Gruppi per tipo con scope e PR, messaggi liberi in "Altre modifiche", range dal tag del primo parent con salto dei merge |
 | Pubblicazione | Upload nel summary, wiki non toccato fuori da main, errore di generazione che non ferma il publish |
+| Collegamenti nelle note di rilascio | Ogni voce con link al commit e alla PR che lo ha integrato (merge o squash, mai la PR di promozione), work item della PR letti da un'API locale finta, note pubblicate anche se l'API non risponde, link GitHub |
 | Note di rilascio del repository AI | Su un wiki locale finto: la prima publish crea la sezione della versione, la seconda publish della stessa versione (Engine e Worker) non la duplica |
 
 #### `Test-PublishedArtifact.Tests.ps1`

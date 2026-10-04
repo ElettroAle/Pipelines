@@ -93,9 +93,9 @@ Describe "New-ReleaseNotes — contenuto" {
 
         $res.ExitCode | Should -Be 0
         $res.Notes | Should -Match "## 2\.0\.0"
-        $res.Notes | Should -Match "### Breaking\s+- \*\*worker\*\*: nuova coda \(PR 13\)"
-        $res.Notes | Should -Match "### Fix\s+- \*\*api\*\*: null check \(PR 12\)"
-        $res.Notes | Should -Match "### Manutenzione\s+- readme \(PR 14\)"
+        $res.Notes | Should -Match "### Breaking\s+- \*\*worker\*\*: nuova coda · [0-9a-f]{7} · PR 13"
+        $res.Notes | Should -Match "### Fix\s+- \*\*api\*\*: null check · [0-9a-f]{7} · PR 12"
+        $res.Notes | Should -Match "### Manutenzione\s+- readme · [0-9a-f]{7} · PR 14"
         $res.Notes | Should -Not -Match "base"
     }
 
@@ -109,7 +109,7 @@ Describe "New-ReleaseNotes — contenuto" {
         $res = Invoke-ReleaseNotes -RepoDir $repo -Tag "1.0.1"
         Remove-TestRepo $repo
 
-        $res.Notes | Should -Match "### Altre modifiche\s+- sistemato il login \(PR 20\)"
+        $res.Notes | Should -Match "### Altre modifiche\s+- sistemato il login · [0-9a-f]{7} · PR 20"
     }
 
     It "Su main copre le versioni di staging promosse dall'ultimo rilascio e salta i merge" {
@@ -138,32 +138,6 @@ Describe "New-ReleaseNotes — contenuto" {
         $res.Notes | Should -Match "timeout"
         $res.Notes | Should -Not -Match "gia' in prod"
         $res.Notes | Should -Not -Match "Release 1\.1"
-    }
-
-    It "Remote Azure DevOps: il numero della PR diventa un link alla PR" {
-        $repo = New-TestRepo
-        Invoke-Git $repo @('remote', 'add', 'origin', 'https://Org@dev.azure.com/Org/Proj/_git/Repo')
-        Add-Commit $repo "chore: base"
-        Invoke-Git $repo @('tag', '1.0.0')
-        Add-Commit $repo "Merged PR 12: fix: null check"
-
-        $res = Invoke-ReleaseNotes -RepoDir $repo -Tag "1.0.1"
-        Remove-TestRepo $repo
-
-        $res.Notes | Should -Match ([regex]::Escape("([PR 12](https://dev.azure.com/Org/Proj/_git/Repo/pullrequest/12))"))
-    }
-
-    It "Remote GitHub: il link punta a /pull/<n>" {
-        $repo = New-TestRepo
-        Invoke-Git $repo @('remote', 'add', 'origin', 'https://github.com/Owner/Repo.git')
-        Add-Commit $repo "chore: base"
-        Invoke-Git $repo @('tag', '1.0.0')
-        Add-Commit $repo "Merged PR 7: feat: nuova"
-
-        $res = Invoke-ReleaseNotes -RepoDir $repo -Tag "1.1.0"
-        Remove-TestRepo $repo
-
-        $res.Notes | Should -Match ([regex]::Escape("([PR 7](https://github.com/Owner/Repo/pull/7))"))
     }
 }
 
@@ -294,6 +268,191 @@ Describe "Funzionalità: Note di rilascio del repository AI" {
 
         It "Allora la pagina '/Release notes/AI' contiene una sola sezione '1.4.0'" {
             Get-VersionSectionCount "1.4.0" | Should -Be 1
+        }
+    }
+}
+
+
+Describe "Funzionalità: Collegamenti nelle note di rilascio" {
+
+    BeforeAll {
+        $AdoRemote = 'https://Org@dev.azure.com/Org/Proj/_git/Repo'
+        $AdoRepoUrl = 'https://dev.azure.com/Org/Proj/_git/Repo'
+
+        $probe = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+        $probe.Start(); $port = $probe.LocalEndpoint.Port; $probe.Stop()
+
+        $PullRequestWorkItems = [hashtable]::Synchronized(@{ '1252' = @('1575', '1576') })
+        $WorkItemListener = [System.Net.HttpListener]::new()
+        $WorkItemListener.Prefixes.Add("http://localhost:$port/")
+        $WorkItemListener.Start()
+        $WorkItemServer = Start-ThreadJob -ArgumentList $WorkItemListener, $PullRequestWorkItems -ScriptBlock {
+            param($listener, $workItems)
+            while ($listener.IsListening) {
+                try { $context = $listener.GetContext() } catch { break }
+                $response = $context.Response
+                if ($context.Request.Url.AbsolutePath -match '^/Proj/_apis/git/repositories/Repo/pullRequests/(\d+)/workitems$') {
+                    $ids = @($workItems[$Matches[1]])
+                    $body = @{ count = $ids.Count; value = @($ids | ForEach-Object { @{ id = $_ } }) } | ConvertTo-Json -Depth 3
+                    $bytes = [Text.Encoding]::UTF8.GetBytes($body)
+                    $response.ContentType = 'application/json'
+                    $response.OutputStream.Write($bytes, 0, $bytes.Length)
+                }
+                else {
+                    $response.StatusCode = 404
+                }
+                $response.Close()
+            }
+        }
+
+        $closedProbe = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+        $closedProbe.Start(); $ClosedPort = $closedProbe.LocalEndpoint.Port; $closedProbe.Stop()
+
+        function Invoke-NotesWithWorkItemService([string]$RepoDir, [string]$CollectionUri) {
+            $env:SYSTEM_COLLECTIONURI = $CollectionUri
+            $env:SYSTEM_ACCESSTOKEN = 'token-di-test'
+            try { return Invoke-ReleaseNotes -RepoDir $RepoDir -Tag "1.1.0" }
+            finally { $env:SYSTEM_COLLECTIONURI = $env:SYSTEM_ACCESSTOKEN = $null }
+        }
+
+        function Get-NoteLine([string]$Notes, [string]$Text) {
+            return @($Notes -split "`n" | Where-Object { $_ -match [regex]::Escape($Text) })[0]
+        }
+
+        function Get-CommitId([string]$RepoDir, [string]$Subject) {
+            Push-Location $RepoDir
+            $id = git log --all --format='%H' --fixed-strings "--grep=$Subject"
+            Pop-Location
+            return @($id)[0]
+        }
+
+        function New-PullRequestMerge([string]$RepoDir, [string]$Branch, [string]$Into, [string]$Commit, [string]$MergeSubject) {
+            Invoke-Git $RepoDir @('checkout', '-q', '-b', $Branch, $Into)
+            Add-Commit $RepoDir $Commit
+            Invoke-Git $RepoDir @('checkout', '-q', $Into)
+            Invoke-Git $RepoDir @('merge', '-q', '--no-ff', $Branch, '-m', $MergeSubject)
+        }
+
+        function New-AdoRepo {
+            $repo = New-TestRepo
+            Invoke-Git $repo @('remote', 'add', 'origin', $AdoRemote)
+            Add-Commit $repo "chore: base"
+            Invoke-Git $repo @('tag', '1.0.0')
+            return $repo
+        }
+    }
+
+    AfterAll {
+        $WorkItemListener.Stop()
+        $WorkItemServer | Wait-Job -Timeout 10 | Remove-Job -Force
+    }
+
+    Context "Scenario: commit integrato con una PR in merge" {
+        BeforeAll {
+            $repo = New-AdoRepo
+            New-PullRequestMerge $repo 'feat/1575' 'main' 'fix(config): codici esatti' 'Merged PR 1252: [#1575 - Codici] Task #1576: codici esatti'
+            $commitId = Get-CommitId $repo 'fix(config): codici esatti'
+            $line = Get-NoteLine (Invoke-ReleaseNotes -RepoDir $repo -Tag "1.0.1").Notes 'codici esatti'
+            Remove-TestRepo $repo
+        }
+
+        It "Allora la voce 'codici esatti' ha il link al proprio commit" {
+            $line | Should -Match ([regex]::Escape("[$($commitId.Substring(0, 7))]($AdoRepoUrl/commit/$commitId)"))
+        }
+
+        It "E la voce 'codici esatti' ha il link alla PR 1252" {
+            $line | Should -Match ([regex]::Escape("[PR 1252]($AdoRepoUrl/pullrequest/1252)"))
+        }
+    }
+
+    Context "Scenario: commit integrato con una PR in squash" {
+        BeforeAll {
+            $repo = New-AdoRepo
+            Add-Commit $repo 'Merged PR 12: fix(api): null check'
+            $commitId = Get-CommitId $repo 'Merged PR 12: fix(api): null check'
+            $line = Get-NoteLine (Invoke-ReleaseNotes -RepoDir $repo -Tag "1.0.1").Notes 'null check'
+            Remove-TestRepo $repo
+        }
+
+        It "Allora la voce 'null check' ha il link al proprio commit" {
+            $line | Should -Match ([regex]::Escape("[$($commitId.Substring(0, 7))]($AdoRepoUrl/commit/$commitId)"))
+        }
+
+        It "E la voce 'null check' ha il link alla PR 12" {
+            $line | Should -Match ([regex]::Escape("[PR 12]($AdoRepoUrl/pullrequest/12)"))
+        }
+    }
+
+    Context "Scenario: commit arrivato in produzione con una promozione" {
+        BeforeAll {
+            $repo = New-AdoRepo
+            Invoke-Git $repo @('checkout', '-q', '-b', 'dev')
+            New-PullRequestMerge $repo 'feat/tema' 'dev' 'feat(fe): tema scuro' 'Merged PR 3: feat(fe): tema scuro'
+            Invoke-Git $repo @('checkout', '-q', 'main')
+            Invoke-Git $repo @('merge', '-q', '--no-ff', 'dev', '-m', 'Merged PR 101: Dev --> Prod')
+            $line = Get-NoteLine (Invoke-ReleaseNotes -RepoDir $repo -Tag "1.1.0" -SourceBranch "refs/heads/main").Notes 'tema scuro'
+            Remove-TestRepo $repo
+        }
+
+        It "Allora la voce 'tema scuro' ha il link alla PR 3" {
+            $line | Should -Match ([regex]::Escape("[PR 3]($AdoRepoUrl/pullrequest/3)"))
+        }
+
+        It "E la voce 'tema scuro' non ha il link alla PR 101" {
+            $line | Should -Not -Match 'PR 101'
+        }
+    }
+
+    Context "Scenario: work item collegati alla PR" {
+        BeforeAll {
+            $repo = New-AdoRepo
+            New-PullRequestMerge $repo 'feat/1575' 'main' 'fix(config): codici esatti' 'Merged PR 1252: codici esatti'
+            $line = Get-NoteLine (Invoke-NotesWithWorkItemService $repo "http://localhost:$port/").Notes 'codici esatti'
+            Remove-TestRepo $repo
+        }
+
+        It "Allora la voce dei commit della PR 1252 nomina i work item 1575 e 1576" {
+            $line | Should -Match '#1575 #1576\s*$'
+        }
+    }
+
+    Context "Scenario: work item non leggibili" {
+        BeforeAll {
+            $repo = New-AdoRepo
+            New-PullRequestMerge $repo 'feat/1575' 'main' 'fix(config): codici esatti' 'Merged PR 1252: codici esatti'
+            $res = Invoke-NotesWithWorkItemService $repo "http://localhost:$ClosedPort/"
+            $line = Get-NoteLine $res.Notes 'codici esatti'
+            Remove-TestRepo $repo
+        }
+
+        It "Allora le note sono pubblicate con i link ai commit e alle PR" {
+            $line | Should -Match ([regex]::Escape("($AdoRepoUrl/commit/"))
+            $line | Should -Match ([regex]::Escape("[PR 1252]($AdoRepoUrl/pullrequest/1252)"))
+        }
+
+        It "E la publish non riceve l'avviso 'Release notes non pubblicate'" {
+            $res.Output | Should -Not -Match 'Release notes non pubblicate'
+        }
+    }
+
+    Context "Scenario: repository su GitHub" {
+        BeforeAll {
+            $repo = New-TestRepo
+            Invoke-Git $repo @('remote', 'add', 'origin', 'https://github.com/Owner/Repo.git')
+            Add-Commit $repo "chore: base"
+            Invoke-Git $repo @('tag', '1.0.0')
+            Add-Commit $repo 'Merged PR 7: feat: nuova'
+            $commitId = Get-CommitId $repo 'Merged PR 7: feat: nuova'
+            $line = Get-NoteLine (Invoke-ReleaseNotes -RepoDir $repo -Tag "1.1.0").Notes 'nuova'
+            Remove-TestRepo $repo
+        }
+
+        It "Allora la voce 'nuova' ha il link al commit su GitHub" {
+            $line | Should -Match ([regex]::Escape("[$($commitId.Substring(0, 7))](https://github.com/Owner/Repo/commit/$commitId)"))
+        }
+
+        It "E la voce 'nuova' ha il link alla pull request 7 su GitHub" {
+            $line | Should -Match ([regex]::Escape("[PR 7](https://github.com/Owner/Repo/pull/7)"))
         }
     }
 }
