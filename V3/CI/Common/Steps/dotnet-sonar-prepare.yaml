@@ -51,6 +51,7 @@ steps:
   - ${{ if parameters.enableSonar }}:
     - task: SonarCloudPrepare@4
       displayName: 'SonarCloud Prepare'
+      retryCountOnTaskFailure: 2
       inputs:
         SonarCloud: '${{ parameters.sonarServiceConnection }}'
         organization: '${{ parameters.sonarOrganization }}'
