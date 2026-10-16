@@ -29,6 +29,15 @@
 #   ciSourceBranch           → branch CI da cui scaricare l'artifact
 #                              (default: '$(Build.SourceBranch)', override per trigger manuale
 #                               es. 'refs/heads/dev')
+#   stageName                → identificativo dello stage (default: 'Deploy'); distinto
+#                              per ogni servizio quando la pipeline ne distribuisce piu' d'uno
+#   packagePattern           → glob dello zip da distribuire nell'artifact
+#                              (default: '**/*.zip'); con piu' pacchetti nello stesso
+#                              artifact, es. '**/MyApp.Worker.zip'
+#   waitForPreviousStages    → false: lo stage parte senza attendere gli stage
+#                              precedenti, cosi' i deploy di piu' servizi vanno in
+#                              parallelo e il fallimento di uno non ferma gli altri
+#                              (default: true)
 #   appType                  → tipo di Function App
 #                              (default: 'functionAppLinux')
 #
@@ -67,17 +76,34 @@ parameters:
     default: 'functionAppLinux'
     # Valori: 'functionApp' (Windows) | 'functionAppLinux' (Linux)
 
+  - name: stageName
+    displayName: 'Identificativo dello stage'
+    type: string
+    default: 'Deploy'
+
+  - name: packagePattern
+    displayName: 'Glob dello zip da distribuire nell''artifact'
+    type: string
+    default: '**/*.zip'
+
+  - name: waitForPreviousStages
+    displayName: 'Attende gli stage precedenti'
+    type: boolean
+    default: true
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 stages:
-  - stage: Deploy
+  - stage: ${{ parameters.stageName }}
     displayName: 'Deploy su ${{ parameters.targetEnvironment }}'
+    ${{ if not(parameters.waitForPreviousStages) }}:
+      dependsOn: []
     jobs:
       - deployment: DeployFunctionApp
         displayName: 'Deploy BE — ${{ parameters.functionAppName }}'
         environment: '${{ parameters.targetEnvironment }}'
         # Pool self-hosted riusa la working directory tra run: senza clean, zip di
-        # run precedenti restano nel downloadPath e rompono il glob '**/*.zip'.
+        # run precedenti restano nel downloadPath e rompono il glob del pacchetto.
         workspace:
           clean: all
         strategy:
@@ -111,5 +137,5 @@ stages:
                   parameters:
                     azureServiceConnection: '${{ parameters.azureServiceConnection }}'
                     functionAppName: '${{ parameters.functionAppName }}'
-                    packagePath: '$(Pipeline.Workspace)/${{ parameters.ciPipelineResourceAlias }}/**/*.zip'
+                    packagePath: '$(Pipeline.Workspace)/${{ parameters.ciPipelineResourceAlias }}/${{ parameters.packagePattern }}'
                     appType: '${{ parameters.appType }}'

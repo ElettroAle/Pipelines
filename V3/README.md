@@ -94,6 +94,7 @@ Nessuna governance Git. Usato per ambienti senza SemVer o tagging.
 | `CI/Agnostic/quality-angular.yaml` | Quality gate Angular (Gitleaks + Build check) |
 | `CI/Agnostic/quality-docs.yaml` | Quality gate documentazione (Gitleaks + verifica degli ADR) |
 | `CD/Agnostic/deploy-azure-appService.yaml` | Download artifact CI + deploy su Azure App Service |
+| `CD/Agnostic/deploy-azure-functionApp.yaml` | Download artifact CI + deploy su Azure Function App |
 | `CD/Agnostic/deploy-angular-staticWebApp.yaml` | Download artifact CI + deploy su Azure Static Web Apps |
 
 ### GitFlow
@@ -187,6 +188,47 @@ extends:
   template: V3/CI/GitFlow/publish-dotNet.yaml@infrastructure
   parameters:
     projectName: 'MyApp.BackEnd'
+```
+
+### Esempio — Più progetti dallo stesso repository, deploy in parallelo
+
+La CI compila, prova e analizza una volta, calcola versione e tag una volta e pubblica ogni
+progetto in `publish/<progetto>/` dello stesso artifact:
+
+```yaml
+extends:
+  template: V3/CI/GitFlow/publish-dotNet.yaml@infrastructure
+  parameters:
+    projectName: 'MyApp'                     # checkout e nome dell'artifact
+    checkoutRepository: app_repo
+    targetRuntime: 'linux-x64'
+    buildProjects: '**/*.slnx'
+    publishProjects: ['MyApp.Api', 'MyApp.Worker']
+```
+
+La CD distribuisce ogni pacchetto in uno stage proprio; con `waitForPreviousStages: false`
+gli stage partono insieme e il fallimento di uno non ferma gli altri:
+
+```yaml
+stages:
+  - template: V3/CD/Agnostic/deploy-azure-appService.yaml@infrastructure
+    parameters:
+      projectName: 'MyApp.Api'
+      stageName: 'DeployApi'
+      packagePattern: '**/MyApp.Api.zip'
+      waitForPreviousStages: false
+      azureServiceConnection: 'sc-arm-myapp'
+      targetEnvironment: 'Development'
+      webAppName: 'app-myapp-api-dev'
+  - template: V3/CD/Agnostic/deploy-azure-functionApp.yaml@infrastructure
+    parameters:
+      projectName: 'MyApp.Worker'
+      stageName: 'DeployWorker'
+      packagePattern: '**/MyApp.Worker.zip'
+      waitForPreviousStages: false
+      azureServiceConnection: 'sc-arm-myapp'
+      targetEnvironment: 'Development'
+      functionAppName: 'func-myapp-worker-dev'
 ```
 
 ### Esempio — CD TrunkFlow Promote
