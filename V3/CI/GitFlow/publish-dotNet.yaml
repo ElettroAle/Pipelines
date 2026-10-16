@@ -8,6 +8,12 @@
 #   - Branch-conditional variable groups (dev/staging/main/feature)
 #   - Versione applicata alla build DotNet (/p:Version, /p:AssemblyVersion, ecc.)
 #
+# Piu' progetti dallo stesso repository: `publishProjects` elenca i progetti da
+# pubblicare. Build, test e Sonar girano una volta, versione e tag una volta; ogni
+# progetto finisce nella propria cartella dell'unico artifact
+# (publish/<progetto>/<progetto>.zip), da cui ogni deploy prende il proprio pacchetto.
+# Senza `publishProjects` si pubblica il solo `projectName`, come sempre.
+#
 # ─────────────────────────────────────────────────────────────────────────────
 
 parameters:
@@ -78,6 +84,17 @@ parameters:
     default:
       vmImage: 'ubuntu-latest'
 
+  # Progetti da pubblicare nello stesso artifact (nomi dei .csproj senza estensione).
+  # Vuoto: si pubblica il solo projectName.
+  - name: publishProjects
+    type: object
+    default: []
+
+  # Progetti da compilare (glob). Vuoto: il .csproj di projectName.
+  - name: buildProjects
+    type: string
+    default: ''
+
 variables:
   - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/dev') }}:
     - group: "development"
@@ -119,7 +136,7 @@ stages:
             sonarExtraProperties: ${{ parameters.sonarExtraProperties }}
         - template: ../Common/Steps/dotnet-build.yaml
           parameters:
-            projects: '**/${{ parameters.projectName }}.csproj'
+            projects: ${{ coalesce(parameters.buildProjects, format('**/{0}.csproj', parameters.projectName)) }}
             dotnetVersion: '10.0.x'
             buildConfiguration: 'Release'
         # I test girano solo ad analisi attiva: servono a produrre il cobertura
@@ -136,14 +153,27 @@ stages:
             sonarServiceConnection: ${{ parameters.sonarServiceConnection }}
 
       publishSteps:
-        - template: ../Common/Steps/dotnet-publish.yaml
-          parameters:
-            publishProject: '**/${{ parameters.projectName }}.csproj'
-            dotnetVersion: '10.0.x'
-            buildConfiguration: 'Release'
-            outputDirectory: '$(Build.ArtifactStagingDirectory)/publish'
-            targetRuntime: '${{ parameters.targetRuntime }}'
-            selfContained: '${{ parameters.selfContained }}'
-            versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(assemblyVersion) /p:FileVersion=$(assemblyVersion) /p:InformationalVersion="$(currentTag)+$(gitHash)"'
-            variableSubstitution: ${{ parameters.variableSubstitution }}
-            substitutionFolder: '${{ parameters.substitutionFolder }}'
+        - ${{ if eq(length(parameters.publishProjects), 0) }}:
+          - template: ../Common/Steps/dotnet-publish.yaml
+            parameters:
+              publishProject: '**/${{ parameters.projectName }}.csproj'
+              dotnetVersion: '10.0.x'
+              buildConfiguration: 'Release'
+              outputDirectory: '$(Build.ArtifactStagingDirectory)/publish'
+              targetRuntime: '${{ parameters.targetRuntime }}'
+              selfContained: '${{ parameters.selfContained }}'
+              versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(assemblyVersion) /p:FileVersion=$(assemblyVersion) /p:InformationalVersion="$(currentTag)+$(gitHash)"'
+              variableSubstitution: ${{ parameters.variableSubstitution }}
+              substitutionFolder: '${{ parameters.substitutionFolder }}'
+        - ${{ each project in parameters.publishProjects }}:
+          - template: ../Common/Steps/dotnet-publish.yaml
+            parameters:
+              publishProject: '**/${{ project }}.csproj'
+              dotnetVersion: '10.0.x'
+              buildConfiguration: 'Release'
+              outputDirectory: '$(Build.ArtifactStagingDirectory)/publish/${{ project }}'
+              targetRuntime: '${{ parameters.targetRuntime }}'
+              selfContained: '${{ parameters.selfContained }}'
+              versionArgs: '/p:Version=$(currentTag) /p:AssemblyVersion=$(assemblyVersion) /p:FileVersion=$(assemblyVersion) /p:InformationalVersion="$(currentTag)+$(gitHash)"'
+              variableSubstitution: ${{ parameters.variableSubstitution }}
+              substitutionFolder: '${{ parameters.substitutionFolder }}'
