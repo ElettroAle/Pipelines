@@ -16,9 +16,12 @@
 #   dotnetVersion      → versione SDK .NET                    (default: variabile $(dotnetVersion))
 #   projects           → path o glob pattern del/dei .csproj  (default: variabile $(publishProject))
 #   buildConfiguration → configurazione build                 (default: variabile $(buildConfiguration))
-#   selfContained      → forza /p:SelfContained               (default: false)
+#   selfContained      → fissa SelfContained per la build     (default: false)
 #                        Impostare esplicitamente per evitare che la pipeline variable
 #                        omonima venga interpretata da MSBuild come proprietà.
+#                        Passa come variabile d'ambiente, non come /p: una proprietà globale
+#                        viene tolta dall'SDK sui progetti referenziati, che su una solution
+#                        vengono così compilati due volte in parallelo sulla stessa obj.
 #   installSdk         → installa l'SDK prima della build     (default: true)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -62,4 +65,6 @@ steps:
       projects: '${{ parameters.projects }}'
       # dotnet build usa /m:1 di default: su una solution multi-progetto lascia
       # inutilizzati i core oltre il primo.
-      arguments: '--configuration ${{ parameters.buildConfiguration }} /p:SelfContained=${{ parameters.selfContained }} /m'
+      arguments: '--configuration ${{ parameters.buildConfiguration }} /m'
+    env:
+      SELFCONTAINED: '${{ parameters.selfContained }}'
