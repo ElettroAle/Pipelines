@@ -1,9 +1,10 @@
-# Lettura di una sezione Markdown della documentazione architetturale e misure di
-# leggibilita' del suo testo, per Test-Documentation.ps1.
+# Lettura delle sezioni Markdown di un documento e misure di leggibilita' del loro testo,
+# per gli script di verifica della documentazione.
 
 $ViewMarkerPattern = '^\s*<!--\s*vista:\s*([\w-]+)\s*-->\s*$'
 $CommentPattern = '^\s*<!--.*-->\s*$'
 $HeadingPattern = '^(#{1,6})\s+(.+?)\s*#*\s*$'
+$HeadingAttributesPattern = '\s*\{#[^}]*\}\s*$'
 $FencePattern = '^\s*```\s*([\w-]*)'
 $QuotePattern = '^\s*>\s?(.*)$'
 $TableSeparatorPattern = '^\s*\|[\s:|-]+\|\s*$'
@@ -91,8 +92,9 @@ function ConvertFrom-MarkdownSection([string]$Content) {
             . $flush
             $level = $Matches[1].Length
             $heading = $Matches[2]
-            if ($level -eq 1 -and -not $section.Title) { $section.Title = ConvertTo-PlainText $heading }
-            if ($level -eq 2) { $section.Parts += ConvertTo-PlainText $heading }
+            $name = ConvertTo-PlainText ($heading -replace $HeadingAttributesPattern, '')
+            if ($level -eq 1 -and -not $section.Title) { $section.Title = $name }
+            if ($level -eq 2) { $section.Parts += $name }
             $section.Anchors += ConvertTo-HeadingAnchor $heading
         }
         elseif ($line -match $QuotePattern) {
@@ -118,4 +120,15 @@ function ConvertFrom-MarkdownSection([string]$Content) {
     }
     . $flush
     return $section
+}
+
+# Le sezioni di un documento sono i file Markdown della sua cartella, in ordine di nome; una
+# sezione senza titolo si nomina con il suo file.
+function Get-DocumentSections([string]$Directory) {
+    if (-not (Test-Path $Directory -PathType Container)) { return @() }
+    return @(Get-ChildItem -Path $Directory -Filter '*.md' -File | Sort-Object Name | ForEach-Object {
+            $content = ConvertFrom-MarkdownSection ([IO.File]::ReadAllText($_.FullName))
+            $title = if ($content.Title) { $content.Title } else { $_.Name }
+            [pscustomobject]@{ File = $_; Title = $title; Content = $content }
+        })
 }

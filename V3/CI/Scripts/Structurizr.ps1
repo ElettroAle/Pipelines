@@ -1,4 +1,4 @@
-# Accesso alla Structurizr CLI per Test-Documentation.ps1: valida il modello C4
+# Accesso alla Structurizr CLI per Test-C4Model.ps1: valida il modello C4
 # scritto in Structurizr DSL e lo esporta in JSON.
 
 $StructurizrVersion = '2025.11.09'

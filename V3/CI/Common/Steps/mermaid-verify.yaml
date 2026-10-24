@@ -1,0 +1,55 @@
+# ── CI Step: Mermaid ──────────────────────────────────────────────────────────
+#
+# Diagrammi Mermaid delle sezioni di un documento (V3/CI/Scripts/Test-MermaidDiagrams.ps1):
+# ogni diagramma passa dal parser di Mermaid fissato da V3/CI/Scripts/mermaid/package-lock.json,
+# e uno non valido si segnala con file e riga. Il parser richiede Node.js.
+#
+# Riusato da:
+#   il consumer, nel parametro diagramSteps di CI/Agnostic/quality-arc42.yaml e
+#   CI/Agnostic/quality-docs.yaml
+#
+# Parametri
+# ─────────
+#   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
+#   docsDirectory      → cartella delle sezioni del documento (default: docs/architecture)
+#   nodeVersion        → versione di Node.js per il parser (default: 22.x)
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: mode
+    type: string
+    default: 'enforce'
+    values: ['off', 'warn', 'enforce']
+
+  - name: docsDirectory
+    type: string
+    default: 'docs/architecture'
+
+  - name: nodeVersion
+    type: string
+    default: '22.x'
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - ${{ if ne(parameters.mode, 'off') }}:
+    - task: UseNode@1
+      displayName: 'Install Node.js'
+      inputs:
+        version: ${{ parameters.nodeVersion }}
+
+  - task: PowerShell@2
+    displayName: 'Mermaid diagrams ${{ parameters.docsDirectory }} (${{ parameters.mode }})'
+    inputs:
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Test-MermaidDiagrams.ps1'
+      workingDirectory: '$(Build.SourcesDirectory)'
+      pwsh: true
+    env:
+      GATE_MODE: ${{ parameters.mode }}
+      DOCS_DIRECTORY: ${{ parameters.docsDirectory }}

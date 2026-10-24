@@ -3,9 +3,9 @@
 # In una PR si giudicano le sezioni cambiate, tutte se cambia la guida. Ogni rilievo nomina
 # la sezione e la regola violata.
 
+. "$PSScriptRoot/VerificationGate.ps1"
 . "$PSScriptRoot/MarkdownText.ps1"
 
-$gateMode = if ($env:GATE_MODE) { $env:GATE_MODE.ToLower() } else { 'enforce' }
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
 $guidePath = if ($env:STYLE_GUIDE) { $env:STYLE_GUIDE } else { 'docs/STYLE.md' }
 $glossaryFileName = $env:DOCS_GLOSSARY
@@ -50,10 +50,6 @@ sapere quali termini sono gia' raccolti li'; non giudichi il glossario.
 GUIDA DI STILE
 
 '@
-
-function New-Issue([string]$Scope, [string]$Reason, [string]$Detail) {
-    return "${Scope}: $Reason ($Detail)"
-}
 
 function Read-JudgeSetup {
     if (-not (Test-Path $guidePath -PathType Leaf)) { return @{ Issue = New-Issue $JudgeScope 'guida mancante' $guidePath } }
@@ -137,24 +133,4 @@ function Get-StyleIssues {
     }
 }
 
-function Complete-Verification([string[]]$Issues) {
-    if (-not $Issues) {
-        Write-Host "##[section]Stile del documento in $docsDirectory conforme alla guida"
-        exit 0
-    }
-
-    $level = if ($gateMode -eq 'warn') { 'warning' } else { 'error' }
-    $Issues | Select-Object -Unique | ForEach-Object { Write-Host "##vso[task.logissue type=$level]$_" }
-    if ($gateMode -eq 'warn') {
-        Write-Host "##vso[task.complete result=SucceededWithIssues;]"
-        exit 0
-    }
-    exit 1
-}
-
-if ($gateMode -eq 'off') {
-    Write-Host "Giudizio dello stile disattivato"
-    exit 0
-}
-
-Complete-Verification @(Get-StyleIssues)
+Invoke-Verification { Get-StyleIssues } "Stile del documento in $docsDirectory conforme alla guida" 'Giudizio dello stile disattivato'

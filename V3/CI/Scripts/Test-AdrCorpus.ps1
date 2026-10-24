@@ -1,7 +1,8 @@
 # Verifica il corpus degli ADR (MADR con intestazioni italiane) di un repository.
 # Si valida l'intero corpus, non solo i file della PR: cosi' resta sempre pulito.
 
-$gateMode = if ($env:GATE_MODE) { $env:GATE_MODE.ToLower() } else { 'enforce' }
+. "$PSScriptRoot/VerificationGate.ps1"
+
 $decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }
 # Fuori da una PR ADO lascia la macro non espansa: non c'e' un ramo di destinazione.
 $targetBranch = $env:TARGET_BRANCH -replace '^refs/heads/', '' -replace '^\$\(.*\)$', ''
@@ -118,24 +119,4 @@ function Get-CorpusIssues {
     Test-AcceptedUnchanged $byId
 }
 
-function Complete-Verification([string[]]$Issues) {
-    if (-not $Issues) {
-        Write-Host "##[section]Corpus delle decisioni in $decisionsDirectory valido"
-        exit 0
-    }
-
-    $level = if ($gateMode -eq 'warn') { 'warning' } else { 'error' }
-    $Issues | ForEach-Object { Write-Host "##vso[task.logissue type=$level]$_" }
-    if ($gateMode -eq 'warn') {
-        Write-Host "##vso[task.complete result=SucceededWithIssues;]"
-        exit 0
-    }
-    exit 1
-}
-
-if ($gateMode -eq 'off') {
-    Write-Host "Verifica delle decisioni disattivata"
-    exit 0
-}
-
-Complete-Verification @(Get-CorpusIssues)
+Invoke-Verification { Get-CorpusIssues } "Corpus delle decisioni in $decisionsDirectory valido" 'Verifica delle decisioni disattivata'
