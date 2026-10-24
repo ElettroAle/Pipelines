@@ -1,7 +1,8 @@
 # ── CI Step: Ensure Java ───────────────────────────────────────────────────────
 #
 # Garantisce un JDK e JAVA_HOME sull'agent per lo scanner Sonar in CLI mode
-# (sonar-scanner.bat e' un'app Java). Non serve in scannerMode 'dotnet': quello
+# (sonar-scanner.bat e' un'app Java) e per la Structurizr CLI della verifica
+# della documentazione. Non serve in scannerMode 'dotnet': quello
 # scarica da solo il JRE dal server, motivo per cui le pipeline .NET passano
 # sugli stessi agent dove le Angular falliscono con "JAVA_HOME not found".
 #
@@ -14,6 +15,7 @@
 #
 # Riusato da:
 #   CI/Common/Steps/angular-sonar.yaml
+#   CI/Common/Steps/documentation-verify.yaml
 #
 # Parametri
 # ─────────

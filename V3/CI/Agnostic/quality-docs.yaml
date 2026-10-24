@@ -1,16 +1,20 @@
 # ── CI Agnostic: Quality Docs ─────────────────────────────────────────────────
 #
-# Quality gate per i repository di documentazione: Gitleaks e verifica del
-# corpus degli Architecture Decision Records.
+# Quality gate per i repository di documentazione: Gitleaks, verifica del
+# corpus degli Architecture Decision Records e verifica della documentazione
+# (struttura dichiarata, modello C4, diagrammi, guida di stile).
 #
 # Il repo consumer dichiara il repository resource con alias `infrastructure`:
-# lo script di verifica vive in questo repo.
+# gli script di verifica vivono in questo repo.
 #
 # Parametri
 # ─────────
 #   checkoutRepository → repository da fare checkout [REQUIRED]
 #   adrMode            → off | warn | enforce (default: enforce)
 #   decisionsDirectory → cartella degli ADR (default: docs/decisions)
+#   docsMode           → off | warn | enforce (default: off, finché il repo non ha la documentazione)
+#   docsDirectory      → cartella del documento, con il suo structure.json (default: docs/architecture)
+#   styleRules         → guida di stile in JSON (default: docs/style.json)
 #   pool               → pool del job (default: hosted ubuntu-latest, richiesto da Gitleaks via docker)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -28,6 +32,20 @@ parameters:
     type: string
     default: 'docs/decisions'
 
+  - name: docsMode
+    type: string
+    default: 'off'
+    values: ['off', 'warn', 'enforce']
+
+  - name: docsDirectory
+    type: string
+    default: 'docs/architecture'
+
+  - name: styleRules
+    type: string
+    default: 'docs/style.json'
+
+
   - name: pool
     type: object
     default:
@@ -43,4 +61,10 @@ stages:
         - template: ../Common/Steps/adr-verify.yaml
           parameters:
             mode: ${{ parameters.adrMode }}
+            decisionsDirectory: ${{ parameters.decisionsDirectory }}
+        - template: ../Common/Steps/documentation-verify.yaml
+          parameters:
+            mode: ${{ parameters.docsMode }}
+            docsDirectory: ${{ parameters.docsDirectory }}
+            styleRules: ${{ parameters.styleRules }}
             decisionsDirectory: ${{ parameters.decisionsDirectory }}
