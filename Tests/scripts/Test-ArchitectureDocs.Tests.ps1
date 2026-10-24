@@ -181,6 +181,8 @@ I termini sono in ordine alfabetico.
 - **hub-and-spoke**: schema di rete con una rete centrale collegata alle reti delle applicazioni.
 - **PE**: Private Endpoint, un indirizzo privato verso un servizio.
 '@
+        # Il checkout su Windows puo' portare i here-string in CRLF: le modifiche delle fixture cercano testo in LF.
+        foreach ($path in @($docs.Keys)) { $docs[$path] = $docs[$path] -replace "`r`n", "`n" }
         return $docs
     }
 

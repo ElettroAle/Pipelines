@@ -60,7 +60,8 @@ function Get-StructurizrLibraries {
 # Esporta il workspace in JSON; se il DSL non e' valido restituisce l'errore della CLI.
 function Export-StructurizrWorkspace([string]$WorkspaceDsl) {
     $java = Get-StructurizrJava
-    $classPath = Join-Path (Get-StructurizrLibraries) '*'
+    # Classpath esplicito: su Linux pwsh espanderebbe il carattere jolly 'lib/*' in piu' argomenti.
+    $classPath = (Get-ChildItem -Path (Get-StructurizrLibraries) -Filter '*.jar').FullName -join [IO.Path]::PathSeparator
     $outputDir = Join-Path ([IO.Path]::GetTempPath()) "structurizr-$(New-Guid)"
     try {
         $output = & $java -cp $classPath com.structurizr.cli.StructurizrCliApplication export -workspace $WorkspaceDsl -format json -output $outputDir 2>&1
