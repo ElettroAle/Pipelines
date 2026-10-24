@@ -220,70 +220,114 @@ extends:
 - **Requisiti.** Il repo dichiara il repository resource con alias `infrastructure`; pool Linux
   (Gitleaks gira in docker).
 
-### Verifica della documentazione (quality-docs)
+### Verifica della documentazione (quality-arc42, quality-docs)
 
-Per un repository che tiene un documento in Markdown, una sezione per file: la documentazione
-architetturale in arc42 con il modello C4 in Structurizr DSL, oppure un altro documento con le sue
-sezioni. I diagrammi UML sono in Mermaid. Si attiva con `docsMode`; di default è `off`.
+Per un repository che tiene un documento in Markdown, una sezione per file. Ogni formato è un modulo:
+uno step template in `CI/Common/Steps/` con il suo script, che conosce solo il suo standard. La pipeline
+d'ingresso compone i moduli come le pipeline di build compongono gli step di una tecnologia, senza
+parametri di formato e senza condizioni sul formato.
+
+| Step | Script | Cosa controlla | Legato a |
+|---|---|---|---|
+| `adr-verify.yaml` | `Test-AdrCorpus.ps1` | corpus delle decisioni | MADR |
+| `arc42-verify.yaml` | `Test-Arc42Document.ps1` | un file per sezione con nome e titolo del template ufficiale | arc42 |
+| `c4-verify.yaml` | `Test-C4Model.ps1` | modello Structurizr valido e completo, viste mostrate nelle sezioni | C4 |
+| `mermaid-verify.yaml` | `Test-MermaidDiagrams.ps1` | diagrammi Mermaid validi | Mermaid |
+| `documentation-verify.yaml` | `Test-Documentation.ps1` | rimandi esistenti, soglie numeriche di leggibilità | nessun formato |
+| `documentation-style.yaml` | `Test-DocumentationStyle.ps1` | giudizio dello stile con la guida del repository | nessun formato |
+
+Due ingressi:
+
+- `CI/Agnostic/quality-arc42.yaml`: ADR, struttura arc42, controlli comuni, diagrammi, stile.
+- `CI/Agnostic/quality-docs.yaml`: ADR, controlli comuni, diagrammi, stile, per un documento senza un
+  formato con struttura propria.
+
+I diagrammi li sceglie il consumer: il parametro `diagramSteps` (stepList, default vuoto) riceve gli step
+dei diagrammi che il documento usa. Chi non usa C4, o usa un'altra notazione, cambia la lista nel suo
+`quality.yml` e non la pipeline. Gli step iniettati prendono i parametri che il consumer passa loro
+(default `enforce` e `docs/architecture`) e non girano con `docsMode: 'off'`.
+
+La verifica ha due modalità, ognuna di default `off`:
+
+- `docsMode`: controlli oggettivi (struttura del formato e controlli comuni), senza nessuna regola di stile;
+- `styleMode`: giudizio dello stile con un modello Azure OpenAI, che riceve la guida di stile del
+  repository come istruzioni. La pipeline non conosce nessuna regola di scrittura: cambiare guida non
+  cambia la pipeline.
 
 ```yaml
 extends:
-  template: V3/CI/Agnostic/quality-docs.yaml@infrastructure
+  template: V3/CI/Agnostic/quality-arc42.yaml@infrastructure
   parameters:
     checkoutRepository: self
+    arc42Language: 'IT'
     docsMode: 'enforce'                 # 'off' (default) | 'warn' | 'enforce'
     docsDirectory: 'docs/architecture'
-    styleRules: 'docs/style.json'
+    docsGulpease: 40                    # 0 (default): nessuna soglia
+    docsMaxWords: 25                    # 0 (default): nessuna soglia
+    docsAbbreviations: ['es.', 'ecc.']
+    docsGlossary: '12_glossary.md'
+    diagramSteps:
+      - template: V3/CI/Common/Steps/c4-verify.yaml@infrastructure
+      - template: V3/CI/Common/Steps/mermaid-verify.yaml@infrastructure
+    styleMode: 'enforce'                # 'off' (default) | 'warn' | 'enforce'
+    styleGuide: 'docs/STYLE.md'         # default
+    styleServiceConnection: '<service connection con Cognitive Services OpenAI User>'
+    styleEndpoint: 'https://<risorsa>.openai.azure.com'
+    styleModel: '<deployment>'
 ```
 
-La cartella del documento dichiara la sua struttura in `structure.json`:
+Struttura arc42 (`arc42-verify.yaml`, `CI/Scripts/Test-Arc42Document.ps1`):
 
-```json
-{
-  "sections": ["Introduzione e obiettivi", "Vincoli", "…", "Glossario"],
-  "glossary": "Glossario",
-  "model": "model/workspace.dsl"
-}
-```
+- **Template.** La release del template ufficiale (variante `plain-markdownMP`), l'URL e lo SHA-256 di
+  ogni lingua sono fissati nello script, come per ogni strumento scaricato in pipeline: il consumer
+  passa solo `arc42Language`. Una lingua senza template, un download non riuscito o uno SHA-256 diverso
+  fanno fallire la verifica nominando il motivo.
+- **Sezioni.** Le sezioni del template sono i suoi file Markdown numerati (`01_introduction_and_goals.md`,
+  …). Il documento ha un file con lo stesso nome per ogni sezione, con lo stesso titolo di primo
+  livello; gli attributi di titolo (`{#section-…}`) non contano. Un file numerato che il template non ha
+  è una sezione fuori template; i file non numerati non sono sezioni. Le sottosezioni e il testo li
+  giudica il modello con la guida di stile.
 
-- **Sezioni.** Un file `NN-titolo.md` per sezione, con il titolo (H1) uguale a uno dei titoli di
-  `sections`, nello stesso ordine. `glossary` nomina la sezione glossario; `model`, facoltativo, è il
-  modello C4 relativo alla cartella del documento.
-- **Modello C4** (solo se `model` è dichiarato). Il DSL è valido e ha vista di contesto, vista dei container e vista di deployment;
-  ogni container con il tag `Applicazione` ha la sua vista dei componenti. Una sezione mostra una vista
-  con il marcatore `<!-- vista: <chiave> -->`; ogni vista è mostrata da almeno una sezione.
-- **Diagrammi spiegati.** Ogni elemento di una vista o di un diagramma Mermaid compare nel testo della
-  sezione che lo mostra; ogni relazione ha un paragrafo che nomina entrambi gli estremi. I diagrammi
-  Mermaid devono essere validi: l'errore nomina file e riga.
+Modello C4 (`c4-verify.yaml`, `CI/Scripts/Test-C4Model.ps1`):
+
+- Il modello è `model/workspace.dsl` nella cartella del documento: il DSL è valido e ha vista di contesto,
+  vista dei container e vista di deployment; ogni container con il tag `Applicazione` ha la sua vista
+  dei componenti.
+- Una sezione mostra una vista con il marcatore `<!-- vista: <chiave> -->`; ogni vista è mostrata da
+  almeno una sezione e ogni marcatore nomina una vista esistente. Senza questo step i marcatori non si
+  controllano.
+- **Requisiti.** Java 17 o successivo per la Structurizr CLI (versione fissata, SHA-256 verificato); lo
+  step lo prepara con `ensure-java.yaml`. Senza Java la verifica fallisce nominando il controllo non
+  eseguito.
+
+Diagrammi Mermaid (`mermaid-verify.yaml`, `CI/Scripts/Test-MermaidDiagrams.ps1`):
+
+- Ogni diagramma Mermaid delle sezioni passa dal parser: l'errore nomina sezione, file e riga.
+- **Requisiti.** Node.js (dipendenze fissate da `CI/Scripts/mermaid/package-lock.json`); lo step lo
+  prepara con `UseNode@1`. Senza Node.js la verifica fallisce nominando il controllo non eseguito.
+
+Controlli comuni (`documentation-verify.yaml`, `CI/Scripts/Test-Documentation.ps1`), su ogni file
+Markdown della cartella del documento:
+
 - **Rimandi.** I link relativi puntano a file e ancore esistenti; un identificativo di decisione
   `NNNN-titolo` nel testo esiste in `decisionsDirectory`.
-- **Forma della sezione.** Si apre con una citazione che contiene le etichette di `opening` della
-  guida di stile (chi la legge, a cosa risponde); la prima parte (H2) è `parts.first`, `parts.last`
-  se presente è l'ultima.
-- **Chiarezza.** Dalla guida di stile `styleRules`: indice Gulpease minimo per apertura e corpo,
-  parole massime per frase, riempitivi, frasi autoreferenziali, gergo con il termine italiano da usare.
-  Una sigla si spiega al primo uso (`Nome per esteso (SIGLA)`, `SIGLA (spiegazione)` o `**SIGLA**`) ed
-  è nel glossario; un termine in corsivo è nel glossario; un nome interno (codice in linea o
-  CamelCase) si spiega al primo uso o è nel glossario; un concetto definito in grassetto non si usa
-  prima della definizione.
-- **Requisiti.** Java 17 o successivo per la Structurizr CLI (versione fissata, SHA-256 verificato) e
-  Node.js per il parser Mermaid (dipendenze fissate da `CI/Scripts/mermaid/package-lock.json`); lo step
-  li prepara con `ensure-java.yaml` e `UseNode@1`. Se uno dei due manca la verifica fallisce
-  nominando il controllo non eseguito.
+- **Soglie numeriche** (solo se dichiarate). Indice Gulpease minimo del testo di ogni sezione
+  (`docsGulpease`) e parole massime per frase (`docsMaxWords`); `docsAbbreviations` sono le
+  abbreviazioni che non chiudono una frase.
 
-Guida di stile (`docs/style.json`):
+Gli script condividono `CI/Scripts/VerificationGate.ps1` (modalità, rilievi, codice di uscita) e
+`CI/Scripts/MarkdownText.ps1` (lettura delle sezioni e misure di leggibilità).
 
-```json
-{
-  "gulpease": { "opening": 60, "body": 50 },
-  "sentences": { "maxWords": 25, "abbreviations": ["es.", "ecc."] },
-  "fillers": ["è importante sottolineare che"],
-  "selfReferences": ["in questa sezione", "vedremo"],
-  "jargon": { "leverage": "sfruttare" },
-  "opening": ["A chi serve", "Cosa risponde"],
-  "parts": { "first": "In breve", "last": "Per approfondire" }
-}
-```
+Giudizio dello stile (`styleMode`, `CI/Scripts/Test-DocumentationStyle.ps1`):
+
+- Il modello riceve come istruzioni la guida `styleGuide` e giudica una sezione per richiesta, con il
+  glossario `docsGlossary` come contesto; il glossario non si giudica. In una PR si giudicano le sezioni
+  cambiate, tutte se cambia la guida.
+- Risposta in formato fissato (JSON schema): per ogni violazione il titolo della regola, la frase e il
+  motivo. Il rilievo è `<sezione>: <regola> («frase»: motivo)`.
+- Accesso con token Entra ID della service connection (task `AzureCLI@2`), senza chiavi. Su 429 o 5xx
+  lo script riprova fino a tre volte; se il modello non risponde la verifica fallisce nominando il
+  motivo.
 
 ---
 
@@ -294,7 +338,7 @@ La libreria include una suite di test a 2 livelli che gira su GitHub Actions sen
 | Livello | Tool | Cosa verifica |
 |---|---|---|
 | 1 — Static Analysis | Python (`yamllint`, script custom) | Sintassi YAML, riferimenti a template esistenti, contratti parametri |
-| 2 — Script Unit Tests | PowerShell Pester 5 | Logica di `Set-Versioning.ps1`, `Verify-SemVer.ps1`, `New-ReleaseNotes.ps1`, `Test-PublishedArtifact.ps1`, `Test-AdrCorpus.ps1`, `Test-Documentation.ps1` e `ScenarioCoverage.cs` |
+| 2 — Script Unit Tests | PowerShell Pester 5 | Logica di `Set-Versioning.ps1`, `Verify-SemVer.ps1`, `New-ReleaseNotes.ps1`, `Test-PublishedArtifact.ps1`, `Test-AdrCorpus.ps1`, degli script di verifica della documentazione e di `ScenarioCoverage.cs` |
 
 ### Esecuzione locale
 
@@ -335,10 +379,15 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | `CI/Scripts/New-ReleaseNotes.ps1` | Release notes dal tag del rilascio precedente sullo stesso ramo, ogni voce con link al commit, alla PR che lo ha integrato e ai work item della PR: summary della run e, su main, pagina wiki |
 | `CI/Scripts/Test-PublishedArtifact.ps1` | Prima dell'upload dell'artifact negli orchestratori GitFlow e TrunkFlow: se la run lo ha già pubblicato (rerun dello stage) setta `artifactAlreadyPublished` e l'upload si salta; se la verifica non riesce l'upload procede |
 | `CI/Scripts/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, sostituzioni reciproche, ADR `accepted` non modificati rispetto al ramo di destinazione della PR |
-| `CI/Scripts/Test-Documentation.ps1` | Verifica un documento (`quality-docs.yaml`): sezioni dichiarate in `structure.json`, modello C4 completo se dichiarato, diagrammi Mermaid validi e spiegati nel testo, rimandi esistenti, testo conforme alla guida di stile |
-| `CI/Scripts/MarkdownText.ps1` | Lettura delle sezioni Markdown (blocchi, parti, marcatori di vista, diagrammi) e misure di leggibilità (frasi, parole, indice Gulpease) per `Test-Documentation.ps1` |
+| `CI/Scripts/Test-Arc42Document.ps1` | Struttura di un documento arc42 (`arc42-verify.yaml`): un file per sezione con nome e titolo del template ufficiale; release, URL e SHA-256 per lingua fissati nello script |
+| `CI/Scripts/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container `Applicazione`, marcatori di vista nelle sezioni |
+| `CI/Scripts/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
+| `CI/Scripts/Test-Documentation.ps1` | Controlli comuni a ogni documento (`documentation-verify.yaml`): rimandi esistenti, soglie numeriche di leggibilità |
+| `CI/Scripts/Test-DocumentationStyle.ps1` | Giudizio dello stile di un documento (`documentation-style.yaml`) con un modello Azure OpenAI che riceve la guida di stile del repository come istruzioni |
+| `CI/Scripts/VerificationGate.ps1` | Parte comune degli script di verifica della documentazione: modalità `off`/`warn`/`enforce`, rilievi `##vso[task.logissue]`, codice di uscita |
+| `CI/Scripts/MarkdownText.ps1` | Lettura delle sezioni Markdown di un documento (blocchi, parti, marcatori di vista, diagrammi) e misure di leggibilità (frasi, parole, indice Gulpease) |
 | `CI/Scripts/Structurizr.ps1` | Scarica la Structurizr CLI (versione fissata, SHA-256 verificato), sceglie un Java 17 o successivo ed esporta il modello C4 in JSON |
-| `CI/Scripts/Mermaid.ps1`, `CI/Scripts/mermaid/` | Installa con `npm ci` il parser Mermaid fissato dal lockfile e ricava, per ogni diagramma, errore o elementi e relazioni |
+| `CI/Scripts/Mermaid.ps1`, `CI/Scripts/mermaid/` | Installa con `npm ci` il parser Mermaid fissato dal lockfile e ricava, per ogni diagramma, il tipo o l'errore con la riga |
 | `CI/Scripts/ScenarioCoverage.cs` | File-based app .NET 10: verifica che ogni scenario dei `.feature` sia stato eseguito e superato, leggendo i Cucumber Messages del runner BDD |
 
 ---

@@ -20,12 +20,18 @@ Tests/
 │   ├── New-ReleaseNotes.Tests.ps1
 │   ├── Test-PublishedArtifact.Tests.ps1
 │   ├── Test-AdrCorpus.Tests.ps1
+│   ├── Test-Arc42Document.Tests.ps1
+│   ├── Test-C4Model.Tests.ps1
+│   ├── Test-MermaidDiagrams.Tests.ps1
 │   ├── Test-Documentation.Tests.ps1
+│   ├── Test-DocumentationStyle.Tests.ps1
+│   ├── MarkdownText.Tests.ps1
 │   ├── GitCliff.Tests.ps1
 │   └── ScenarioCoverage.Tests.ps1
 ├── fixtures/
 │   ├── valid-commits.txt       # Messaggi commit validi — usati da Verify-SemVer.Tests
 │   ├── invalid-commits.txt     # Messaggi commit non validi — usati da Verify-SemVer.Tests
+│   ├── documentation/          # Documento valido condiviso e template arc42 italiano ufficiale — usati dai test della documentazione
 │   └── scenario-coverage/      # .feature + Cucumber Messages reali (Reqnroll 3.3.4) — usati da ScenarioCoverage.Tests
 └── preview/                    # Livello 3: pipeline ADO per az pipelines run --preview
     ├── quality-dotNet.yaml
@@ -147,18 +153,65 @@ Ogni test costruisce un repository con un bare repo come origin: il corpus di pa
 | Verifica del corpus delle decisioni architetturali | Decisione ben formata; stato non ammesso, numero duplicato, sezione mancante, sostituzione non reciproca; ADR accepted riscritto e sostituito; modalità `warn` |
 | Regole del corpus | ADR accepted eliminato, ADR proposed riscrivibile, superseded-by verso una decisione inesistente, file senza frontmatter, file non numerati ignorati, run fuori da una PR, modalità `off`, una segnalazione per difetto |
 
-#### `Test-Documentation.Tests.ps1`
+I test degli script di verifica della documentazione partono dal documento valido di
+`Tests/fixtures/documentation/DocumentationFixture.ps1` (le dodici sezioni del template arc42 italiano,
+modello C4, diagramma Mermaid, testo entro le soglie) e vi introducono un solo difetto per scenario.
+Lo script gira come in pipeline, in un processo separato.
 
-Ogni scenario parte da una documentazione valida (dodici sezioni arc42 dichiarate in `structure.json`, modello C4, diagramma Mermaid, guida di stile) e vi introduce un solo difetto. Richiede Java 17 o successivo (`STRUCTURIZR_JAVA`, `JAVA_HOME_17_X64` o `JAVA_HOME`) e Node.js; la Structurizr CLI e il parser Mermaid si scaricano alla prima esecuzione.
+#### `Test-Arc42Document.Tests.ps1`
+
+Il template è l'archivio ufficiale `arc42-template-IT-plain-markdownMP.zip` della release fissata nello
+script (CC BY-SA 4.0, in `Tests/fixtures/documentation/`), servito da un HttpListener locale al posto di
+GitHub: lo SHA-256 verificato è quello vero e nessuna prova scarica dalla rete.
 
 | Suite | Scenario testato |
 |---|---|
-| Verifica della documentazione architetturale | Documento completo e chiaro; documento non ben formato (sezione mancante, relazione verso un elemento non dichiarato, container senza vista dei componenti, Mermaid non valido, rimando a decisione inesistente); testo non chiaro (leggibilità, frase troppo lunga, riempitivo, autoreferenziale, sigla non spiegata, termine senza glossario, nome interno non spiegato, gergo, ordine dei concetti, ordine della sezione, apertura mancante, elemento e relazione non spiegati) |
-| Modalità del controllo | `warn`, `off`, guida di stile mancante |
-| Strumenti assenti | Senza Java 17 o senza Node.js la verifica fallisce nominando il controllo non eseguito |
-| Controlli strutturali | Ancora inesistente, vista non mostrata, marcatore di vista inesistente, livello C4 mancante, titolo fuori struttura, sezioni fuori ordine, sigla assente dal glossario |
-| Struttura dichiarata dal documento | Documento con sezioni proprie e senza modello C4, marcatore di vista senza modello, `structure.json` mancante |
-| MarkdownText | Frasi, abbreviazioni, decimali, parole, indice Gulpease, testo semplice, ancore, blocchi di una sezione |
+| Struttura del documento sul template arc42 | Documento con le sezioni del template e URL della release nella lingua; sezione mancante, sezione fuori template, titolo diverso; attributo di titolo conservato; file non numerato ignorato |
+| Template della release fissata | Lingua non supportata senza download, SHA-256 diverso, download non riuscito |
+| Modalità del controllo | `warn`, `off` senza download |
+
+#### `Test-C4Model.Tests.ps1`
+
+Richiede Java 17 o successivo (`STRUCTURIZR_JAVA`, `JAVA_HOME_17_X64` o `JAVA_HOME`); la Structurizr CLI si scarica alla prima esecuzione.
+
+| Suite | Scenario testato |
+|---|---|
+| Verifica del modello C4 | Modello completo e mostrato; relazione verso un elemento non dichiarato, container senza vista dei componenti, livello mancante, vista non mostrata, marcatore di vista inesistente, modello mancante |
+| Strumenti e modalità | Senza Java 17 la verifica fallisce nominando il controllo non eseguito; `off` |
+
+#### `Test-MermaidDiagrams.Tests.ps1`
+
+Richiede Node.js; il parser Mermaid si installa alla prima esecuzione.
+
+| Suite | Scenario testato |
+|---|---|
+| Verifica dei diagrammi Mermaid | Diagrammi validi; diagramma non valido con sezione, file e riga |
+| Strumenti e modalità | Senza Node.js la verifica fallisce nominando il controllo non eseguito; `off` |
+
+#### `Test-Documentation.Tests.ps1`
+
+| Suite | Scenario testato |
+|---|---|
+| Controlli comuni sulla documentazione | Rimandi esistenti e testo entro le soglie; rimando a decisione, ancora o file inesistente; testo oltre le soglie (leggibilità, frase troppo lunga); documento di un altro formato senza modello C4 e con file non numerati |
+| Modalità del controllo | `warn`, `off` |
+
+#### `MarkdownText.Tests.ps1`
+
+| Suite | Scenario testato |
+|---|---|
+| Analisi del testo | Frasi, abbreviazioni, decimali, parole, indice Gulpease, testo semplice, ancore |
+| Blocchi di una sezione | Titolo e parti senza attributi di titolo, apertura, paragrafi, elenchi, tabelle, marcatori di vista, diagrammi |
+| Sezioni di un documento | File Markdown della cartella in ordine di nome, nome dal titolo o dal file, cartella assente |
+
+#### `Test-DocumentationStyle.Tests.ps1`
+
+Il modello è sostituito da un endpoint locale che risponde come Azure OpenAI: restituisce un rilievo quando la sezione inviata contiene la frase registrata e conserva le richieste. Le prove verificano cosa si manda al modello e come si riporta la risposta; il giudizio vero del modello si prova con gli esempi della guida di stile del repository della documentazione.
+
+| Suite | Scenario testato |
+|---|---|
+| Giudizio dello stile | Documento conforme; sezione che viola una regola della guida (sezione e regola nominate); regola nuova nella guida senza cambiare la pipeline; modello non disponibile (tre tentativi, poi rilievo) |
+| Cosa si manda al modello | Una richiesta per sezione, glossario escluso e mandato come contesto; formato di risposta e deployment; in una PR solo le sezioni cambiate, nessuna chiamata senza sezioni cambiate, tutte se cambia la guida |
+| Configurazione e modalità | Guida indicata dal parametro, guida mancante, endpoint assente, `warn`, `off` |
 
 #### `ScenarioCoverage.Tests.ps1` (14 suite, 25 test)
 

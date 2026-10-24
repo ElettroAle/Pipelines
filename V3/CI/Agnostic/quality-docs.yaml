@@ -1,8 +1,10 @@
 # ── CI Agnostic: Quality Docs ─────────────────────────────────────────────────
 #
-# Quality gate per i repository di documentazione: Gitleaks, verifica del
-# corpus degli Architecture Decision Records e verifica della documentazione
-# (struttura dichiarata, modello C4, diagrammi, guida di stile).
+# Quality gate per i repository di documentazione, qualunque sia il formato del documento:
+# Gitleaks, verifica del corpus degli Architecture Decision Records, controlli oggettivi
+# comuni (rimandi, soglie di leggibilita'), i diagrammi che il consumer inietta e il
+# giudizio dello stile con un modello che riceve la guida del repository come istruzioni.
+# Un formato con una struttura propria ha il suo ingresso (es. quality-arc42.yaml).
 #
 # Il repo consumer dichiara il repository resource con alias `infrastructure`:
 # gli script di verifica vivono in questo repo.
@@ -13,8 +15,18 @@
 #   adrMode            → off | warn | enforce (default: enforce)
 #   decisionsDirectory → cartella degli ADR (default: docs/decisions)
 #   docsMode           → off | warn | enforce (default: off, finché il repo non ha la documentazione)
-#   docsDirectory      → cartella del documento, con il suo structure.json (default: docs/architecture)
-#   styleRules         → guida di stile in JSON (default: docs/style.json)
+#   docsDirectory      → cartella del documento (default: docs/architecture)
+#   docsGulpease       → indice Gulpease minimo del testo di ogni sezione (default: 0, nessuna soglia)
+#   docsMaxWords       → parole massime per frase (default: 0, nessuna soglia)
+#   docsAbbreviations  → abbreviazioni che non chiudono una frase (default: nessuna)
+#   docsGlossary       → file del glossario nella cartella del documento (default: nessuno)
+#   diagramSteps       → step di verifica dei diagrammi, es. CI/Common/Steps/c4-verify.yaml e
+#                        mermaid-verify.yaml (default: nessuno); non girano con docsMode off
+#   styleMode          → off | warn | enforce (default: off): giudizio dello stile con il modello
+#   styleGuide         → guida di stile del repository (default: docs/STYLE.md)
+#   styleServiceConnection → service connection Azure per il modello [REQUIRED se styleMode non e' off]
+#   styleEndpoint      → endpoint Azure OpenAI [REQUIRED se styleMode non e' off]
+#   styleModel         → nome del deployment del modello [REQUIRED se styleMode non e' off]
 #   pool               → pool del job (default: hosted ubuntu-latest, richiesto da Gitleaks via docker)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -41,10 +53,46 @@ parameters:
     type: string
     default: 'docs/architecture'
 
-  - name: styleRules
-    type: string
-    default: 'docs/style.json'
+  - name: docsGulpease
+    type: number
+    default: 0
 
+  - name: docsMaxWords
+    type: number
+    default: 0
+
+  - name: docsAbbreviations
+    type: object
+    default: []
+
+  - name: docsGlossary
+    type: string
+    default: ''
+
+  - name: diagramSteps
+    type: stepList
+    default: []
+
+  - name: styleMode
+    type: string
+    default: 'off'
+    values: ['off', 'warn', 'enforce']
+
+  - name: styleGuide
+    type: string
+    default: 'docs/STYLE.md'
+
+  - name: styleServiceConnection
+    type: string
+    default: ''
+
+  - name: styleEndpoint
+    type: string
+    default: ''
+
+  - name: styleModel
+    type: string
+    default: ''
 
   - name: pool
     type: object
@@ -66,5 +114,18 @@ stages:
           parameters:
             mode: ${{ parameters.docsMode }}
             docsDirectory: ${{ parameters.docsDirectory }}
-            styleRules: ${{ parameters.styleRules }}
+            gulpease: ${{ parameters.docsGulpease }}
+            maxWords: ${{ parameters.docsMaxWords }}
+            abbreviations: ${{ parameters.docsAbbreviations }}
             decisionsDirectory: ${{ parameters.decisionsDirectory }}
+        - ${{ if ne(parameters.docsMode, 'off') }}:
+          - ${{ parameters.diagramSteps }}
+        - template: ../Common/Steps/documentation-style.yaml
+          parameters:
+            mode: ${{ parameters.styleMode }}
+            docsDirectory: ${{ parameters.docsDirectory }}
+            guide: ${{ parameters.styleGuide }}
+            glossary: ${{ parameters.docsGlossary }}
+            serviceConnection: ${{ parameters.styleServiceConnection }}
+            endpoint: ${{ parameters.styleEndpoint }}
+            model: ${{ parameters.styleModel }}

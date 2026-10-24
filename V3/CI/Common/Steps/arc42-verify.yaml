@@ -1,0 +1,49 @@
+# ── CI Step: arc42 ────────────────────────────────────────────────────────────
+#
+# Struttura di un documento arc42 (V3/CI/Scripts/Test-Arc42Document.ps1): un file per
+# sezione con il nome e il titolo del template ufficiale. Release del template, URL e
+# SHA-256 per lingua sono fissati nello script, come ogni strumento scaricato in pipeline.
+#
+# Riusato da:
+#   CI/Agnostic/quality-arc42.yaml
+#
+# Parametri
+# ─────────
+#   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
+#   docsDirectory      → cartella delle sezioni del documento (default: docs/architecture)
+#   language           → lingua del template arc42, es. 'IT' o 'EN' [REQUIRED se mode non e' off]
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: mode
+    type: string
+    default: 'enforce'
+    values: ['off', 'warn', 'enforce']
+
+  - name: docsDirectory
+    type: string
+    default: 'docs/architecture'
+
+  - name: language
+    type: string
+    default: ''
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: PowerShell@2
+    displayName: 'arc42 ${{ parameters.docsDirectory }} (${{ parameters.mode }})'
+    inputs:
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Test-Arc42Document.ps1'
+      workingDirectory: '$(Build.SourcesDirectory)'
+      pwsh: true
+    env:
+      GATE_MODE: ${{ parameters.mode }}
+      DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
+      ARC42_LANGUAGE: ${{ parameters.language }}

@@ -1,4 +1,4 @@
-# Accesso al parser Mermaid per Test-Documentation.ps1: le dipendenze sono fissate
+# Accesso al parser Mermaid per Test-MermaidDiagrams.ps1: le dipendenze sono fissate
 # da mermaid/package-lock.json e installate con npm ci in una cache per lockfile.
 
 $MermaidCheckerSource = Join-Path $PSScriptRoot 'mermaid'
@@ -25,9 +25,8 @@ function Get-MermaidCheckerDirectory {
     return $installDir
 }
 
-# Ogni diagramma { Id, Text } torna con Error/Line se non valido, altrimenti con
-# Elements e Relationships (coppie di nomi).
-function Test-MermaidDiagrams([object[]]$Diagrams) {
+# Ogni diagramma { Id, Text } torna con error/line se non valido, altrimenti con il tipo.
+function Invoke-MermaidParser([object[]]$Diagrams) {
     if (-not $Diagrams) { return @() }
 
     $checkerDir = Get-MermaidCheckerDirectory

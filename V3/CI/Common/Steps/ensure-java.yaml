@@ -15,7 +15,7 @@
 #
 # Riusato da:
 #   CI/Common/Steps/angular-sonar.yaml
-#   CI/Common/Steps/documentation-verify.yaml
+#   CI/Common/Steps/c4-verify.yaml
 #
 # Parametri
 # ─────────

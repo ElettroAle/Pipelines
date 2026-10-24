@@ -1,21 +1,22 @@
 # ── CI Step: Documentation ────────────────────────────────────────────────────
 #
-# Verifica un documento del repository (V3/CI/Scripts/Test-Documentation.ps1): le
-# sezioni dichiarate nel suo structure.json, il modello C4 in Structurizr DSL se la
-# struttura lo dichiara, diagrammi Mermaid validi, elementi e relazioni dei diagrammi
-# spiegati nel testo, rimandi esistenti, testo conforme alla guida di stile.
-# La Structurizr CLI richiede Java 17, il parser Mermaid Node.js.
+# Controlli oggettivi che valgono per ogni documento (V3/CI/Scripts/Test-Documentation.ps1):
+# rimandi a file, ancore e decisioni esistenti, soglie numeriche di leggibilita'. La
+# struttura la verifica lo step del formato (es. arc42-verify.yaml), i diagrammi gli step
+# iniettati dal consumer, lo stile documentation-style.yaml.
 #
 # Riusato da:
+#   CI/Agnostic/quality-arc42.yaml
 #   CI/Agnostic/quality-docs.yaml
 #
 # Parametri
 # ─────────
 #   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
-#   docsDirectory      → cartella delle sezioni del documento, con il suo structure.json (default: docs/architecture)
-#   styleRules         → guida di stile in JSON (default: docs/style.json)
+#   docsDirectory      → cartella delle sezioni del documento (default: docs/architecture)
+#   gulpease           → indice Gulpease minimo del testo di ogni sezione (default: 0, nessuna soglia)
+#   maxWords           → parole massime per frase (default: 0, nessuna soglia)
+#   abbreviations      → abbreviazioni che non chiudono una frase (default: nessuna)
 #   decisionsDirectory → cartella degli ADR a cui puntano i rimandi (default: docs/decisions)
-#   nodeVersion        → versione di Node.js per il parser Mermaid (default: 22.x)
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -30,17 +31,21 @@ parameters:
     type: string
     default: 'docs/architecture'
 
-  - name: styleRules
-    type: string
-    default: 'docs/style.json'
+  - name: gulpease
+    type: number
+    default: 0
+
+  - name: maxWords
+    type: number
+    default: 0
+
+  - name: abbreviations
+    type: object
+    default: []
 
   - name: decisionsDirectory
     type: string
     default: 'docs/decisions'
-
-  - name: nodeVersion
-    type: string
-    default: '22.x'
 
   - name: templatesDirectory
     type: string
@@ -49,14 +54,6 @@ parameters:
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
-  - ${{ if ne(parameters.mode, 'off') }}:
-    - template: ensure-java.yaml
-
-    - task: UseNode@1
-      displayName: 'Install Node.js'
-      inputs:
-        version: ${{ parameters.nodeVersion }}
-
   - task: PowerShell@2
     displayName: 'Documentation ${{ parameters.docsDirectory }} (${{ parameters.mode }})'
     inputs:
@@ -66,5 +63,7 @@ steps:
     env:
       GATE_MODE: ${{ parameters.mode }}
       DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
-      STYLE_RULES: ${{ parameters.styleRules }}
+      READABILITY_GULPEASE: ${{ parameters.gulpease }}
+      READABILITY_MAX_WORDS: ${{ parameters.maxWords }}
+      READABILITY_ABBREVIATIONS: ${{ join(';', parameters.abbreviations) }}
       DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}

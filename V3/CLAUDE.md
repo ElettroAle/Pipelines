@@ -156,7 +156,12 @@ I test usano un **bare repo locale** come fake remote. L'unico accesso di rete Ã
 | `CI/Scripts/New-ReleaseNotes.ps1` | Livello 1 + Livello 2 (`New-ReleaseNotes.Tests.ps1`) |
 | `CI/Scripts/Test-PublishedArtifact.ps1` | Livello 1 + Livello 2 (`Test-PublishedArtifact.Tests.ps1`) |
 | `CI/Scripts/Test-AdrCorpus.ps1` | Livello 1 + Livello 2 (`Test-AdrCorpus.Tests.ps1`) |
-| `CI/Scripts/Test-Documentation.ps1`, `MarkdownText.ps1`, `Structurizr.ps1`, `Mermaid.ps1`, `mermaid/` | Livello 1 + Livello 2 (`Test-Documentation.Tests.ps1`, richiede Java 17 e Node.js) |
+| `CI/Scripts/Test-Arc42Document.ps1` | Livello 1 + Livello 2 (`Test-Arc42Document.Tests.ps1`) |
+| `CI/Scripts/Test-C4Model.ps1`, `Structurizr.ps1` | Livello 1 + Livello 2 (`Test-C4Model.Tests.ps1`, richiede Java 17) |
+| `CI/Scripts/Test-MermaidDiagrams.ps1`, `Mermaid.ps1`, `mermaid/` | Livello 1 + Livello 2 (`Test-MermaidDiagrams.Tests.ps1`, richiede Node.js) |
+| `CI/Scripts/Test-Documentation.ps1` | Livello 1 + Livello 2 (`Test-Documentation.Tests.ps1`) |
+| `CI/Scripts/Test-DocumentationStyle.ps1` | Livello 1 + Livello 2 (`Test-DocumentationStyle.Tests.ps1`) |
+| `CI/Scripts/MarkdownText.ps1`, `VerificationGate.ps1`, `Tests/fixtures/documentation/` | Livello 1 + Livello 2 (`MarkdownText.Tests.ps1` e i test di tutti gli script di verifica della documentazione) |
 | `CI/Scripts/ScenarioCoverage.cs` | Livello 1 + Livello 2 (`ScenarioCoverage.Tests.ps1`, richiede .NET SDK 10) |
 
 I workflow GitHub Actions replicano questi stessi check automaticamente su ogni push.
