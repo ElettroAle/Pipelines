@@ -2,7 +2,7 @@
 #
 # Quality gate per i repository di documentazione: Gitleaks, verifica del
 # corpus degli Architecture Decision Records e verifica della documentazione
-# architetturale (arc42, modello C4, diagrammi, guida di stile).
+# (struttura dichiarata, modello C4, diagrammi, guida di stile).
 #
 # Il repo consumer dichiara il repository resource con alias `infrastructure`:
 # gli script di verifica vivono in questo repo.
@@ -13,9 +13,8 @@
 #   adrMode            → off | warn | enforce (default: enforce)
 #   decisionsDirectory → cartella degli ADR (default: docs/decisions)
 #   docsMode           → off | warn | enforce (default: off, finché il repo non ha la documentazione)
-#   docsDirectory      → cartella delle sezioni arc42 (default: docs/architecture)
+#   docsDirectory      → cartella del documento, con il suo structure.json (default: docs/architecture)
 #   styleRules         → guida di stile in JSON (default: docs/style.json)
-#   workspaceDsl       → modello C4 in Structurizr DSL (default: docs/architecture/model/workspace.dsl)
 #   pool               → pool del job (default: hosted ubuntu-latest, richiesto da Gitleaks via docker)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -46,9 +45,6 @@ parameters:
     type: string
     default: 'docs/style.json'
 
-  - name: workspaceDsl
-    type: string
-    default: 'docs/architecture/model/workspace.dsl'
 
   - name: pool
     type: object
@@ -66,10 +62,9 @@ stages:
           parameters:
             mode: ${{ parameters.adrMode }}
             decisionsDirectory: ${{ parameters.decisionsDirectory }}
-        - template: ../Common/Steps/architecture-docs-verify.yaml
+        - template: ../Common/Steps/documentation-verify.yaml
           parameters:
             mode: ${{ parameters.docsMode }}
             docsDirectory: ${{ parameters.docsDirectory }}
             styleRules: ${{ parameters.styleRules }}
-            workspaceDsl: ${{ parameters.workspaceDsl }}
             decisionsDirectory: ${{ parameters.decisionsDirectory }}

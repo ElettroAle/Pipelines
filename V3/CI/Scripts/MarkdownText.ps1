@@ -1,5 +1,5 @@
 # Lettura di una sezione Markdown della documentazione architetturale e misure di
-# leggibilita' del suo testo, per Test-ArchitectureDocs.ps1.
+# leggibilita' del suo testo, per Test-Documentation.ps1.
 
 $ViewMarkerPattern = '^\s*<!--\s*vista:\s*([\w-]+)\s*-->\s*$'
 $CommentPattern = '^\s*<!--.*-->\s*$'

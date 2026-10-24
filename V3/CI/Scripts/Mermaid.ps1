@@ -1,4 +1,4 @@
-# Accesso al parser Mermaid per Test-ArchitectureDocs.ps1: le dipendenze sono fissate
+# Accesso al parser Mermaid per Test-Documentation.ps1: le dipendenze sono fissate
 # da mermaid/package-lock.json e installate con npm ci in una cache per lockfile.
 
 $MermaidCheckerSource = Join-Path $PSScriptRoot 'mermaid'

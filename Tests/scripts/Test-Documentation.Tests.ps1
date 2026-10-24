@@ -2,7 +2,7 @@
 
 <#
 .SYNOPSIS
-    Test Pester per V3/CI/Scripts/Test-ArchitectureDocs.ps1
+    Test Pester per V3/CI/Scripts/Test-Documentation.ps1
 
 .DESCRIPTION
     Ogni scenario parte da una documentazione valida (dodici sezioni arc42, modello C4,
@@ -12,7 +12,7 @@
 #>
 
 BeforeAll {
-    $ScriptPath = Resolve-Path "$PSScriptRoot/../../V3/CI/Scripts/Test-ArchitectureDocs.ps1"
+    $ScriptPath = Resolve-Path "$PSScriptRoot/../../V3/CI/Scripts/Test-Documentation.ps1"
     $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-architecture-docs-$(New-Guid)"
 
@@ -40,6 +40,17 @@ $Body
   "jargon": { "leverage": "sfruttare", "deployare": "rilasciare" },
   "opening": ["A chi serve", "Cosa risponde"],
   "parts": { "first": "In breve", "last": "Per approfondire" }
+}
+'@
+        $docs['docs/architecture/structure.json'] = @'
+{
+  "sections": [
+    "Introduzione e obiettivi", "Vincoli", "Contesto e ambito", "Strategia di soluzione",
+    "Vista dei building block", "Vista di runtime", "Vista di deployment", "Concetti trasversali",
+    "Decisioni architetturali", "Requisiti di qualità", "Rischi e debito tecnico", "Glossario"
+  ],
+  "glossary": "Glossario",
+  "model": "model/workspace.dsl"
 }
 '@
         $docs['docs/decisions/0001-esempio.md'] = "---`nstatus: accepted`n---`n`n# Esempio`n"
@@ -371,7 +382,7 @@ Describe "Funzionalità: Verifica della documentazione architetturale" {
     }
 }
 
-Describe "Test-ArchitectureDocs — modalità del controllo" {
+Describe "Test-Documentation — modalità del controllo" {
 
     BeforeAll {
         $docs = New-ValidDocs
@@ -399,7 +410,7 @@ Describe "Test-ArchitectureDocs — modalità del controllo" {
     }
 }
 
-Describe "Test-ArchitectureDocs — strumenti assenti" {
+Describe "Test-Documentation — strumenti assenti" {
 
     It "Senza un Java 17 fallisce nominando il modello C4 e il motivo" {
         $res = Invoke-DocsCheck (New-ValidDocs) -Environment @{ STRUCTURIZR_JAVA = (Join-Path ([IO.Path]::GetTempPath()) 'java-assente') }
@@ -414,7 +425,7 @@ Describe "Test-ArchitectureDocs — strumenti assenti" {
     }
 }
 
-Describe "Test-ArchitectureDocs — controlli strutturali" {
+Describe "Test-Documentation — controlli strutturali" {
 
     It "Un rimando a un'ancora inesistente fallisce nominando il rimando" {
         $docs = New-ValidDocs
@@ -445,14 +456,14 @@ Describe "Test-ArchitectureDocs — controlli strutturali" {
         Get-Issues $res.Output | Where-Object { $_ -match '^modello C4: livello mancante \(vista di deployment\)' } | Should -Not -BeNullOrEmpty
     }
 
-    It "Un titolo che non è una sezione arc42 fallisce nominando il file" {
+    It "Un titolo che non è una sezione della struttura fallisce nominando il file" {
         $docs = New-ValidDocs
         $docs['docs/architecture/13-extra.md'] = "# Appendice`n"
         $res = Invoke-DocsCheck $docs
-        Get-Issues $res.Output | Where-Object { $_ -match '^documento: titolo non arc42 \(13-extra\.md: Appendice\)' } | Should -Not -BeNullOrEmpty
+        Get-Issues $res.Output | Where-Object { $_ -match '^documento: titolo fuori struttura \(13-extra\.md: Appendice\)' } | Should -Not -BeNullOrEmpty
     }
 
-    It "Sezioni fuori dall'ordine arc42 falliscono nominando la sezione" {
+    It "Sezioni fuori dall'ordine della struttura falliscono nominando la sezione" {
         $docs = New-ValidDocs
         $docs['docs/architecture/00-vincoli.md'] = $docs['docs/architecture/02-vincoli.md']
         $docs['docs/architecture/02-vincoli.md'] = $null
@@ -542,5 +553,40 @@ Describe "MarkdownText — analisi del testo" {
             $section.Diagrams[0].Line | Should -Be 16
             $section.Diagrams[0].Text | Should -Be 'sequenceDiagram'
         }
+    }
+}
+
+Describe "Test-Documentation — struttura dichiarata dal documento" {
+
+    BeforeAll {
+        function New-ProductDocs {
+            $docs = New-ValidDocs
+            foreach ($path in @($docs.Keys | Where-Object { $_ -like 'docs/architecture/*' })) { $docs[$path] = $null }
+            $docs['docs/architecture/structure.json'] = '{ "sections": ["Introduzione e obiettivi", "Glossario"], "glossary": "Glossario" }'
+            $docs['docs/architecture/01-introduzione-e-obiettivi.md'] = New-Section 'Introduzione e obiettivi' 'a cosa serve il prodotto?' 'Il prodotto aiuta il cittadino a parlare con un operatore del comune.'
+            $docs['docs/architecture/02-glossario.md'] = New-Section 'Glossario' 'cosa vogliono dire i termini usati?' 'I termini sono in ordine alfabetico.'
+            return $docs
+        }
+    }
+
+    It "Un documento con sezioni proprie e senza modello C4 passa" {
+        $res = Invoke-DocsCheck (New-ProductDocs)
+        Get-Issues $res.Output | Should -BeNullOrEmpty -Because ($res.Output)
+        $res.ExitCode | Should -Be 0
+    }
+
+    It "Senza modello C4 un marcatore di vista fallisce nominando la sezione e la vista" {
+        $docs = New-ProductDocs
+        Edit-Docs $docs 'docs/architecture/01-introduzione-e-obiettivi.md' 'Il prodotto aiuta' "<!-- vista: contesto -->`n`nIl prodotto aiuta"
+        $res = Invoke-DocsCheck $docs
+        Get-Issues $res.Output | Where-Object { $_ -match '^Introduzione e obiettivi: vista inesistente \(contesto\)' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+    }
+
+    It "Senza structure.json fallisce nominando il file" {
+        $docs = New-ValidDocs
+        $docs['docs/architecture/structure.json'] = $null
+        $res = Invoke-DocsCheck $docs
+        $res.ExitCode | Should -Be 1
+        Get-Issues $res.Output | Where-Object { $_ -match '^struttura del documento: file mancante \(docs/architecture/structure\.json\)' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
     }
 }

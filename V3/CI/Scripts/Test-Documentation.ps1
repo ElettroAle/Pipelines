@@ -1,5 +1,5 @@
-# Verifica la documentazione architetturale di un repository: dodici sezioni arc42,
-# modello C4 in Structurizr DSL completo dei suoi livelli, diagrammi Mermaid validi,
+# Verifica un documento di un repository: le sezioni dichiarate in structure.json,
+# il modello C4 in Structurizr DSL se la struttura lo dichiara, diagrammi Mermaid validi,
 # elementi e relazioni dei diagrammi spiegati nel testo, rimandi esistenti e testo
 # conforme alla guida di stile (docs/style.json). Ogni problema nomina la sezione e il motivo.
 
@@ -10,18 +10,13 @@
 $gateMode = if ($env:GATE_MODE) { $env:GATE_MODE.ToLower() } else { 'enforce' }
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
 $styleRulesPath = if ($env:STYLE_RULES) { $env:STYLE_RULES } else { 'docs/style.json' }
-$workspaceDsl = if ($env:WORKSPACE_DSL) { $env:WORKSPACE_DSL } else { 'docs/architecture/model/workspace.dsl' }
+$structurePath = if ($env:DOCS_STRUCTURE) { $env:DOCS_STRUCTURE } else { "$docsDirectory/structure.json" }
 $decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }
 
-$Arc42Titles = @(
-    'Introduzione e obiettivi', 'Vincoli', 'Contesto e ambito', 'Strategia di soluzione',
-    'Vista dei building block', 'Vista di runtime', 'Vista di deployment', 'Concetti trasversali',
-    'Decisioni architetturali', 'Requisiti di qualità', 'Rischi e debito tecnico', 'Glossario'
-)
-$GlossaryTitle = 'Glossario'
 $SectionFilePattern = '^\d{2}-.+\.md$'
 $ApplicationTag = 'Applicazione'
 $DocumentScope = 'documento'
+$StructureScope = 'struttura del documento'
 $ModelScope = 'modello C4'
 $StyleScope = 'guida di stile'
 $MermaidScope = 'diagrammi Mermaid'
@@ -49,23 +44,34 @@ function Test-Mentions([string]$Text, [string]$Name) {
     return [regex]::IsMatch($Text, (Get-PhrasePattern $Name))
 }
 
-# ── Struttura arc42 ───────────────────────────────────────────────────────────
+# ── Struttura ─────────────────────────────────────────────────────────────────
+
+# Elenco ordinato dei titoli delle sezioni, titolo del glossario e, facoltativo, il
+# modello C4 relativo alla cartella del documento.
+function Read-DocumentStructure {
+    if (-not (Test-Path $structurePath)) { return $null }
+    $structure = Get-Content -Raw $structurePath | ConvertFrom-Json
+    $script:SectionTitles = @($structure.sections)
+    $script:GlossaryTitle = $structure.glossary
+    $script:WorkspaceDsl = if ($structure.model) { Join-Path $docsDirectory $structure.model }
+    return $structure
+}
 
 function Get-Sections {
     if (-not (Test-Path $docsDirectory)) { return @() }
     return @(Get-ChildItem -Path $docsDirectory -File | Where-Object Name -Match $SectionFilePattern | Sort-Object Name | ForEach-Object {
             $parsed = ConvertFrom-MarkdownSection ([IO.File]::ReadAllText($_.FullName))
-            [pscustomobject]@{ File = $_; Title = $parsed.Title; Arc42Index = [Array]::IndexOf($Arc42Titles, $parsed.Title); Content = $parsed }
+            [pscustomobject]@{ File = $_; Title = $parsed.Title; Index = [Array]::IndexOf($SectionTitles, $parsed.Title); Content = $parsed }
         })
 }
 
-function Test-Arc42Structure($Sections) {
-    $Sections | Where-Object Arc42Index -LT 0 | ForEach-Object { New-Issue $DocumentScope 'titolo non arc42' "$($_.File.Name): $($_.Title)" }
-    $Arc42Titles | Where-Object { $Sections.Title -notcontains $_ } | ForEach-Object { New-Issue $DocumentScope 'sezione mancante' $_ }
+function Test-SectionStructure($Sections) {
+    $Sections | Where-Object Index -LT 0 | ForEach-Object { New-Issue $DocumentScope 'titolo fuori struttura' "$($_.File.Name): $($_.Title)" }
+    $SectionTitles | Where-Object { $Sections.Title -notcontains $_ } | ForEach-Object { New-Issue $DocumentScope 'sezione mancante' $_ }
     $Sections | Group-Object Title | Where-Object Count -GT 1 | ForEach-Object { New-Issue $DocumentScope 'sezione duplicata' $_.Name }
 
-    $recognized = @($Sections | Where-Object Arc42Index -GE 0)
-    $expectedOrder = @($recognized | Sort-Object Arc42Index)
+    $recognized = @($Sections | Where-Object Index -GE 0)
+    $expectedOrder = @($recognized | Sort-Object Index)
     for ($position = 0; $position -lt $recognized.Count; $position++) {
         if ($recognized[$position].Title -ne $expectedOrder[$position].Title) { New-Issue $DocumentScope 'sezione fuori ordine' $recognized[$position].Title }
     }
@@ -119,7 +125,7 @@ function Test-Wording($Section, $Style) {
 # ── Termini, sigle, nomi interni e concetti ───────────────────────────────────
 
 function Get-GlossaryTerms($Sections) {
-    $glossary = $Sections | Where-Object Title -EQ $GlossaryTitle | Select-Object -First 1
+    $glossary = $Sections | Where-Object { $GlossaryTitle -and $_.Title -eq $GlossaryTitle } | Select-Object -First 1
     if (-not $glossary) { return @() }
     return @($glossary.Content.Blocks | ForEach-Object {
             if ($_.Raw -match '^\s*\*\*([^*]+)\*\*') { $Matches[1].Trim().ToLowerInvariant() }
@@ -131,7 +137,7 @@ function Get-GlossaryTerms($Sections) {
 # perche' le posizioni restino confrontabili con il testo originale.
 function Get-ReadingStream($Sections) {
     $position = 0
-    foreach ($section in ($Sections | Where-Object { $_.Arc42Index -ge 0 -and $_.Title -ne $GlossaryTitle })) {
+    foreach ($section in ($Sections | Where-Object { $_.Index -ge 0 -and $_.Title -ne $GlossaryTitle })) {
         foreach ($block in $section.Content.Blocks) {
             $withoutLinks = $block.Raw -replace '!\[[^\]]*\]\([^)]*\)', '' -replace '\[([^\]]*)\]\([^)]*\)', '$1'
             $light = [regex]::Replace($withoutLinks, '`[^`]*`', { param($m) ' ' * $m.Length })
@@ -299,8 +305,11 @@ function Test-MermaidSections($Sections) {
 }
 
 function Test-C4Model($Sections) {
-    if (-not (Test-Path $workspaceDsl)) { return New-Issue $ModelScope 'file mancante' $workspaceDsl }
-    try { $export = Export-StructurizrWorkspace (Resolve-Path $workspaceDsl).Path }
+    if (-not $WorkspaceDsl) {
+        return $Sections | ForEach-Object { $section = $_; $section.Content.Views | ForEach-Object { New-Issue $section.Title 'vista inesistente' $_ } }
+    }
+    if (-not (Test-Path $WorkspaceDsl)) { return New-Issue $ModelScope 'file mancante' $WorkspaceDsl }
+    try { $export = Export-StructurizrWorkspace (Resolve-Path $WorkspaceDsl).Path }
     catch { return New-Issue $ModelScope 'verifica non eseguita' $_.Exception.Message }
     if ($export.Error) { return New-Issue $ModelScope 'non valido' $export.Error }
 
@@ -316,7 +325,7 @@ function Test-Writing($Sections) {
     $style = Get-StyleRules
     if (-not $style) { return New-Issue $StyleScope 'file mancante' $styleRulesPath }
 
-    $Sections | Where-Object Arc42Index -GE 0 | ForEach-Object { Test-SectionShape $_ $style; Test-Readability $_ $style; Test-Wording $_ $style }
+    $Sections | Where-Object Index -GE 0 | ForEach-Object { Test-SectionShape $_ $style; Test-Readability $_ $style; Test-Wording $_ $style }
     $glossary = Get-GlossaryTerms $Sections
     $stream = @(Get-ReadingStream $Sections)
     Test-Acronyms $stream $glossary
@@ -326,8 +335,9 @@ function Test-Writing($Sections) {
 }
 
 function Get-DocumentationIssues {
+    if (-not (Read-DocumentStructure)) { return New-Issue $StructureScope 'file mancante' $structurePath }
     $sections = Get-Sections
-    Test-Arc42Structure $sections
+    Test-SectionStructure $sections
     Test-C4Model $sections
     Test-MermaidSections $sections
     $sections | ForEach-Object { Test-References $_ }
@@ -336,7 +346,7 @@ function Get-DocumentationIssues {
 
 function Complete-Verification([string[]]$Issues) {
     if (-not $Issues) {
-        Write-Host "##[section]Documentazione architetturale in $docsDirectory valida"
+        Write-Host "##[section]Documento in $docsDirectory valido"
         exit 0
     }
 
@@ -350,7 +360,7 @@ function Complete-Verification([string[]]$Issues) {
 }
 
 if ($gateMode -eq 'off') {
-    Write-Host "Verifica della documentazione architetturale disattivata"
+    Write-Host "Verifica del documento disattivata"
     exit 0
 }
 

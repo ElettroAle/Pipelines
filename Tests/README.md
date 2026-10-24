@@ -20,7 +20,7 @@ Tests/
 │   ├── New-ReleaseNotes.Tests.ps1
 │   ├── Test-PublishedArtifact.Tests.ps1
 │   ├── Test-AdrCorpus.Tests.ps1
-│   ├── Test-ArchitectureDocs.Tests.ps1
+│   ├── Test-Documentation.Tests.ps1
 │   ├── GitCliff.Tests.ps1
 │   └── ScenarioCoverage.Tests.ps1
 ├── fixtures/
@@ -147,16 +147,17 @@ Ogni test costruisce un repository con un bare repo come origin: il corpus di pa
 | Verifica del corpus delle decisioni architetturali | Decisione ben formata; stato non ammesso, numero duplicato, sezione mancante, sostituzione non reciproca; ADR accepted riscritto e sostituito; modalità `warn` |
 | Regole del corpus | ADR accepted eliminato, ADR proposed riscrivibile, superseded-by verso una decisione inesistente, file senza frontmatter, file non numerati ignorati, run fuori da una PR, modalità `off`, una segnalazione per difetto |
 
-#### `Test-ArchitectureDocs.Tests.ps1`
+#### `Test-Documentation.Tests.ps1`
 
-Ogni scenario parte da una documentazione valida (dodici sezioni, modello C4, diagramma Mermaid, guida di stile) e vi introduce un solo difetto. Richiede Java 17 o successivo (`STRUCTURIZR_JAVA`, `JAVA_HOME_17_X64` o `JAVA_HOME`) e Node.js; la Structurizr CLI e il parser Mermaid si scaricano alla prima esecuzione.
+Ogni scenario parte da una documentazione valida (dodici sezioni arc42 dichiarate in `structure.json`, modello C4, diagramma Mermaid, guida di stile) e vi introduce un solo difetto. Richiede Java 17 o successivo (`STRUCTURIZR_JAVA`, `JAVA_HOME_17_X64` o `JAVA_HOME`) e Node.js; la Structurizr CLI e il parser Mermaid si scaricano alla prima esecuzione.
 
 | Suite | Scenario testato |
 |---|---|
 | Verifica della documentazione architetturale | Documento completo e chiaro; documento non ben formato (sezione mancante, relazione verso un elemento non dichiarato, container senza vista dei componenti, Mermaid non valido, rimando a decisione inesistente); testo non chiaro (leggibilità, frase troppo lunga, riempitivo, autoreferenziale, sigla non spiegata, termine senza glossario, nome interno non spiegato, gergo, ordine dei concetti, ordine della sezione, apertura mancante, elemento e relazione non spiegati) |
 | Modalità del controllo | `warn`, `off`, guida di stile mancante |
 | Strumenti assenti | Senza Java 17 o senza Node.js la verifica fallisce nominando il controllo non eseguito |
-| Controlli strutturali | Ancora inesistente, vista non mostrata, marcatore di vista inesistente, livello C4 mancante, titolo non arc42, sezioni fuori ordine, sigla assente dal glossario |
+| Controlli strutturali | Ancora inesistente, vista non mostrata, marcatore di vista inesistente, livello C4 mancante, titolo fuori struttura, sezioni fuori ordine, sigla assente dal glossario |
+| Struttura dichiarata dal documento | Documento con sezioni proprie e senza modello C4, marcatore di vista senza modello, `structure.json` mancante |
 | MarkdownText | Frasi, abbreviazioni, decimali, parole, indice Gulpease, testo semplice, ancore, blocchi di una sezione |
 
 #### `ScenarioCoverage.Tests.ps1` (14 suite, 25 test)
