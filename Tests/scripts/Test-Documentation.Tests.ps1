@@ -6,7 +6,7 @@
 
 .DESCRIPTION
     Ogni scenario parte da una documentazione valida (dodici sezioni arc42, modello C4,
-    diagrammi Mermaid, guida di stile) e vi introduce un solo difetto. Lo script gira
+    diagrammi Mermaid, soglie di leggibilita') e vi introduce un solo difetto. Lo script gira
     come in pipeline: richiede Java 17 o successivo e Node.js; la Structurizr CLI e il
     parser Mermaid si installano in una cache condivisa da tutti gli scenari.
 #>
@@ -31,17 +31,6 @@ $Body
 
     function New-ValidDocs {
         $docs = [ordered]@{}
-        $docs['docs/style.json'] = @'
-{
-  "gulpease": { "opening": 40, "body": 40 },
-  "sentences": { "maxWords": 25, "abbreviations": ["es.", "ecc."] },
-  "fillers": ["è importante sottolineare che", "vale la pena notare che"],
-  "selfReferences": ["in questa sezione", "questo documento", "vedremo"],
-  "jargon": { "leverage": "sfruttare", "deployare": "rilasciare" },
-  "opening": ["A chi serve", "Cosa risponde"],
-  "parts": { "first": "In breve", "last": "Per approfondire" }
-}
-'@
         $docs['docs/architecture/structure.json'] = @'
 {
   "sections": [
@@ -50,7 +39,8 @@ $Body
     "Decisioni architetturali", "Requisiti di qualità", "Rischi e debito tecnico", "Glossario"
   ],
   "glossary": "Glossario",
-  "model": "model/workspace.dsl"
+  "model": "model/workspace.dsl",
+  "readability": { "gulpease": 40, "maxWords": 25, "abbreviations": ["es.", "ecc."] }
 }
 '@
         $docs['docs/decisions/0001-esempio.md'] = "---`nstatus: accepted`n---`n`n# Esempio`n"
@@ -308,62 +298,14 @@ Describe "Funzionalità: Verifica della documentazione architetturale" {
         }
     }
 
-    Context "Schema dello scenario: testo non chiaro — <sezione>, <motivo>" -ForEach @(
+    Context "Schema dello scenario: testo oltre le soglie di leggibilità — <sezione>, <motivo>" -ForEach @(
         @{
             sezione = 'Strategia di soluzione'; motivo = 'leggibilità'
-            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/04-strategia-di-soluzione.md' 'La piattaforma divide il lavoro fra applicazioni piccole. Ogni applicazione fa una cosa sola.' 'Infrastrutturalmente, l''orchestrazione multiprogettuale garantisce interoperabilità transfrontaliera. Contestualmente, l''automatizzazione documentale razionalizza l''amministrazione organizzativa.' }
+            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/04-strategia-di-soluzione.md' 'La piattaforma divide il lavoro fra applicazioni piccole. Ogni applicazione fa una cosa sola.' 'Infrastrutturalmente, l''orchestrazione multiprogettuale garantisce interoperabilità transfrontaliera. Contestualmente, l''automatizzazione documentale razionalizza l''amministrazione organizzativa. Conseguentemente, l''interoperabilità infrastrutturale semplifica l''amministrazione multiprogettuale. Parallelamente, l''internazionalizzazione organizzativa rafforza l''orchestrazione documentale interdipartimentale.' }
         }
         @{
             sezione = 'Vista di runtime'; motivo = 'frase troppo lunga'
             Mutate  = { param($d) Edit-Docs $d 'docs/architecture/06-vista-di-runtime.md' 'con il codice della sessione.' 'con il codice della sessione, che il BFF conserva per tutta la durata della conversazione e che rimanda all''API del Motore ogni volta che il cittadino scrive un messaggio nuovo o chiude la finestra.' }
-        }
-        @{
-            sezione = 'Introduzione e obiettivi'; motivo = 'riempitivo'
-            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/01-introduzione-e-obiettivi.md' 'La piattaforma aiuta' 'È importante sottolineare che la piattaforma aiuta' }
-        }
-        @{
-            sezione = 'Strategia di soluzione'; motivo = 'autoreferenziale'
-            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/04-strategia-di-soluzione.md' 'La piattaforma divide' 'In questa sezione vedremo come la piattaforma divide' }
-        }
-        @{
-            sezione = 'Concetti trasversali'; motivo = 'sigla non spiegata'
-            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/08-concetti-trasversali.md' 'Ogni servizio riceve' 'Il PE è privato. Ogni servizio riceve' }
-        }
-        @{
-            sezione = 'Vista di deployment'; motivo = 'termine senza glossario'
-            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/12-glossario.md' "- **hub-and-spoke**: schema di rete con una rete centrale collegata alle reti delle applicazioni.`n" '' }
-        }
-        @{
-            sezione = 'Vista dei building block'; motivo = 'nome interno non spiegato'
-            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/05-vista-dei-building-block.md' 'conserva lo stato fra due richieste.' 'conserva lo stato fra due richieste. Il SessionBackup parte ogni notte.' }
-        }
-        @{
-            sezione = 'Concetti trasversali'; motivo = 'gergo evitabile'
-            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/08-concetti-trasversali.md' 'della rete privata.' 'della rete privata. Il PE permette di fare leverage sulla rete.' }
-        }
-        @{
-            sezione = 'Vista di deployment'; motivo = 'ordine dei concetti'
-            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/07-vista-di-deployment.md' 'Un **Private Endpoint**' "Il traffico entra da un Private Endpoint.`n`nUn **Private Endpoint**" }
-        }
-        @{
-            sezione = 'Vincoli'; motivo = 'ordine della sezione'
-            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/02-vincoli.md' '## In breve' "## Dettagli`n`nIl progetto usa un solo cloud.`n`n## In breve" }
-        }
-        @{
-            sezione = 'Vincoli'; motivo = 'apertura mancante'
-            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/02-vincoli.md' "> **A chi serve**: a chi entra nel progetto e a chi lo guida.`n> **Cosa risponde**: quali limiti valgono per tutto il progetto?`n" '' }
-        }
-        @{
-            sezione = 'Vista dei building block'; motivo = 'elemento non spiegato'
-            Mutate  = {
-                param($d)
-                Edit-Docs $d 'docs/architecture/05-vista-dei-building-block.md' 'L''API del Motore accoda i lavori lunghi al Worker.' 'L''API del Motore accoda i lavori lunghi.'
-                Edit-Docs $d 'docs/architecture/05-vista-dei-building-block.md' 'La Coda del Worker ordina' 'La Coda ordina'
-            }
-        }
-        @{
-            sezione = 'Vista di runtime'; motivo = 'relazione non spiegata'
-            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/06-vista-di-runtime.md' 'Il BFF chiede all''API del Motore di aprire una sessione. L''API del Motore risponde' "Il BFF apre una sessione.`n`nL'API del Motore risponde" }
         }
     ) {
         BeforeAll {
@@ -386,7 +328,7 @@ Describe "Test-Documentation — modalità del controllo" {
 
     BeforeAll {
         $docs = New-ValidDocs
-        Edit-Docs $docs 'docs/architecture/04-strategia-di-soluzione.md' 'La piattaforma divide' 'In questa sezione vedremo come la piattaforma divide'
+        Edit-Docs $docs 'docs/architecture/09-decisioni-architetturali.md' 'come unico ingresso.' 'come unico ingresso. La decisione 0042-inesistente vale ancora.'
     }
 
     It "In modalità warn segnala come warning e non blocca" {
@@ -400,13 +342,6 @@ Describe "Test-Documentation — modalità del controllo" {
         $res = Invoke-DocsCheck $docs 'off'
         $res.ExitCode | Should -Be 0
         Get-Issues $res.Output | Should -BeNullOrEmpty
-    }
-
-    It "Senza guida di stile fallisce nominando il file" {
-        $docs['docs/style.json'] = $null
-        $res = Invoke-DocsCheck $docs
-        $res.ExitCode | Should -Be 1
-        Get-Issues $res.Output | Where-Object { $_ -match '^guida di stile: file mancante \(docs/style\.json\)' } | Should -Not -BeNullOrEmpty
     }
 }
 
@@ -470,13 +405,6 @@ Describe "Test-Documentation — controlli strutturali" {
         $res = Invoke-DocsCheck $docs
         Get-Issues $res.Output | Where-Object { $_ -match '^documento: sezione fuori ordine \(Vincoli\)' } | Should -Not -BeNullOrEmpty
     }
-
-    It "Una sigla assente dal glossario fallisce anche se spiegata nel testo" {
-        $docs = New-ValidDocs
-        Edit-Docs $docs 'docs/architecture/12-glossario.md' '- **PE**: Private Endpoint, un indirizzo privato verso un servizio.' ''
-        $res = Invoke-DocsCheck $docs
-        Get-Issues $res.Output | Where-Object { $_ -match '^Concetti trasversali: termine senza glossario \(PE\)' } | Should -Not -BeNullOrEmpty
-    }
 }
 
 Describe "MarkdownText — analisi del testo" {
@@ -489,7 +417,7 @@ Describe "MarkdownText — analisi del testo" {
         Get-Sentences 'Il BFF riceve. Chi chiama? Il Client!' @() | Should -Be @('Il BFF riceve.', 'Chi chiama?', 'Il Client!')
     }
 
-    It "Non divide la frase dopo un'abbreviazione della guida di stile" {
+    It "Non divide la frase dopo un'abbreviazione dichiarata" {
         Get-Sentences 'Un servizio, es. il BFF, riceve. Poi basta.' @('es.') | Should -Be @('Un servizio, es. il BFF, riceve.', 'Poi basta.')
     }
 

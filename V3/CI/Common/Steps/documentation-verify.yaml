@@ -1,9 +1,9 @@
 # ── CI Step: Documentation ────────────────────────────────────────────────────
 #
-# Verifica un documento del repository (V3/CI/Scripts/Test-Documentation.ps1): le
-# sezioni dichiarate nel suo structure.json, il modello C4 in Structurizr DSL se la
-# struttura lo dichiara, diagrammi Mermaid validi, elementi e relazioni dei diagrammi
-# spiegati nel testo, rimandi esistenti, testo conforme alla guida di stile.
+# Controlli oggettivi su un documento del repository (V3/CI/Scripts/Test-Documentation.ps1):
+# le sezioni dichiarate nel suo structure.json, il modello C4 in Structurizr DSL se la
+# struttura lo dichiara, diagrammi Mermaid validi, rimandi esistenti, soglie numeriche
+# di leggibilita' dichiarate in structure.json. Lo stile lo giudica documentation-style.yaml.
 # La Structurizr CLI richiede Java 17, il parser Mermaid Node.js.
 #
 # Riusato da:
@@ -13,7 +13,6 @@
 # ─────────
 #   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
 #   docsDirectory      → cartella delle sezioni del documento, con il suo structure.json (default: docs/architecture)
-#   styleRules         → guida di stile in JSON (default: docs/style.json)
 #   decisionsDirectory → cartella degli ADR a cui puntano i rimandi (default: docs/decisions)
 #   nodeVersion        → versione di Node.js per il parser Mermaid (default: 22.x)
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
@@ -29,10 +28,6 @@ parameters:
   - name: docsDirectory
     type: string
     default: 'docs/architecture'
-
-  - name: styleRules
-    type: string
-    default: 'docs/style.json'
 
   - name: decisionsDirectory
     type: string
@@ -66,5 +61,4 @@ steps:
     env:
       GATE_MODE: ${{ parameters.mode }}
       DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
-      STYLE_RULES: ${{ parameters.styleRules }}
       DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}

@@ -25,8 +25,7 @@ function Get-MermaidCheckerDirectory {
     return $installDir
 }
 
-# Ogni diagramma { Id, Text } torna con Error/Line se non valido, altrimenti con
-# Elements e Relationships (coppie di nomi).
+# Ogni diagramma { Id, Text } torna con error/line se non valido, altrimenti con il tipo.
 function Test-MermaidDiagrams([object[]]$Diagrams) {
     if (-not $Diagrams) { return @() }
 

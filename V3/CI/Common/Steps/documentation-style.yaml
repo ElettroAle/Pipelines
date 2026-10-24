@@ -1,0 +1,65 @@
+# ── CI Step: Documentation style ──────────────────────────────────────────────
+#
+# Giudica lo stile delle sezioni di un documento con un modello Azure OpenAI
+# (V3/CI/Scripts/Test-DocumentationStyle.ps1): la guida di stile dichiarata nel
+# structure.json del documento e' l'istruzione del modello. L'accesso al modello passa
+# dalla service connection con un token Entra ID, senza chiavi.
+#
+# Riusato da:
+#   CI/Agnostic/quality-docs.yaml
+#
+# Parametri
+# ─────────
+#   mode               → 'off' (default) | 'warn' (segnala senza bloccare) | 'enforce'
+#   docsDirectory      → cartella delle sezioni del documento, con il suo structure.json (default: docs/architecture)
+#   serviceConnection  → service connection Azure con il ruolo Cognitive Services OpenAI User [REQUIRED se mode non e' off]
+#   endpoint           → endpoint della risorsa Azure OpenAI, es. https://<nome>.openai.azure.com [REQUIRED se mode non e' off]
+#   model              → nome del deployment del modello [REQUIRED se mode non e' off]
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: mode
+    type: string
+    default: 'off'
+    values: ['off', 'warn', 'enforce']
+
+  - name: docsDirectory
+    type: string
+    default: 'docs/architecture'
+
+  - name: serviceConnection
+    type: string
+    default: ''
+
+  - name: endpoint
+    type: string
+    default: ''
+
+  - name: model
+    type: string
+    default: ''
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - ${{ if ne(parameters.mode, 'off') }}:
+    - task: AzureCLI@2
+      displayName: 'Documentation style ${{ parameters.docsDirectory }} (${{ parameters.mode }})'
+      inputs:
+        azureSubscription: ${{ parameters.serviceConnection }}
+        scriptType: pscore
+        scriptLocation: scriptPath
+        scriptPath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Test-DocumentationStyle.ps1'
+        workingDirectory: '$(Build.SourcesDirectory)'
+      env:
+        GATE_MODE: ${{ parameters.mode }}
+        DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
+        TARGET_BRANCH: $(System.PullRequest.TargetBranch)
+        STYLE_JUDGE_ENDPOINT: ${{ parameters.endpoint }}
+        STYLE_JUDGE_MODEL: ${{ parameters.model }}

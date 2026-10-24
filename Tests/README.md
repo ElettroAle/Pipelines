@@ -149,16 +149,26 @@ Ogni test costruisce un repository con un bare repo come origin: il corpus di pa
 
 #### `Test-Documentation.Tests.ps1`
 
-Ogni scenario parte da una documentazione valida (dodici sezioni arc42 dichiarate in `structure.json`, modello C4, diagramma Mermaid, guida di stile) e vi introduce un solo difetto. Richiede Java 17 o successivo (`STRUCTURIZR_JAVA`, `JAVA_HOME_17_X64` o `JAVA_HOME`) e Node.js; la Structurizr CLI e il parser Mermaid si scaricano alla prima esecuzione.
+Ogni scenario parte da una documentazione valida (dodici sezioni arc42 dichiarate in `structure.json`, modello C4, diagramma Mermaid, soglie di leggibilità) e vi introduce un solo difetto. Richiede Java 17 o successivo (`STRUCTURIZR_JAVA`, `JAVA_HOME_17_X64` o `JAVA_HOME`) e Node.js; la Structurizr CLI e il parser Mermaid si scaricano alla prima esecuzione.
 
 | Suite | Scenario testato |
 |---|---|
-| Verifica della documentazione architetturale | Documento completo e chiaro; documento non ben formato (sezione mancante, relazione verso un elemento non dichiarato, container senza vista dei componenti, Mermaid non valido, rimando a decisione inesistente); testo non chiaro (leggibilità, frase troppo lunga, riempitivo, autoreferenziale, sigla non spiegata, termine senza glossario, nome interno non spiegato, gergo, ordine dei concetti, ordine della sezione, apertura mancante, elemento e relazione non spiegati) |
-| Modalità del controllo | `warn`, `off`, guida di stile mancante |
+| Verifica della documentazione architetturale | Documento completo e chiaro; documento non ben formato (sezione mancante, relazione verso un elemento non dichiarato, container senza vista dei componenti, Mermaid non valido, rimando a decisione inesistente); testo oltre le soglie (leggibilità, frase troppo lunga) |
+| Modalità del controllo | `warn`, `off` |
 | Strumenti assenti | Senza Java 17 o senza Node.js la verifica fallisce nominando il controllo non eseguito |
-| Controlli strutturali | Ancora inesistente, vista non mostrata, marcatore di vista inesistente, livello C4 mancante, titolo fuori struttura, sezioni fuori ordine, sigla assente dal glossario |
+| Controlli strutturali | Ancora inesistente, vista non mostrata, marcatore di vista inesistente, livello C4 mancante, titolo fuori struttura, sezioni fuori ordine |
 | Struttura dichiarata dal documento | Documento con sezioni proprie e senza modello C4, marcatore di vista senza modello, `structure.json` mancante |
 | MarkdownText | Frasi, abbreviazioni, decimali, parole, indice Gulpease, testo semplice, ancore, blocchi di una sezione |
+
+#### `Test-DocumentationStyle.Tests.ps1`
+
+Il modello è sostituito da un endpoint locale che risponde come Azure OpenAI: restituisce un rilievo quando la sezione inviata contiene la frase registrata e conserva le richieste. Le prove verificano cosa si manda al modello e come si riporta la risposta; il giudizio vero del modello si prova con gli esempi della guida di stile del repository della documentazione.
+
+| Suite | Scenario testato |
+|---|---|
+| Giudizio dello stile | Documento conforme; sezione che viola una regola della guida (sezione e regola nominate); regola nuova nella guida senza cambiare la pipeline; modello non disponibile (tre tentativi, poi rilievo) |
+| Cosa si manda al modello | Una richiesta per sezione, glossario escluso e mandato come contesto; formato di risposta e deployment; in una PR solo le sezioni cambiate, nessuna chiamata senza sezioni cambiate, tutte se cambia la guida |
+| Configurazione e modalità | Guida non dichiarata, guida mancante, endpoint assente, `warn`, `off` |
 
 #### `ScenarioCoverage.Tests.ps1` (14 suite, 25 test)
 
