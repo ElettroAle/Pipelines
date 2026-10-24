@@ -1,0 +1,9 @@
+{
+  "name": "architecture-docs-mermaid",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "jsdom": "30.1.2",
+    "mermaid": "12.1.0"
+  }
+}

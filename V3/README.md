@@ -92,7 +92,7 @@ Nessuna governance Git. Usato per ambienti senza SemVer o tagging.
 | `CI/Agnostic/publish-angular.yaml` | Build + Publish Angular, artifact nominato `{progetto}-{env}` |
 | `CI/Agnostic/quality-dotNet.yaml` | Quality gate .NET (Gitleaks + Test + Coverage) |
 | `CI/Agnostic/quality-angular.yaml` | Quality gate Angular (Gitleaks + Build check) |
-| `CI/Agnostic/quality-docs.yaml` | Quality gate documentazione (Gitleaks + verifica degli ADR) |
+| `CI/Agnostic/quality-docs.yaml` | Quality gate documentazione (Gitleaks + verifica degli ADR + verifica della documentazione architetturale) |
 | `CD/Agnostic/deploy-azure-appService.yaml` | Download artifact CI + deploy su Azure App Service |
 | `CD/Agnostic/deploy-azure-functionApp.yaml` | Download artifact CI + deploy su Azure Function App |
 | `CD/Agnostic/deploy-angular-staticWebApp.yaml` | Download artifact CI + deploy su Azure Static Web Apps |

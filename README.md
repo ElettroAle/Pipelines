@@ -220,6 +220,60 @@ extends:
 - **Requisiti.** Il repo dichiara il repository resource con alias `infrastructure`; pool Linux
   (Gitleaks gira in docker).
 
+### Verifica della documentazione architetturale (quality-docs)
+
+Per un repository che tiene la documentazione architetturale in arc42, con il modello C4 in
+Structurizr DSL e i diagrammi UML in Mermaid. Si attiva con `docsMode`; di default è `off`.
+
+```yaml
+extends:
+  template: V3/CI/Agnostic/quality-docs.yaml@infrastructure
+  parameters:
+    checkoutRepository: self
+    docsMode: 'enforce'                 # 'off' (default) | 'warn' | 'enforce'
+    docsDirectory: 'docs/architecture'
+    styleRules: 'docs/style.json'
+    workspaceDsl: 'docs/architecture/model/workspace.dsl'
+```
+
+- **Sezioni.** Un file `NN-titolo.md` per sezione, con il titolo (H1) uguale a uno dei dodici titoli
+  arc42 in italiano, nell'ordine arc42.
+- **Modello C4.** Il DSL è valido e ha vista di contesto, vista dei container e vista di deployment;
+  ogni container con il tag `Applicazione` ha la sua vista dei componenti. Una sezione mostra una vista
+  con il marcatore `<!-- vista: <chiave> -->`; ogni vista è mostrata da almeno una sezione.
+- **Diagrammi spiegati.** Ogni elemento di una vista o di un diagramma Mermaid compare nel testo della
+  sezione che lo mostra; ogni relazione ha un paragrafo che nomina entrambi gli estremi. I diagrammi
+  Mermaid devono essere validi: l'errore nomina file e riga.
+- **Rimandi.** I link relativi puntano a file e ancore esistenti; un identificativo di decisione
+  `NNNN-titolo` nel testo esiste in `decisionsDirectory`.
+- **Forma della sezione.** Si apre con una citazione che contiene le etichette di `opening` della
+  guida di stile (chi la legge, a cosa risponde); la prima parte (H2) è `parts.first`, `parts.last`
+  se presente è l'ultima.
+- **Chiarezza.** Dalla guida di stile `styleRules`: indice Gulpease minimo per apertura e corpo,
+  parole massime per frase, riempitivi, frasi autoreferenziali, gergo con il termine italiano da usare.
+  Una sigla si spiega al primo uso (`Nome per esteso (SIGLA)`, `SIGLA (spiegazione)` o `**SIGLA**`) ed
+  è nel glossario; un termine in corsivo è nel glossario; un nome interno (codice in linea o
+  CamelCase) si spiega al primo uso o è nel glossario; un concetto definito in grassetto non si usa
+  prima della definizione.
+- **Requisiti.** Java 17 o successivo per la Structurizr CLI (versione fissata, SHA-256 verificato) e
+  Node.js per il parser Mermaid (dipendenze fissate da `CI/Scripts/mermaid/package-lock.json`); lo step
+  li prepara con `ensure-java.yaml` e `UseNode@1`. Se uno dei due manca la verifica fallisce
+  nominando il controllo non eseguito.
+
+Guida di stile (`docs/style.json`):
+
+```json
+{
+  "gulpease": { "opening": 60, "body": 50 },
+  "sentences": { "maxWords": 25, "abbreviations": ["es.", "ecc."] },
+  "fillers": ["è importante sottolineare che"],
+  "selfReferences": ["in questa sezione", "vedremo"],
+  "jargon": { "leverage": "sfruttare" },
+  "opening": ["A chi serve", "Cosa risponde"],
+  "parts": { "first": "In breve", "last": "Per approfondire" }
+}
+```
+
 ---
 
 ## Test Suite
@@ -229,7 +283,7 @@ La libreria include una suite di test a 2 livelli che gira su GitHub Actions sen
 | Livello | Tool | Cosa verifica |
 |---|---|---|
 | 1 — Static Analysis | Python (`yamllint`, script custom) | Sintassi YAML, riferimenti a template esistenti, contratti parametri |
-| 2 — Script Unit Tests | PowerShell Pester 5 | Logica di `Set-Versioning.ps1`, `Verify-SemVer.ps1`, `New-ReleaseNotes.ps1`, `Test-PublishedArtifact.ps1`, `Test-AdrCorpus.ps1` e `ScenarioCoverage.cs` |
+| 2 — Script Unit Tests | PowerShell Pester 5 | Logica di `Set-Versioning.ps1`, `Verify-SemVer.ps1`, `New-ReleaseNotes.ps1`, `Test-PublishedArtifact.ps1`, `Test-AdrCorpus.ps1`, `Test-ArchitectureDocs.ps1` e `ScenarioCoverage.cs` |
 
 ### Esecuzione locale
 
@@ -270,6 +324,10 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | `CI/Scripts/New-ReleaseNotes.ps1` | Release notes dal tag del rilascio precedente sullo stesso ramo, ogni voce con link al commit, alla PR che lo ha integrato e ai work item della PR: summary della run e, su main, pagina wiki |
 | `CI/Scripts/Test-PublishedArtifact.ps1` | Prima dell'upload dell'artifact negli orchestratori GitFlow e TrunkFlow: se la run lo ha già pubblicato (rerun dello stage) setta `artifactAlreadyPublished` e l'upload si salta; se la verifica non riesce l'upload procede |
 | `CI/Scripts/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, sostituzioni reciproche, ADR `accepted` non modificati rispetto al ramo di destinazione della PR |
+| `CI/Scripts/Test-ArchitectureDocs.ps1` | Verifica la documentazione architetturale (`quality-docs.yaml`): sezioni arc42, modello C4 completo, diagrammi Mermaid validi e spiegati nel testo, rimandi esistenti, testo conforme alla guida di stile |
+| `CI/Scripts/MarkdownText.ps1` | Lettura delle sezioni Markdown (blocchi, parti, marcatori di vista, diagrammi) e misure di leggibilità (frasi, parole, indice Gulpease) per `Test-ArchitectureDocs.ps1` |
+| `CI/Scripts/Structurizr.ps1` | Scarica la Structurizr CLI (versione fissata, SHA-256 verificato), sceglie un Java 17 o successivo ed esporta il modello C4 in JSON |
+| `CI/Scripts/Mermaid.ps1`, `CI/Scripts/mermaid/` | Installa con `npm ci` il parser Mermaid fissato dal lockfile e ricava, per ogni diagramma, errore o elementi e relazioni |
 | `CI/Scripts/ScenarioCoverage.cs` | File-based app .NET 10: verifica che ogni scenario dei `.feature` sia stato eseguito e superato, leggendo i Cucumber Messages del runner BDD |
 
 ---

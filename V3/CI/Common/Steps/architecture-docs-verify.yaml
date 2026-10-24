@@ -1,0 +1,76 @@
+# ── CI Step: Architecture documentation ───────────────────────────────────────
+#
+# Verifica la documentazione architetturale del repository
+# (V3/CI/Scripts/Test-ArchitectureDocs.ps1): dodici sezioni arc42, modello C4 in
+# Structurizr DSL completo dei suoi livelli, diagrammi Mermaid validi, elementi e
+# relazioni dei diagrammi spiegati nel testo, rimandi esistenti, testo conforme alla
+# guida di stile. La Structurizr CLI richiede Java 17, il parser Mermaid Node.js.
+#
+# Riusato da:
+#   CI/Agnostic/quality-docs.yaml
+#
+# Parametri
+# ─────────
+#   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
+#   docsDirectory      → cartella delle sezioni arc42 (default: docs/architecture)
+#   styleRules         → guida di stile in JSON (default: docs/style.json)
+#   workspaceDsl       → modello C4 in Structurizr DSL (default: docs/architecture/model/workspace.dsl)
+#   decisionsDirectory → cartella degli ADR a cui puntano i rimandi (default: docs/decisions)
+#   nodeVersion        → versione di Node.js per il parser Mermaid (default: 22.x)
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: mode
+    type: string
+    default: 'enforce'
+    values: ['off', 'warn', 'enforce']
+
+  - name: docsDirectory
+    type: string
+    default: 'docs/architecture'
+
+  - name: styleRules
+    type: string
+    default: 'docs/style.json'
+
+  - name: workspaceDsl
+    type: string
+    default: 'docs/architecture/model/workspace.dsl'
+
+  - name: decisionsDirectory
+    type: string
+    default: 'docs/decisions'
+
+  - name: nodeVersion
+    type: string
+    default: '22.x'
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - ${{ if ne(parameters.mode, 'off') }}:
+    - template: ensure-java.yaml
+
+    - task: UseNode@1
+      displayName: 'Install Node.js'
+      inputs:
+        version: ${{ parameters.nodeVersion }}
+
+  - task: PowerShell@2
+    displayName: 'Architecture documentation (${{ parameters.mode }})'
+    inputs:
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Test-ArchitectureDocs.ps1'
+      workingDirectory: '$(Build.SourcesDirectory)'
+      pwsh: true
+    env:
+      GATE_MODE: ${{ parameters.mode }}
+      DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
+      STYLE_RULES: ${{ parameters.styleRules }}
+      WORKSPACE_DSL: ${{ parameters.workspaceDsl }}
+      DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}
