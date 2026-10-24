@@ -76,7 +76,6 @@ Niente frasi che annunciano cosa dira' il testo.
     function New-Docs {
         $docs = [ordered]@{}
         $docs['docs/STYLE.md'] = $Guide
-        $docs['docs/architecture/structure.json'] = '{ "sections": ["Introduzione e obiettivi", "Vincoli", "Glossario"], "glossary": "Glossario", "guide": "../STYLE.md" }'
         $docs['docs/architecture/01-introduzione-e-obiettivi.md'] = "# Introduzione e obiettivi`n`nLa piattaforma aiuta il cittadino a parlare con il comune.`n"
         $docs['docs/architecture/02-vincoli.md'] = "# Vincoli`n`nLa piattaforma gira su Azure.`n"
         $docs['docs/architecture/03-glossario.md'] = "# Glossario`n`n**Azure**: il cloud di Microsoft.`n"
@@ -115,7 +114,7 @@ Niente frasi che annunciano cosa dira' il testo.
             $Root = Join-Path ([IO.Path]::GetTempPath()) "pester-style-$(New-Guid)"
             Write-Docs $Docs $Root
         }
-        $variables = @{ GATE_MODE = $Mode; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; TARGET_BRANCH = '' }
+        $variables = @{ GATE_MODE = $Mode; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; TARGET_BRANCH = ''; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md' }
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
 
         Push-Location $Root
@@ -310,15 +309,14 @@ Describe "Test-DocumentationStyle — configurazione e modalità" {
 
     BeforeEach { Reset-Stub }
 
-    It "Senza guida dichiarata fallisce nominando la struttura" {
+    It "Manda al modello la guida indicata dal parametro" {
         $docs = New-Docs
-        $docs['docs/architecture/structure.json'] = '{ "sections": ["Introduzione e obiettivi", "Vincoli", "Glossario"], "glossary": "Glossario" }'
-        $res = Invoke-StyleCheck $docs
-        $res.ExitCode | Should -Be 1
-        Get-Issues $res.Output | Where-Object { $_ -match '^giudizio dello stile: guida non dichiarata \(docs/architecture/structure\.json\)' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        $docs['docs/guide/scrittura.md'] = "# Altra guida`n`n### Niente sigle`n"
+        Invoke-StyleCheck $docs -Environment @{ STYLE_GUIDE = 'docs/guide/scrittura.md' } | Out-Null
+        (Get-StubRequests)[0].messages[0].content | Should -BeLike '*### Niente sigle*'
     }
 
-    It "Con la guida dichiarata ma assente fallisce nominando il file" {
+    It "Senza la guida fallisce nominando il file" {
         $docs = New-Docs
         $docs['docs/STYLE.md'] = $null
         $res = Invoke-StyleCheck $docs

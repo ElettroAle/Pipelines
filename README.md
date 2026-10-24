@@ -222,10 +222,10 @@ extends:
 
 ### Verifica della documentazione (quality-docs)
 
-Per un repository che tiene un documento in Markdown, una sezione per file: la documentazione
-architetturale in arc42 con il modello C4 in Structurizr DSL, oppure un altro documento con le sue
-sezioni. I diagrammi UML sono in Mermaid. La verifica ha due parti, ognuna con la sua modalità e di
-default `off`:
+Per un repository che tiene un documento in Markdown, una sezione per file, costruito su un template:
+la documentazione architetturale sul template ufficiale di arc42 con il modello C4 in Structurizr DSL,
+oppure un altro documento sul suo template. I diagrammi UML sono in Mermaid. La verifica ha due parti,
+ognuna con la sua modalità e di default `off`:
 
 - `docsMode`: controlli oggettivi, senza nessuna regola di stile;
 - `styleMode`: giudizio dello stile con un modello Azure OpenAI, che riceve la guida di stile del
@@ -239,37 +239,40 @@ extends:
     checkoutRepository: self
     docsMode: 'enforce'                 # 'off' (default) | 'warn' | 'enforce'
     docsDirectory: 'docs/architecture'
+    docsTemplate: 'https://github.com/arc42/arc42-template/releases/download/2026.10.19/arc42-template-IT-plain-markdownMP.zip'
+    docsTemplateSha256: 'bdcf1cefe5402fa15bb981a2e178c8714f1137992a38b267ad2de4ff09029d5a'
+    docsGulpease: 40                    # 0 (default): nessuna soglia
+    docsMaxWords: 25                    # 0 (default): nessuna soglia
+    docsAbbreviations: ['es.', 'ecc.']
+    docsGlossary: '12_glossary.md'
     styleMode: 'enforce'                # 'off' (default) | 'warn' | 'enforce'
+    styleGuide: 'docs/STYLE.md'         # default
     styleServiceConnection: '<service connection con Cognitive Services OpenAI User>'
     styleEndpoint: 'https://<risorsa>.openai.azure.com'
     styleModel: '<deployment>'
 ```
 
-La cartella del documento dichiara la sua configurazione in `structure.json`:
-
-```json
-{
-  "sections": ["Introduzione e obiettivi", "Vincoli", "…", "Glossario"],
-  "glossary": "Glossario",
-  "model": "model/workspace.dsl",
-  "guide": "../STYLE.md",
-  "readability": { "gulpease": 40, "maxWords": 25, "abbreviations": ["es.", "ecc."] }
-}
-```
+Il documento non dichiara la sua struttura: la prende dal template. `docsTemplate` è l'URL di un
+archivio zip pubblicato, con `docsTemplateSha256` obbligatorio come per ogni strumento scaricato, oppure
+un archivio o una cartella del repository. Cambiare versione o lingua del template è cambiare quei due
+parametri; cambiare formato è indicare un altro template.
 
 Controlli oggettivi (`docsMode`, `CI/Scripts/Test-Documentation.ps1`):
 
-- **Sezioni.** Un file `NN-titolo.md` per sezione, con il titolo (H1) uguale a uno dei titoli di
-  `sections`, nello stesso ordine.
-- **Modello C4** (solo se `model` è dichiarato). Il DSL è valido e ha vista di contesto, vista dei container e vista di deployment;
+- **Sezioni.** Le sezioni del template sono i suoi file Markdown numerati (`01_introduction_and_goals.md`,
+  …): il nome dà l'ordine. Il documento ha un file con lo stesso nome per ogni sezione, con lo stesso
+  titolo di primo livello; gli attributi di titolo del template (`{#section-…}`) non contano. Un file
+  numerato che il template non ha è una sezione fuori template.
+- **Modello C4** (solo se la cartella del documento contiene `model/workspace.dsl`). Il DSL è valido e ha vista di contesto, vista dei container e vista di deployment;
   ogni container con il tag `Applicazione` ha la sua vista dei componenti. Una sezione mostra una vista
   con il marcatore `<!-- vista: <chiave> -->`; ogni vista è mostrata da almeno una sezione e ogni
   marcatore nomina una vista esistente.
 - **Diagrammi Mermaid** validi: l'errore nomina file e riga.
 - **Rimandi.** I link relativi puntano a file e ancore esistenti; un identificativo di decisione
   `NNNN-titolo` nel testo esiste in `decisionsDirectory`.
-- **Soglie numeriche** (solo se `readability` è dichiarato). Indice Gulpease minimo del testo di ogni
-  sezione e parole massime per frase; `abbreviations` sono le abbreviazioni che non chiudono una frase.
+- **Soglie numeriche** (solo se dichiarate). Indice Gulpease minimo del testo di ogni sezione
+  (`docsGulpease`) e parole massime per frase (`docsMaxWords`); `docsAbbreviations` sono le
+  abbreviazioni che non chiudono una frase.
 - **Requisiti.** Java 17 o successivo per la Structurizr CLI (versione fissata, SHA-256 verificato) e
   Node.js per il parser Mermaid (dipendenze fissate da `CI/Scripts/mermaid/package-lock.json`); lo step
   li prepara con `ensure-java.yaml` e `UseNode@1`. Se uno dei due manca la verifica fallisce
@@ -277,9 +280,9 @@ Controlli oggettivi (`docsMode`, `CI/Scripts/Test-Documentation.ps1`):
 
 Giudizio dello stile (`styleMode`, `CI/Scripts/Test-DocumentationStyle.ps1`):
 
-- Il modello riceve come istruzioni la guida indicata da `guide` e giudica una sezione per richiesta,
-  con il glossario come contesto; il glossario non si giudica. In una PR si giudicano le sezioni
-  cambiate, tutte se cambiano la guida o `structure.json`.
+- Il modello riceve come istruzioni la guida `styleGuide` e giudica una sezione per richiesta, con il
+  glossario `docsGlossary` come contesto; il glossario non si giudica. In una PR si giudicano le sezioni
+  cambiate, tutte se cambia la guida.
 - Risposta in formato fissato (JSON schema): per ogni violazione il titolo della regola, la frase e il
   motivo. Il rilievo è `<sezione>: <regola> («frase»: motivo)`.
 - Accesso con token Entra ID della service connection (task `AzureCLI@2`), senza chiavi. Su 429 o 5xx
@@ -336,7 +339,7 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | `CI/Scripts/New-ReleaseNotes.ps1` | Release notes dal tag del rilascio precedente sullo stesso ramo, ogni voce con link al commit, alla PR che lo ha integrato e ai work item della PR: summary della run e, su main, pagina wiki |
 | `CI/Scripts/Test-PublishedArtifact.ps1` | Prima dell'upload dell'artifact negli orchestratori GitFlow e TrunkFlow: se la run lo ha già pubblicato (rerun dello stage) setta `artifactAlreadyPublished` e l'upload si salta; se la verifica non riesce l'upload procede |
 | `CI/Scripts/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, sostituzioni reciproche, ADR `accepted` non modificati rispetto al ramo di destinazione della PR |
-| `CI/Scripts/Test-Documentation.ps1` | Controlli oggettivi su un documento (`quality-docs.yaml`): sezioni dichiarate in `structure.json`, modello C4 completo se dichiarato, diagrammi Mermaid validi, rimandi esistenti, soglie numeriche di leggibilità |
+| `CI/Scripts/Test-Documentation.ps1` | Controlli oggettivi su un documento (`quality-docs.yaml`): sezioni del template dichiarato, modello C4 completo se presente, diagrammi Mermaid validi, rimandi esistenti, soglie numeriche di leggibilità |
 | `CI/Scripts/Test-DocumentationStyle.ps1` | Giudizio dello stile di un documento (`quality-docs.yaml`) con un modello Azure OpenAI che riceve la guida di stile del repository come istruzioni |
 | `CI/Scripts/MarkdownText.ps1` | Lettura delle sezioni Markdown (blocchi, parti, marcatori di vista, diagrammi) e misure di leggibilità (frasi, parole, indice Gulpease) per `Test-Documentation.ps1` |
 | `CI/Scripts/Structurizr.ps1` | Scarica la Structurizr CLI (versione fissata, SHA-256 verificato), sceglie un Java 17 o successivo ed esporta il modello C4 in JSON |

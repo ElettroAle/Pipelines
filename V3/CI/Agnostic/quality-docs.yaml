@@ -2,7 +2,7 @@
 #
 # Quality gate per i repository di documentazione: Gitleaks, verifica del
 # corpus degli Architecture Decision Records, controlli oggettivi sulla documentazione
-# (struttura dichiarata, modello C4, diagrammi, rimandi, soglie di leggibilita') e
+# (sezioni del template, modello C4, diagrammi, rimandi, soglie di leggibilita') e
 # giudizio dello stile con un modello che riceve la guida del repository come istruzioni.
 #
 # Il repo consumer dichiara il repository resource con alias `infrastructure`:
@@ -14,8 +14,15 @@
 #   adrMode            → off | warn | enforce (default: enforce)
 #   decisionsDirectory → cartella degli ADR (default: docs/decisions)
 #   docsMode           → off | warn | enforce (default: off, finché il repo non ha la documentazione)
-#   docsDirectory      → cartella del documento, con il suo structure.json (default: docs/architecture)
+#   docsDirectory      → cartella del documento (default: docs/architecture)
+#   docsTemplate       → template del documento: URL di un archivio zip, oppure archivio o cartella del repository [REQUIRED se docsMode non e' off]
+#   docsTemplateSha256 → SHA-256 dell'archivio del template [REQUIRED se docsTemplate e' un URL]
+#   docsGulpease       → indice Gulpease minimo del testo di ogni sezione (default: 0, nessuna soglia)
+#   docsMaxWords       → parole massime per frase (default: 0, nessuna soglia)
+#   docsAbbreviations  → abbreviazioni che non chiudono una frase (default: nessuna)
+#   docsGlossary       → file del glossario nella cartella del documento (default: nessuno)
 #   styleMode          → off | warn | enforce (default: off): giudizio dello stile con il modello
+#   styleGuide         → guida di stile del repository (default: docs/STYLE.md)
 #   styleServiceConnection → service connection Azure per il modello [REQUIRED se styleMode non e' off]
 #   styleEndpoint      → endpoint Azure OpenAI [REQUIRED se styleMode non e' off]
 #   styleModel         → nome del deployment del modello [REQUIRED se styleMode non e' off]
@@ -45,10 +52,38 @@ parameters:
     type: string
     default: 'docs/architecture'
 
+  - name: docsTemplate
+    type: string
+    default: ''
+
+  - name: docsTemplateSha256
+    type: string
+    default: ''
+
+  - name: docsGulpease
+    type: number
+    default: 0
+
+  - name: docsMaxWords
+    type: number
+    default: 0
+
+  - name: docsAbbreviations
+    type: object
+    default: []
+
+  - name: docsGlossary
+    type: string
+    default: ''
+
   - name: styleMode
     type: string
     default: 'off'
     values: ['off', 'warn', 'enforce']
+
+  - name: styleGuide
+    type: string
+    default: 'docs/STYLE.md'
 
   - name: styleServiceConnection
     type: string
@@ -82,11 +117,18 @@ stages:
           parameters:
             mode: ${{ parameters.docsMode }}
             docsDirectory: ${{ parameters.docsDirectory }}
+            documentTemplate: ${{ parameters.docsTemplate }}
+            documentTemplateSha256: ${{ parameters.docsTemplateSha256 }}
+            gulpease: ${{ parameters.docsGulpease }}
+            maxWords: ${{ parameters.docsMaxWords }}
+            abbreviations: ${{ parameters.docsAbbreviations }}
             decisionsDirectory: ${{ parameters.decisionsDirectory }}
         - template: ../Common/Steps/documentation-style.yaml
           parameters:
             mode: ${{ parameters.styleMode }}
             docsDirectory: ${{ parameters.docsDirectory }}
+            guide: ${{ parameters.styleGuide }}
+            glossary: ${{ parameters.docsGlossary }}
             serviceConnection: ${{ parameters.styleServiceConnection }}
             endpoint: ${{ parameters.styleEndpoint }}
             model: ${{ parameters.styleModel }}

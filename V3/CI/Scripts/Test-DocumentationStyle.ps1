@@ -1,18 +1,19 @@
 # Giudica lo stile delle sezioni di un documento con un modello linguistico: la guida di
-# stile del repository, dichiarata in structure.json, e' l'istruzione del modello, e la
-# pipeline non conosce nessuna regola. In una PR si giudicano le sezioni cambiate, tutte se
-# cambiano la guida o la struttura. Ogni rilievo nomina la sezione e la regola violata.
+# stile del repository e' l'istruzione del modello, e la pipeline non conosce nessuna regola.
+# In una PR si giudicano le sezioni cambiate, tutte se cambia la guida. Ogni rilievo nomina
+# la sezione e la regola violata.
 
 . "$PSScriptRoot/MarkdownText.ps1"
 
 $gateMode = if ($env:GATE_MODE) { $env:GATE_MODE.ToLower() } else { 'enforce' }
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
-$structurePath = if ($env:DOCS_STRUCTURE) { $env:DOCS_STRUCTURE } else { "$docsDirectory/structure.json" }
+$guidePath = if ($env:STYLE_GUIDE) { $env:STYLE_GUIDE } else { 'docs/STYLE.md' }
+$glossaryFileName = $env:DOCS_GLOSSARY
 $targetBranch = $env:TARGET_BRANCH -replace '^refs/heads/', '' -replace '^\$\(.*\)$', ''
 $endpoint = "$env:STYLE_JUDGE_ENDPOINT".TrimEnd('/')
 $model = $env:STYLE_JUDGE_MODEL
 
-$SectionFilePattern = '^\d{2}-.+\.md$'
+$SectionFilePattern = '^\d+[_-].+\.md$'
 $JudgeScope = 'giudizio dello stile'
 $MaxAttempts = 3
 $RequestTimeoutSeconds = 300
@@ -55,13 +56,9 @@ function New-Issue([string]$Scope, [string]$Reason, [string]$Detail) {
 }
 
 function Read-JudgeSetup {
-    if (-not (Test-Path $structurePath)) { return @{ Issue = New-Issue 'struttura del documento' 'file mancante' $structurePath } }
-    $structure = Get-Content -Raw $structurePath | ConvertFrom-Json
-    if (-not $structure.guide) { return @{ Issue = New-Issue $JudgeScope 'guida non dichiarata' $structurePath } }
-    $guidePath = Join-Path $docsDirectory $structure.guide
-    if (-not (Test-Path $guidePath)) { return @{ Issue = New-Issue $JudgeScope 'guida mancante' $guidePath } }
+    if (-not (Test-Path $guidePath -PathType Leaf)) { return @{ Issue = New-Issue $JudgeScope 'guida mancante' $guidePath } }
     if (-not $endpoint -or -not $model) { return @{ Issue = New-Issue $JudgeScope 'verifica non eseguita' 'endpoint o modello non configurati' } }
-    return @{ Guide = [IO.File]::ReadAllText($guidePath); GuidePath = $guidePath; Glossary = $structure.glossary }
+    return @{ Guide = [IO.File]::ReadAllText($guidePath) }
 }
 
 function Get-SectionFiles {
@@ -80,11 +77,10 @@ function Get-ChangedPaths([string[]]$Paths) {
     return , @(git diff --name-only "origin/$targetBranch...HEAD" -- $Paths | ForEach-Object { $_ -replace '\\', '/' })
 }
 
-function Select-SectionsToJudge($Sections, $Setup) {
-    $changed = Get-ChangedPaths @($docsDirectory, $Setup.GuidePath, $structurePath)
+function Select-SectionsToJudge($Sections) {
+    $changed = Get-ChangedPaths @($docsDirectory, $guidePath)
     if ($null -eq $changed) { return $Sections }
-    $rulesChanged = $changed -contains (ConvertTo-RepositoryPath (Resolve-Path $Setup.GuidePath).Path) -or $changed -contains (ConvertTo-RepositoryPath (Resolve-Path $structurePath).Path)
-    if ($rulesChanged) { return $Sections }
+    if ($changed -contains (ConvertTo-RepositoryPath (Resolve-Path $guidePath).Path)) { return $Sections }
     return @($Sections | Where-Object { $changed -contains (ConvertTo-RepositoryPath $_.FullName) })
 }
 
@@ -122,9 +118,9 @@ function Get-StyleIssues {
     if ($setup.Issue) { return $setup.Issue }
 
     $sections = Get-SectionFiles
-    $glossaryFile = $sections | Where-Object { $setup.Glossary -and (ConvertFrom-MarkdownSection ([IO.File]::ReadAllText($_.FullName))).Title -eq $setup.Glossary } | Select-Object -First 1
+    $glossaryFile = $sections | Where-Object { $glossaryFileName -and $_.Name -eq $glossaryFileName } | Select-Object -First 1
     $glossary = if ($glossaryFile) { [IO.File]::ReadAllText($glossaryFile.FullName) } else { '' }
-    $toJudge = @(Select-SectionsToJudge $sections $setup | Where-Object { -not $glossaryFile -or $_.FullName -ne $glossaryFile.FullName })
+    $toJudge = @(Select-SectionsToJudge $sections | Where-Object { -not $glossaryFile -or $_.FullName -ne $glossaryFile.FullName })
     if (-not $toJudge) { return }
 
     try { $token = Get-AccessToken }

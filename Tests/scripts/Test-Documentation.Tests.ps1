@@ -5,8 +5,10 @@
     Test Pester per V3/CI/Scripts/Test-Documentation.ps1
 
 .DESCRIPTION
-    Ogni scenario parte da una documentazione valida (dodici sezioni arc42, modello C4,
-    diagrammi Mermaid, soglie di leggibilita') e vi introduce un solo difetto. Lo script gira
+    Ogni scenario parte da una documentazione valida (le dodici sezioni di un template arc42,
+    modello C4, diagrammi Mermaid, soglie di leggibilita') e vi introduce un solo difetto. Il
+    template e' un archivio zip costruito qui, con i nomi dei file e i titoli del template
+    ufficiale italiano e gli attributi di titolo che quel template porta. Lo script gira
     come in pipeline: richiede Java 17 o successivo e Node.js; la Structurizr CLI e il
     parser Mermaid si installano in una cache condivisa da tutti gli scenari.
 #>
@@ -15,6 +17,28 @@ BeforeAll {
     $ScriptPath = Resolve-Path "$PSScriptRoot/../../V3/CI/Scripts/Test-Documentation.ps1"
     $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-architecture-docs-$(New-Guid)"
+
+    $TemplateFiles = [ordered]@{
+        '01_introduction_and_goals.md' = "# Introduzione e obiettivi {#section-introduction-and-goals}`n`n## Parte`n"
+        '02_architecture_constraints.md' = "# Vincoli di architettura {#section-architecture-constraints}`n`n## Parte`n"
+        '03_context_and_scope.md' = "# Ambito e contesto del sistema {#section-context-and-scope}`n`n## Parte`n"
+        '04_solution_strategy.md' = "# Strategia della soluzione {#section-solution-strategy}`n`n## Parte`n"
+        '05_building_block_view.md' = "# Building Block View {#section-building-block-view}`n`n## Parte`n"
+        '06_runtime_view.md' = "# Runtime View {#section-runtime-view}`n`n## Parte`n"
+        '07_deployment_view.md' = "# Deployment View {#section-deployment-view}`n`n## Parte`n"
+        '08_concepts.md' = "# Concetti trasversali {#section-concepts}`n`n## Parte`n"
+        '09_architecture_decisions.md' = "# Decisioni di progettazione {#section-architecture-decisions}`n`n## Parte`n"
+        '10_quality_requirements.md' = "# Requisiti di Qualità {#section-quality-requirements}`n`n## Parte`n"
+        '11_technical_risks.md' = "# Rischi e debiti tecnici {#section-technical-risks}`n`n## Parte`n"
+        '12_glossary.md' = "# Glossario {#section-glossary}`n`n## Parte`n"
+        'about-arc42.md' = "# Informazioni su arc42`n"
+    }
+    $TemplateDirectory = Join-Path ([IO.Path]::GetTempPath()) "pester-docs-template-$(New-Guid)"
+    New-Item -ItemType Directory -Path "$TemplateDirectory/files" | Out-Null
+    foreach ($name in $TemplateFiles.Keys) { [IO.File]::WriteAllText("$TemplateDirectory/files/$name", $TemplateFiles[$name]) }
+    $TemplateArchive = Join-Path $TemplateDirectory 'template.zip'
+    Compress-Archive -Path "$TemplateDirectory/files/*" -DestinationPath $TemplateArchive
+    $TemplateSha256 = (Get-FileHash $TemplateArchive -Algorithm SHA256).Hash.ToLowerInvariant()
 
     function New-Section([string]$Title, [string]$Question, [string]$Body) {
         return @"
@@ -31,18 +55,6 @@ $Body
 
     function New-ValidDocs {
         $docs = [ordered]@{}
-        $docs['docs/architecture/structure.json'] = @'
-{
-  "sections": [
-    "Introduzione e obiettivi", "Vincoli", "Contesto e ambito", "Strategia di soluzione",
-    "Vista dei building block", "Vista di runtime", "Vista di deployment", "Concetti trasversali",
-    "Decisioni architetturali", "Requisiti di qualità", "Rischi e debito tecnico", "Glossario"
-  ],
-  "glossary": "Glossario",
-  "model": "model/workspace.dsl",
-  "readability": { "gulpease": 40, "maxWords": 25, "abbreviations": ["es.", "ecc."] }
-}
-'@
         $docs['docs/decisions/0001-esempio.md'] = "---`nstatus: accepted`n---`n`n# Esempio`n"
         $docs['docs/architecture/model/workspace.dsl'] = @'
 workspace "Piattaforma" {
@@ -98,23 +110,23 @@ workspace "Piattaforma" {
     }
 }
 '@
-        $docs['docs/architecture/01-introduzione-e-obiettivi.md'] = New-Section 'Introduzione e obiettivi' 'a cosa serve la piattaforma?' @'
+        $docs['docs/architecture/01_introduction_and_goals.md'] = New-Section 'Introduzione e obiettivi' 'a cosa serve la piattaforma?' @'
 La piattaforma aiuta il cittadino a parlare con un operatore del comune.
 
 Il Backend for Frontend (BFF) riceve le richieste del Client. L'interfaccia di programmazione del Motore (API) esegue il lavoro.
 '@
-        $docs['docs/architecture/02-vincoli.md'] = New-Section 'Vincoli' 'quali limiti valgono per tutto il progetto?' @'
+        $docs['docs/architecture/02_architecture_constraints.md'] = New-Section 'Vincoli di architettura' 'quali limiti valgono per tutto il progetto?' @'
 La piattaforma gira su Azure. Il codice vive nei repository del progetto.
 '@
-        $docs['docs/architecture/03-contesto-e-ambito.md'] = New-Section 'Contesto e ambito' 'chi usa la piattaforma?' @'
+        $docs['docs/architecture/03_context_and_scope.md'] = New-Section 'Ambito e contesto del sistema' 'chi usa la piattaforma?' @'
 <!-- vista: contesto -->
 
 Il Cittadino usa la Piattaforma dal telefono o dal computer.
 '@
-        $docs['docs/architecture/04-strategia-di-soluzione.md'] = New-Section 'Strategia di soluzione' 'come è divisa la piattaforma?' @'
+        $docs['docs/architecture/04_solution_strategy.md'] = New-Section 'Strategia della soluzione' 'come è divisa la piattaforma?' @'
 La piattaforma divide il lavoro fra applicazioni piccole. Ogni applicazione fa una cosa sola.
 '@
-        $docs['docs/architecture/05-vista-dei-building-block.md'] = (New-Section 'Vista dei building block' 'di quali parti è fatta la piattaforma?' @'
+        $docs['docs/architecture/05_building_block_view.md'] = (New-Section 'Building Block View' 'di quali parti è fatta la piattaforma?' @'
 <!-- vista: contenitori -->
 
 Il Cittadino usa il Client per aprire una richiesta.
@@ -138,9 +150,9 @@ La Coda del Worker ordina i lavori. `SessionStore` (l'archivio delle sessioni) c
 
 ## Per approfondire
 
-Le scelte sono nella sezione [Decisioni architetturali](09-decisioni-architetturali.md).
+Le scelte sono nella sezione [Decisioni architetturali](09_architecture_decisions.md).
 '@)
-        $docs['docs/architecture/06-vista-di-runtime.md'] = New-Section 'Vista di runtime' 'cosa succede quando si apre una sessione?' @'
+        $docs['docs/architecture/06_runtime_view.md'] = New-Section 'Runtime View' 'cosa succede quando si apre una sessione?' @'
 Il BFF chiede all'API del Motore di aprire una sessione. L'API del Motore risponde con il codice della sessione.
 
 ```mermaid
@@ -151,7 +163,7 @@ sequenceDiagram
     M-->>B: codice della sessione
 ```
 '@
-        $docs['docs/architecture/07-vista-di-deployment.md'] = New-Section 'Vista di deployment' 'dove girano le applicazioni?' @'
+        $docs['docs/architecture/07_deployment_view.md'] = New-Section 'Deployment View' 'dove girano le applicazioni?' @'
 <!-- vista: deployment-produzione -->
 
 Un **Private Endpoint** è un indirizzo privato che porta il traffico a un servizio senza passare da internet.
@@ -160,21 +172,21 @@ Il Client gira nel nodo Azure. Ogni servizio riceve il traffico da un Private En
 
 La rete segue lo schema *hub-and-spoke*: una rete centrale collega le reti delle applicazioni.
 '@
-        $docs['docs/architecture/08-concetti-trasversali.md'] = New-Section 'Concetti trasversali' 'quali regole valgono per tutte le applicazioni?' @'
+        $docs['docs/architecture/08_concepts.md'] = New-Section 'Concetti trasversali' 'quali regole valgono per tutte le applicazioni?' @'
 Ogni servizio riceve il traffico da un Private Endpoint (PE). Il PE ha un indirizzo della rete privata.
 '@
-        $docs['docs/architecture/09-decisioni-architetturali.md'] = New-Section 'Decisioni architetturali' 'quali scelte sono state fatte e perché?' @'
+        $docs['docs/architecture/09_architecture_decisions.md'] = New-Section 'Decisioni di progettazione' 'quali scelte sono state fatte e perché?' @'
 La decisione [0001-esempio](../decisions/0001-esempio.md) sceglie il BFF come unico ingresso.
 
-Il quadro delle applicazioni è nella [vista dei building block](05-vista-dei-building-block.md#in-breve).
+Il quadro delle applicazioni è nella [vista dei building block](05_building_block_view.md#in-breve).
 '@
-        $docs['docs/architecture/10-requisiti-di-qualita.md'] = New-Section 'Requisiti di qualità' 'quanto deve essere veloce la piattaforma?' @'
+        $docs['docs/architecture/10_quality_requirements.md'] = New-Section 'Requisiti di Qualità' 'quanto deve essere veloce la piattaforma?' @'
 Una risposta arriva al cittadino in meno di due secondi.
 '@
-        $docs['docs/architecture/11-rischi-e-debito-tecnico.md'] = New-Section 'Rischi e debito tecnico' 'cosa può andare storto?' @'
+        $docs['docs/architecture/11_technical_risks.md'] = New-Section 'Rischi e debiti tecnici' 'cosa può andare storto?' @'
 Un guasto dell'API del Motore ferma le richieste nuove.
 '@
-        $docs['docs/architecture/12-glossario.md'] = New-Section 'Glossario' 'cosa vogliono dire i termini usati?' @'
+        $docs['docs/architecture/12_glossary.md'] = New-Section 'Glossario' 'cosa vogliono dire i termini usati?' @'
 I termini sono in ordine alfabetico.
 
 - **API**: interfaccia di programmazione, il modo in cui un programma chiede un servizio a un altro.
@@ -193,6 +205,15 @@ I termini sono in ordine alfabetico.
     }
 
     function Invoke-DocsCheck([System.Collections.IDictionary]$Docs, [string]$Mode = '', [hashtable]$Environment = @{}) {
+        $variables = @{
+            DOCS_TEMPLATE             = $TemplateArchive
+            DOCS_TEMPLATE_SHA256      = $TemplateSha256
+            READABILITY_GULPEASE      = '40'
+            READABILITY_MAX_WORDS     = '25'
+            READABILITY_ABBREVIATIONS = 'es.;ecc.'
+        }
+        foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
+
         $root = Join-Path ([IO.Path]::GetTempPath()) "pester-docs-$(New-Guid)"
         foreach ($path in $Docs.Keys) {
             if ($null -eq $Docs[$path]) { continue }
@@ -205,9 +226,9 @@ I termini sono in ordine alfabetico.
         try {
             $env:GATE_MODE = $Mode
             $previous = @{}
-            foreach ($name in $Environment.Keys) {
+            foreach ($name in $variables.Keys) {
                 $previous[$name] = [Environment]::GetEnvironmentVariable($name)
-                [Environment]::SetEnvironmentVariable($name, $Environment[$name])
+                [Environment]::SetEnvironmentVariable($name, $variables[$name])
             }
             $pwsh = (Get-Process -Id $PID).Path
             $output = & $pwsh -NoProfile -NonInteractive -File $ScriptPath 2>&1
@@ -232,6 +253,7 @@ I termini sono in ordine alfabetico.
 }
 
 AfterAll {
+    Remove-Item -Recurse -Force $TemplateDirectory -ErrorAction SilentlyContinue
     Remove-Item -Recurse -Force $env:AGENT_TOOLSDIRECTORY -ErrorAction SilentlyContinue
     $env:AGENT_TOOLSDIRECTORY = $previousToolsDirectory
 }
@@ -252,9 +274,9 @@ Describe "Funzionalità: Verifica della documentazione architetturale" {
 
     Context "Schema dello scenario: documento non ben formato — <difetto>" -ForEach @(
         @{
-            difetto  = 'la sezione "Vista di deployment" mancante'
-            elemento = '^documento: sezione mancante \(Vista di deployment\)'
-            Mutate   = { param($d) $d['docs/architecture/07-vista-di-deployment.md'] = $null }
+            difetto  = 'la sezione "Deployment View" mancante'
+            elemento = '^documento: sezione mancante \(07_deployment_view\.md: Deployment View\)'
+            Mutate   = { param($d) $d['docs/architecture/07_deployment_view.md'] = $null }
         }
         @{
             difetto  = 'una relazione da "BFF" verso "Motore v3", che il modello non dichiara'
@@ -267,26 +289,26 @@ Describe "Funzionalità: Verifica della documentazione architetturale" {
             Mutate   = {
                 param($d)
                 Edit-Docs $d 'docs/architecture/model/workspace.dsl' "        component worker `"componenti-worker`" {`n            include *`n        }`n" ''
-                Edit-Docs $d 'docs/architecture/05-vista-dei-building-block.md' "<!-- vista: componenti-worker -->`n" ''
+                Edit-Docs $d 'docs/architecture/05_building_block_view.md' "<!-- vista: componenti-worker -->`n" ''
             }
         }
         @{
             difetto  = 'un diagramma di sequenza Mermaid con sintassi non valida'
-            elemento = '^Vista di runtime: diagramma non valido \(06-vista-di-runtime\.md:{0}\b'
-            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/06-vista-di-runtime.md' 'B->>M: apre la sessione' 'B->>: apre la sessione' }
+            elemento = '^Runtime View: diagramma non valido \(06_runtime_view\.md:{0}\b'
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/06_runtime_view.md' 'B->>M: apre la sessione' 'B->>: apre la sessione' }
             Line     = 'B->>: apre la sessione'
         }
         @{
             difetto  = 'un rimando alla decisione "0042-inesistente"'
-            elemento = '^Decisioni architetturali: rimando inesistente \(0042-inesistente\)'
-            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/09-decisioni-architetturali.md' 'come unico ingresso.' 'come unico ingresso. La decisione 0042-inesistente vale ancora.' }
+            elemento = '^Decisioni di progettazione: rimando inesistente \(0042-inesistente\)'
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/09_architecture_decisions.md' 'come unico ingresso.' 'come unico ingresso. La decisione 0042-inesistente vale ancora.' }
         }
     ) {
         BeforeAll {
             $docs = New-ValidDocs
             & $Mutate $docs
             $res = Invoke-DocsCheck $docs
-            $expected = if ($Line) { $elemento -f (Get-LineNumber $docs['docs/architecture/06-vista-di-runtime.md'] $Line) } else { $elemento }
+            $expected = if ($Line) { $elemento -f (Get-LineNumber $docs['docs/architecture/06_runtime_view.md'] $Line) } else { $elemento }
         }
 
         It "Allora la verifica fallisce" {
@@ -300,12 +322,12 @@ Describe "Funzionalità: Verifica della documentazione architetturale" {
 
     Context "Schema dello scenario: testo oltre le soglie di leggibilità — <sezione>, <motivo>" -ForEach @(
         @{
-            sezione = 'Strategia di soluzione'; motivo = 'leggibilità'
-            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/04-strategia-di-soluzione.md' 'La piattaforma divide il lavoro fra applicazioni piccole. Ogni applicazione fa una cosa sola.' 'Infrastrutturalmente, l''orchestrazione multiprogettuale garantisce interoperabilità transfrontaliera. Contestualmente, l''automatizzazione documentale razionalizza l''amministrazione organizzativa. Conseguentemente, l''interoperabilità infrastrutturale semplifica l''amministrazione multiprogettuale. Parallelamente, l''internazionalizzazione organizzativa rafforza l''orchestrazione documentale interdipartimentale.' }
+            sezione = 'Strategia della soluzione'; motivo = 'leggibilità'
+            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/04_solution_strategy.md' 'La piattaforma divide il lavoro fra applicazioni piccole. Ogni applicazione fa una cosa sola.' 'Infrastrutturalmente, l''orchestrazione multiprogettuale garantisce interoperabilità transfrontaliera. Contestualmente, l''automatizzazione documentale razionalizza l''amministrazione organizzativa. Conseguentemente, l''interoperabilità infrastrutturale semplifica l''amministrazione multiprogettuale. Parallelamente, l''internazionalizzazione organizzativa rafforza l''orchestrazione documentale interdipartimentale.' }
         }
         @{
-            sezione = 'Vista di runtime'; motivo = 'frase troppo lunga'
-            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/06-vista-di-runtime.md' 'con il codice della sessione.' 'con il codice della sessione, che il BFF conserva per tutta la durata della conversazione e che rimanda all''API del Motore ogni volta che il cittadino scrive un messaggio nuovo o chiude la finestra.' }
+            sezione = 'Runtime View'; motivo = 'frase troppo lunga'
+            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/06_runtime_view.md' 'con il codice della sessione.' 'con il codice della sessione, che il BFF conserva per tutta la durata della conversazione e che rimanda all''API del Motore ogni volta che il cittadino scrive un messaggio nuovo o chiude la finestra.' }
         }
     ) {
         BeforeAll {
@@ -328,7 +350,7 @@ Describe "Test-Documentation — modalità del controllo" {
 
     BeforeAll {
         $docs = New-ValidDocs
-        Edit-Docs $docs 'docs/architecture/09-decisioni-architetturali.md' 'come unico ingresso.' 'come unico ingresso. La decisione 0042-inesistente vale ancora.'
+        Edit-Docs $docs 'docs/architecture/09_architecture_decisions.md' 'come unico ingresso.' 'come unico ingresso. La decisione 0042-inesistente vale ancora.'
     }
 
     It "In modalità warn segnala come warning e non blocca" {
@@ -364,46 +386,45 @@ Describe "Test-Documentation — controlli strutturali" {
 
     It "Un rimando a un'ancora inesistente fallisce nominando il rimando" {
         $docs = New-ValidDocs
-        Edit-Docs $docs 'docs/architecture/09-decisioni-architetturali.md' '#in-breve' '#nessuna'
+        Edit-Docs $docs 'docs/architecture/09_architecture_decisions.md' '#in-breve' '#nessuna'
         $res = Invoke-DocsCheck $docs
-        Get-Issues $res.Output | Where-Object { $_ -match '^Decisioni architetturali: rimando inesistente \(05-vista-dei-building-block\.md#nessuna\)' } | Should -Not -BeNullOrEmpty
+        Get-Issues $res.Output | Where-Object { $_ -match '^Decisioni di progettazione: rimando inesistente \(05_building_block_view\.md#nessuna\)' } | Should -Not -BeNullOrEmpty
     }
 
     It "Una vista non mostrata in nessuna sezione fallisce nominando la vista" {
         $docs = New-ValidDocs
-        Edit-Docs $docs 'docs/architecture/03-contesto-e-ambito.md' "<!-- vista: contesto -->`n" ''
+        Edit-Docs $docs 'docs/architecture/03_context_and_scope.md' "<!-- vista: contesto -->`n" ''
         $res = Invoke-DocsCheck $docs
         Get-Issues $res.Output | Where-Object { $_ -match '^modello C4: vista non mostrata in nessuna sezione \(contesto\)' } | Should -Not -BeNullOrEmpty
     }
 
     It "Un marcatore di vista inesistente fallisce nominando la sezione e la vista" {
         $docs = New-ValidDocs
-        Edit-Docs $docs 'docs/architecture/03-contesto-e-ambito.md' 'vista: contesto' "vista: contesto -->`n<!-- vista: nessuna"
+        Edit-Docs $docs 'docs/architecture/03_context_and_scope.md' 'vista: contesto' "vista: contesto -->`n<!-- vista: nessuna"
         $res = Invoke-DocsCheck $docs
-        Get-Issues $res.Output | Where-Object { $_ -match '^Contesto e ambito: vista inesistente \(nessuna\)' } | Should -Not -BeNullOrEmpty
+        Get-Issues $res.Output | Where-Object { $_ -match '^Ambito e contesto del sistema: vista inesistente \(nessuna\)' } | Should -Not -BeNullOrEmpty
     }
 
     It "Un modello senza vista di deployment fallisce nominando il livello" {
         $docs = New-ValidDocs
         Edit-Docs $docs 'docs/architecture/model/workspace.dsl' "        deployment dxp produzione `"deployment-produzione`" {`n            include *`n        }`n" ''
-        Edit-Docs $docs 'docs/architecture/07-vista-di-deployment.md' "<!-- vista: deployment-produzione -->`n" ''
+        Edit-Docs $docs 'docs/architecture/07_deployment_view.md' "<!-- vista: deployment-produzione -->`n" ''
         $res = Invoke-DocsCheck $docs
         Get-Issues $res.Output | Where-Object { $_ -match '^modello C4: livello mancante \(vista di deployment\)' } | Should -Not -BeNullOrEmpty
     }
 
-    It "Un titolo che non è una sezione della struttura fallisce nominando il file" {
+    It "Un file numerato che non è una sezione del template fallisce nominando il file" {
         $docs = New-ValidDocs
-        $docs['docs/architecture/13-extra.md'] = "# Appendice`n"
+        $docs['docs/architecture/13_extra.md'] = "# Appendice`n"
         $res = Invoke-DocsCheck $docs
-        Get-Issues $res.Output | Where-Object { $_ -match '^documento: titolo fuori struttura \(13-extra\.md: Appendice\)' } | Should -Not -BeNullOrEmpty
+        Get-Issues $res.Output | Where-Object { $_ -match '^documento: sezione fuori template \(13_extra\.md: Appendice\)' } | Should -Not -BeNullOrEmpty
     }
 
-    It "Sezioni fuori dall'ordine della struttura falliscono nominando la sezione" {
+    It "Un titolo diverso da quello del template fallisce nominando il file e il titolo atteso" {
         $docs = New-ValidDocs
-        $docs['docs/architecture/00-vincoli.md'] = $docs['docs/architecture/02-vincoli.md']
-        $docs['docs/architecture/02-vincoli.md'] = $null
+        Edit-Docs $docs 'docs/architecture/02_architecture_constraints.md' '# Vincoli di architettura' '# Vincoli'
         $res = Invoke-DocsCheck $docs
-        Get-Issues $res.Output | Where-Object { $_ -match '^documento: sezione fuori ordine \(Vincoli\)' } | Should -Not -BeNullOrEmpty
+        Get-Issues $res.Output | Where-Object { $_ -match '^documento: titolo diverso dal template \(02_architecture_constraints\.md: Vincoli, atteso «Vincoli di architettura»\)' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
     }
 }
 
@@ -484,37 +505,56 @@ Describe "MarkdownText — analisi del testo" {
     }
 }
 
-Describe "Test-Documentation — struttura dichiarata dal documento" {
+Describe "Test-Documentation — template del documento" {
 
     BeforeAll {
         function New-ProductDocs {
             $docs = New-ValidDocs
             foreach ($path in @($docs.Keys | Where-Object { $_ -like 'docs/architecture/*' })) { $docs[$path] = $null }
-            $docs['docs/architecture/structure.json'] = '{ "sections": ["Introduzione e obiettivi", "Glossario"], "glossary": "Glossario" }'
-            $docs['docs/architecture/01-introduzione-e-obiettivi.md'] = New-Section 'Introduzione e obiettivi' 'a cosa serve il prodotto?' 'Il prodotto aiuta il cittadino a parlare con un operatore del comune.'
+            $docs['docs/template/01-introduzione.md'] = "# Introduzione`n"
+            $docs['docs/template/02-glossario.md'] = "# Glossario`n"
+            $docs['docs/architecture/01-introduzione.md'] = New-Section 'Introduzione' 'a cosa serve il prodotto?' 'Il prodotto aiuta il cittadino a parlare con un operatore del comune.'
             $docs['docs/architecture/02-glossario.md'] = New-Section 'Glossario' 'cosa vogliono dire i termini usati?' 'I termini sono in ordine alfabetico.'
             return $docs
         }
+        $ProductTemplate = @{ DOCS_TEMPLATE = 'docs/template'; DOCS_TEMPLATE_SHA256 = '' }
     }
 
-    It "Un documento con sezioni proprie e senza modello C4 passa" {
-        $res = Invoke-DocsCheck (New-ProductDocs)
+    It "Un documento con un template proprio nel repository e senza modello C4 passa" {
+        $res = Invoke-DocsCheck (New-ProductDocs) -Environment $ProductTemplate
         Get-Issues $res.Output | Should -BeNullOrEmpty -Because ($res.Output)
         $res.ExitCode | Should -Be 0
     }
 
     It "Senza modello C4 un marcatore di vista fallisce nominando la sezione e la vista" {
         $docs = New-ProductDocs
-        Edit-Docs $docs 'docs/architecture/01-introduzione-e-obiettivi.md' 'Il prodotto aiuta' "<!-- vista: contesto -->`n`nIl prodotto aiuta"
-        $res = Invoke-DocsCheck $docs
-        Get-Issues $res.Output | Where-Object { $_ -match '^Introduzione e obiettivi: vista inesistente \(contesto\)' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        Edit-Docs $docs 'docs/architecture/01-introduzione.md' 'Il prodotto aiuta' "<!-- vista: contesto -->`n`nIl prodotto aiuta"
+        $res = Invoke-DocsCheck $docs -Environment $ProductTemplate
+        Get-Issues $res.Output | Where-Object { $_ -match '^Introduzione: vista inesistente \(contesto\)' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
     }
 
-    It "Senza structure.json fallisce nominando il file" {
-        $docs = New-ValidDocs
-        $docs['docs/architecture/structure.json'] = $null
-        $res = Invoke-DocsCheck $docs
+    It "Senza template dichiarato fallisce nominando il parametro" {
+        $res = Invoke-DocsCheck (New-ValidDocs) -Environment @{ DOCS_TEMPLATE = '' }
         $res.ExitCode | Should -Be 1
-        Get-Issues $res.Output | Where-Object { $_ -match '^struttura del documento: file mancante \(docs/architecture/structure\.json\)' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        Get-Issues $res.Output | Where-Object { $_ -match '^template del documento: non dichiarato \(parametro docsTemplate\)' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+    }
+
+    It "Un template con SHA-256 diverso da quello dichiarato fallisce nominando i due valori" {
+        $declared = '0' * 64
+        $res = Invoke-DocsCheck (New-ValidDocs) -Environment @{ DOCS_TEMPLATE_SHA256 = $declared }
+        $res.ExitCode | Should -Be 1
+        Get-Issues $res.Output | Where-Object { $_ -match "^template del documento: SHA-256 diverso \(atteso $declared, ricevuto $TemplateSha256\)" } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+    }
+
+    It "Un template scaricato senza SHA-256 fallisce senza scaricarlo" {
+        $res = Invoke-DocsCheck (New-ValidDocs) -Environment @{ DOCS_TEMPLATE = 'https://example.invalid/template.zip'; DOCS_TEMPLATE_SHA256 = '' }
+        $res.ExitCode | Should -Be 1
+        Get-Issues $res.Output | Where-Object { $_ -match '^template del documento: SHA-256 non dichiarato \(https://example\.invalid/template\.zip\)' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+    }
+
+    It "Un template che non si scarica fallisce nominando l'indirizzo" {
+        $res = Invoke-DocsCheck (New-ValidDocs) -Environment @{ DOCS_TEMPLATE = 'http://127.0.0.1:9/template.zip' }
+        $res.ExitCode | Should -Be 1
+        Get-Issues $res.Output | Where-Object { $_ -match '^template del documento: download non riuscito \(http://127\.0\.0\.1:9/template\.zip: ' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
     }
 }

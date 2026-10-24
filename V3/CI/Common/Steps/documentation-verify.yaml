@@ -1,9 +1,9 @@
 # ── CI Step: Documentation ────────────────────────────────────────────────────
 #
 # Controlli oggettivi su un documento del repository (V3/CI/Scripts/Test-Documentation.ps1):
-# le sezioni dichiarate nel suo structure.json, il modello C4 in Structurizr DSL se la
-# struttura lo dichiara, diagrammi Mermaid validi, rimandi esistenti, soglie numeriche
-# di leggibilita' dichiarate in structure.json. Lo stile lo giudica documentation-style.yaml.
+# le sezioni del template dichiarato, il modello C4 in Structurizr DSL se la cartella del
+# documento contiene model/workspace.dsl, diagrammi Mermaid validi, rimandi esistenti, soglie
+# numeriche di leggibilita'. Lo stile lo giudica documentation-style.yaml.
 # La Structurizr CLI richiede Java 17, il parser Mermaid Node.js.
 #
 # Riusato da:
@@ -12,7 +12,12 @@
 # Parametri
 # ─────────
 #   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
-#   docsDirectory      → cartella delle sezioni del documento, con il suo structure.json (default: docs/architecture)
+#   docsDirectory      → cartella delle sezioni del documento (default: docs/architecture)
+#   documentTemplate       → template del documento: URL di un archivio zip, oppure archivio o cartella del repository [REQUIRED se mode non e' off]
+#   documentTemplateSha256 → SHA-256 dell'archivio del template [REQUIRED se documentTemplate e' un URL]
+#   gulpease           → indice Gulpease minimo del testo di ogni sezione (default: 0, nessuna soglia)
+#   maxWords           → parole massime per frase (default: 0, nessuna soglia)
+#   abbreviations      → abbreviazioni che non chiudono una frase (default: nessuna)
 #   decisionsDirectory → cartella degli ADR a cui puntano i rimandi (default: docs/decisions)
 #   nodeVersion        → versione di Node.js per il parser Mermaid (default: 22.x)
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
@@ -28,6 +33,26 @@ parameters:
   - name: docsDirectory
     type: string
     default: 'docs/architecture'
+
+  - name: documentTemplate
+    type: string
+    default: ''
+
+  - name: documentTemplateSha256
+    type: string
+    default: ''
+
+  - name: gulpease
+    type: number
+    default: 0
+
+  - name: maxWords
+    type: number
+    default: 0
+
+  - name: abbreviations
+    type: object
+    default: []
 
   - name: decisionsDirectory
     type: string
@@ -61,4 +86,9 @@ steps:
     env:
       GATE_MODE: ${{ parameters.mode }}
       DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
+      DOCS_TEMPLATE: ${{ parameters.documentTemplate }}
+      DOCS_TEMPLATE_SHA256: ${{ parameters.documentTemplateSha256 }}
+      READABILITY_GULPEASE: ${{ parameters.gulpease }}
+      READABILITY_MAX_WORDS: ${{ parameters.maxWords }}
+      READABILITY_ABBREVIATIONS: ${{ join(';', parameters.abbreviations) }}
       DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}

@@ -1,7 +1,7 @@
-# Controlli oggettivi su un documento di un repository: le sezioni dichiarate in
-# structure.json, il modello C4 in Structurizr DSL se la struttura lo dichiara, diagrammi
-# Mermaid validi, rimandi esistenti e soglie numeriche di leggibilita'. Lo stile del testo
-# lo giudica Test-DocumentationStyle.ps1. Ogni problema nomina la sezione e il motivo.
+# Controlli oggettivi su un documento di un repository: le sezioni del template dichiarato,
+# il modello C4 in Structurizr DSL se il documento lo contiene, diagrammi Mermaid validi,
+# rimandi esistenti e soglie numeriche di leggibilita'. Lo stile del testo lo giudica
+# Test-DocumentationStyle.ps1. Ogni problema nomina la sezione e il motivo.
 
 . "$PSScriptRoot/MarkdownText.ps1"
 . "$PSScriptRoot/Structurizr.ps1"
@@ -9,13 +9,20 @@
 
 $gateMode = if ($env:GATE_MODE) { $env:GATE_MODE.ToLower() } else { 'enforce' }
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
-$structurePath = if ($env:DOCS_STRUCTURE) { $env:DOCS_STRUCTURE } else { "$docsDirectory/structure.json" }
 $decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }
+$templateSource = $env:DOCS_TEMPLATE
+$templateSha256 = $env:DOCS_TEMPLATE_SHA256
+$minimumGulpease = [int]$env:READABILITY_GULPEASE
+$maximumWords = [int]$env:READABILITY_MAX_WORDS
+$abbreviations = @("$env:READABILITY_ABBREVIATIONS" -split ';' | ForEach-Object Trim | Where-Object { $_ })
+$WorkspaceDsl = Join-Path $docsDirectory 'model/workspace.dsl'
 
-$SectionFilePattern = '^\d{2}-.+\.md$'
+$SectionFilePattern = '^\d+[_-].+\.md$'
+$HeadingAttributesPattern = '\s*\{#[^}]*\}\s*$'
+$RemoteSourcePattern = '^https?://'
 $ApplicationTag = 'Applicazione'
 $DocumentScope = 'documento'
-$StructureScope = 'struttura del documento'
+$TemplateScope = 'template del documento'
 $ModelScope = 'modello C4'
 $MermaidScope = 'diagrammi Mermaid'
 $RequiredLevels = [ordered]@{ systemContextViews = 'vista di contesto'; containerViews = 'vista dei container'; deploymentViews = 'vista di deployment' }
@@ -29,56 +36,81 @@ function New-Issue([string]$Scope, [string]$Reason, [string]$Detail) {
     return "${Scope}: $Reason ($Detail)"
 }
 
-# ── Struttura ─────────────────────────────────────────────────────────────────
-
-# Elenco ordinato dei titoli delle sezioni, soglie di leggibilita' e, facoltativo, il
-# modello C4 relativo alla cartella del documento.
-function Read-DocumentStructure {
-    if (-not (Test-Path $structurePath)) { return $null }
-    $structure = Get-Content -Raw $structurePath | ConvertFrom-Json
-    $script:SectionTitles = @($structure.sections)
-    $script:Readability = $structure.readability
-    $script:WorkspaceDsl = if ($structure.model) { Join-Path $docsDirectory $structure.model }
-    return $structure
+function New-TemplateError([string]$Reason, [string]$Detail) {
+    return [InvalidOperationException]::new((New-Issue $TemplateScope $Reason $Detail))
 }
 
-function Get-Sections {
+# ── Template ──────────────────────────────────────────────────────────────────
+
+# Il template e' un archivio zip pubblicato, con SHA-256 obbligatorio come ogni strumento
+# scaricato in pipeline, oppure un archivio o una cartella del repository.
+function Expand-DocumentTemplate {
+    if (-not $templateSource) { throw (New-TemplateError 'non dichiarato' 'parametro docsTemplate') }
+    $remote = $templateSource -match $RemoteSourcePattern
+    if (-not $remote -and (Test-Path $templateSource -PathType Container)) { return (Resolve-Path $templateSource).Path }
+    if ($remote -and -not $templateSha256) { throw (New-TemplateError 'SHA-256 non dichiarato' $templateSource) }
+
+    $workDirectory = Join-Path ([IO.Path]::GetTempPath()) "document-template-$(New-Guid)"
+    New-Item -ItemType Directory -Path $workDirectory | Out-Null
+    $archive = Join-Path $workDirectory 'template.zip'
+    if ($remote) {
+        try { Invoke-WebRequest -Uri $templateSource -OutFile $archive -UseBasicParsing }
+        catch { throw (New-TemplateError 'download non riuscito' "${templateSource}: $($_.Exception.Message)") }
+    }
+    elseif (Test-Path $templateSource -PathType Leaf) { Copy-Item $templateSource $archive }
+    else { throw (New-TemplateError 'file mancante' $templateSource) }
+
+    $actual = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($templateSha256 -and $actual -ne $templateSha256.ToLowerInvariant()) { throw (New-TemplateError 'SHA-256 diverso' "atteso $templateSha256, ricevuto $actual") }
+    $expanded = Join-Path $workDirectory 'template'
+    Expand-Archive -Path $archive -DestinationPath $expanded
+    return $expanded
+}
+
+function Get-SectionTitle($Content) {
+    return $Content.Title -replace $HeadingAttributesPattern, ''
+}
+
+# Le sezioni del template sono i suoi file Markdown numerati: il nome del file da' l'ordine e
+# la sezione del documento con lo stesso nome riporta il suo titolo di primo livello.
+function Get-TemplateSections([string]$Directory) {
+    $sections = [ordered]@{}
+    Get-ChildItem -Path $Directory -Recurse -File | Where-Object Name -Match $SectionFilePattern | Sort-Object Name |
+        ForEach-Object { $sections[$_.Name] = Get-SectionTitle (ConvertFrom-MarkdownSection ([IO.File]::ReadAllText($_.FullName))) }
+    return $sections
+}
+
+# ── Struttura ─────────────────────────────────────────────────────────────────
+
+function Get-Sections($TemplateSections) {
     if (-not (Test-Path $docsDirectory)) { return @() }
     return @(Get-ChildItem -Path $docsDirectory -File | Where-Object Name -Match $SectionFilePattern | Sort-Object Name | ForEach-Object {
             $parsed = ConvertFrom-MarkdownSection ([IO.File]::ReadAllText($_.FullName))
-            [pscustomobject]@{ File = $_; Title = $parsed.Title; Index = [Array]::IndexOf($SectionTitles, $parsed.Title); Content = $parsed }
+            [pscustomobject]@{ File = $_; Title = Get-SectionTitle $parsed; Expected = $TemplateSections[$_.Name]; Content = $parsed }
         })
 }
 
-function Test-SectionStructure($Sections) {
-    $Sections | Where-Object Index -LT 0 | ForEach-Object { New-Issue $DocumentScope 'titolo fuori struttura' "$($_.File.Name): $($_.Title)" }
-    $SectionTitles | Where-Object { $Sections.Title -notcontains $_ } | ForEach-Object { New-Issue $DocumentScope 'sezione mancante' $_ }
-    $Sections | Group-Object Title | Where-Object Count -GT 1 | ForEach-Object { New-Issue $DocumentScope 'sezione duplicata' $_.Name }
-
-    $recognized = @($Sections | Where-Object Index -GE 0)
-    $expectedOrder = @($recognized | Sort-Object Index)
-    for ($position = 0; $position -lt $recognized.Count; $position++) {
-        if ($recognized[$position].Title -ne $expectedOrder[$position].Title) { New-Issue $DocumentScope 'sezione fuori ordine' $recognized[$position].Title }
-    }
+function Test-SectionStructure($Sections, $TemplateSections) {
+    $Sections | Where-Object { $null -eq $_.Expected } | ForEach-Object { New-Issue $DocumentScope 'sezione fuori template' "$($_.File.Name): $($_.Title)" }
+    $TemplateSections.Keys | Where-Object { $Sections.File.Name -notcontains $_ } | ForEach-Object { New-Issue $DocumentScope 'sezione mancante' "${_}: $($TemplateSections[$_])" }
+    $Sections | Where-Object { $_.Expected -and $_.Title -ne $_.Expected } | ForEach-Object { New-Issue $DocumentScope 'titolo diverso dal template' "$($_.File.Name): $($_.Title), atteso «$($_.Expected)»" }
 }
 
 # ── Leggibilità ───────────────────────────────────────────────────────────────
 
 function Test-Readability($Section) {
-    if (-not $Readability) { return }
-    $abbreviations = @($Readability.abbreviations)
     $prose = @($Section.Content.Blocks | Where-Object Kind -In $ProseKinds | ForEach-Object Text)
     if (-not $prose) { return }
 
     $index = Get-GulpeaseIndex $prose $abbreviations
-    if ($Readability.gulpease -and $null -ne $index -and $index -lt $Readability.gulpease) { New-Issue $Section.Title 'leggibilità' "Gulpease $index, minimo $($Readability.gulpease)" }
+    if ($minimumGulpease -and $null -ne $index -and $index -lt $minimumGulpease) { New-Issue $Section.Title 'leggibilità' "Gulpease $index, minimo $minimumGulpease" }
 
-    if (-not $Readability.maxWords) { return }
+    if (-not $maximumWords) { return }
     $prose | ForEach-Object { Get-Sentences $_ $abbreviations } | ForEach-Object {
         $words = Get-WordCount $_
-        if ($words -gt $Readability.maxWords) {
+        if ($words -gt $maximumWords) {
             $start = (($_ -split '\s+') | Select-Object -First 8) -join ' '
-            New-Issue $Section.Title 'frase troppo lunga' "$words parole, massimo $($Readability.maxWords): «$start…»"
+            New-Issue $Section.Title 'frase troppo lunga' "$words parole, massimo ${maximumWords}: «$start…»"
         }
     }
 }
@@ -148,10 +180,9 @@ function Test-MermaidSections($Sections) {
 }
 
 function Test-C4Model($Sections) {
-    if (-not $WorkspaceDsl) {
+    if (-not (Test-Path $WorkspaceDsl)) {
         return $Sections | ForEach-Object { $section = $_; $section.Content.Views | ForEach-Object { New-Issue $section.Title 'vista inesistente' $_ } }
     }
-    if (-not (Test-Path $WorkspaceDsl)) { return New-Issue $ModelScope 'file mancante' $WorkspaceDsl }
     try { $export = Export-StructurizrWorkspace (Resolve-Path $WorkspaceDsl).Path }
     catch { return New-Issue $ModelScope 'verifica non eseguita' $_.Exception.Message }
     if ($export.Error) { return New-Issue $ModelScope 'non valido' $export.Error }
@@ -164,13 +195,14 @@ function Test-C4Model($Sections) {
 # ── Esito ─────────────────────────────────────────────────────────────────────
 
 function Get-DocumentationIssues {
-    if (-not (Read-DocumentStructure)) { return New-Issue $StructureScope 'file mancante' $structurePath }
-    $sections = Get-Sections
-    Test-SectionStructure $sections
+    try { $templateSections = Get-TemplateSections (Expand-DocumentTemplate) }
+    catch [InvalidOperationException] { return $_.Exception.Message }
+    $sections = Get-Sections $templateSections
+    Test-SectionStructure $sections $templateSections
     Test-C4Model $sections
     Test-MermaidSections $sections
     $sections | ForEach-Object { Test-References $_ }
-    $sections | Where-Object Index -GE 0 | ForEach-Object { Test-Readability $_ }
+    $sections | Where-Object Expected | ForEach-Object { Test-Readability $_ }
 }
 
 function Complete-Verification([string[]]$Issues) {
