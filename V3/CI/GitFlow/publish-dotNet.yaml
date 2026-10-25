@@ -140,13 +140,16 @@ stages:
             dotnetVersion: '10.0.x'
             buildConfiguration: 'Release'
         # I test girano solo ad analisi attiva: servono a produrre il cobertura
-        # che Sonar legge, la publish di per se' non li richiede.
+        # che Sonar legge, la publish di per se' non li richiede. Con buildProjects
+        # la build precedente ha gia' compilato anche i test: ricompilarli qui fa
+        # correre due build sugli stessi output.
         - ${{ if parameters.enableSonar }}:
           - template: ../Common/Steps/dotnet-test.yaml
             parameters:
               buildConfiguration: 'Release'
               testProjects: ${{ parameters.testProjects }}
-              buildArguments: ''
+              ${{ if eq(parameters.buildProjects, '') }}:
+                buildArguments: ''
         - template: ../Common/Steps/dotnet-sonar.yaml
           parameters:
             enableSonar: ${{ parameters.enableSonar }}
