@@ -16,7 +16,7 @@ $endpoint = "$env:STYLE_JUDGE_ENDPOINT".TrimEnd('/')
 $model = $env:STYLE_JUDGE_MODEL
 $seed = if ($env:STYLE_JUDGE_SEED) { [int]$env:STYLE_JUDGE_SEED } else { 1919 }
 $fixRequested = $env:STYLE_FIX -eq 'true'
-$maxRounds = if ($env:STYLE_MAX_ROUNDS) { [math]::Max(1, [int]$env:STYLE_MAX_ROUNDS) } else { 3 }
+$maxRounds = if ($env:STYLE_MAX_ROUNDS) { [math]::Max(1, [int]$env:STYLE_MAX_ROUNDS) } else { 4 }
 $maximumWords = [int]$env:READABILITY_MAX_WORDS
 $abbreviations = @("$env:READABILITY_ABBREVIATIONS" -split ';' | ForEach-Object Trim | Where-Object { $_ })
 
@@ -55,8 +55,9 @@ lettera, il motivo in una frase e la correzione:
   alfabetico, nella stessa forma delle altre voci.
 - none: la violazione non si corregge cambiando il testo; find e text restano vuoti.
 Una correzione non tocca titoli, diagrammi, blocchi di codice e commenti, non va a capo, rispetta
-tutte le regole della guida e non allunga una frase oltre il limite della guida. Una violazione in
-un titolo o in un diagramma si corregge nel testo che li spiega, oppure è none.
+tutte le regole della guida. Una violazione in un titolo o in un diagramma si corregge nel testo che
+li spiega, oppure è none. Se il messaggio riporta correzioni scartate nel giro precedente, la nuova
+correzione di quell'unità evita il motivo dello scarto.
 
 GUIDA DI STILE
 
@@ -373,7 +374,7 @@ function Invoke-Judge($Context, [string]$User) {
     }
 }
 
-function Get-JudgeMessage($Document, $Context, [string]$FileName) {
+function Get-JudgeMessage($Document, $Context, [string]$FileName, [hashtable]$Rejections) {
     $parts = [Collections.Generic.List[string]]::new()
     if ($Context.Glossary) {
         $parts.Add("GLOSSARIO DEL DOCUMENTO ($glossaryFileName)")
@@ -381,6 +382,10 @@ function Get-JudgeMessage($Document, $Context, [string]$FileName) {
     }
     $parts.Add("SEZIONE DA GIUDICARE ($FileName)")
     $parts.Add((@(Get-Units $Document | ForEach-Object { $mark = if ($_.Marked) { '*' } else { '' }; "[$($_.Number)$mark] $(Get-UnitText $_)" }) -join "`n"))
+    if ($Rejections.Count) {
+        $parts.Add('CORREZIONI SCARTATE NEL GIRO PRECEDENTE')
+        $parts.Add((@($Rejections.Keys | Sort-Object Number | ForEach-Object { "[$($_.Number)] $($Rejections[$_] -join '; ')" }) -join "`n"))
+    }
     return $parts -join "`n`n"
 }
 
@@ -488,12 +493,14 @@ function New-FindingIssue([string]$Title, $Finding, [string]$Rejection) {
 }
 
 # Ogni giro giudica le unita' segnate e, se la correzione e' attiva e non e' l'ultimo giro,
-# applica le correzioni e segna le sole unita' corrette per il giro dopo. L'ultimo giro verifica.
+# applica le correzioni e segna per il giro dopo le unita' corrette e quelle con una correzione
+# scartata, che torna al modello con il motivo. L'ultimo giro verifica.
 function Invoke-SectionReview($File, $Context) {
     $document = Read-Document $File.FullName
     $title = (ConvertFrom-MarkdownSection ([IO.File]::ReadAllText($File.FullName))).Title
     if (-not $title) { $title = $File.Name }
     Set-InitialMarks $document $Context.Scope (ConvertTo-RepositoryPath $File.FullName)
+    $rejections = @{}
 
     for ($round = 1; $round -le $Context.Rounds; $round++) {
         $next = Update-Numbering $document 1
@@ -501,16 +508,23 @@ function Invoke-SectionReview($File, $Context) {
         $marked = [Collections.Generic.HashSet[int]]::new([int[]]@(Get-Units $document | Where-Object Marked | ForEach-Object Number))
         if (-not $marked.Count) { return }
 
-        $findings = @(Invoke-Judge $Context (Get-JudgeMessage $document $Context $File.Name) | Where-Object { $marked.Contains($_.Unit) })
+        $units = @{}
+        foreach ($unit in (Get-Units $document)) { $units[$unit.Number] = $unit }
+        $findings = @(Invoke-Judge $Context (Get-JudgeMessage $document $Context $File.Name $rejections) | Where-Object { $marked.Contains($_.Unit) })
         Write-Host "$($File.Name), giro ${round}: $($marked.Count) unità giudicate, $($findings.Count) rilievi"
         foreach ($unit in (Get-Units $document)) { $unit.Marked = $false }
         if (-not $findings) { return }
 
         if (-not $Context.Fix -or $round -eq $Context.Rounds) {
-            $findings | ForEach-Object { New-FindingIssue $title $_ }
+            $findings | ForEach-Object { New-FindingIssue $title $_ ($rejections[$units[$_.Unit]] -join '; ') }
             return
         }
-        Invoke-Corrections $document $Context.Glossary $findings | ForEach-Object { New-FindingIssue $title $_.Finding $_.Reason }
+        $rejections = @{}
+        foreach ($rejection in @(Invoke-Corrections $document $Context.Glossary $findings)) {
+            $unit = $units[$rejection.Finding.Unit]
+            $unit.Marked = $true
+            $rejections[$unit] = @($rejections[$unit]) + "$($rejection.Finding.Rule): $($rejection.Reason)" | Where-Object { $_ }
+        }
         Save-Document $document
         if ($Context.Glossary) { Save-Document $Context.Glossary }
     }

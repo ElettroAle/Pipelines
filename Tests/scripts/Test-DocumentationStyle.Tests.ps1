@@ -48,7 +48,8 @@ BeforeAll {
                     $find = if ($rule.find) { $rule.find } else { $rule.match }
                     $target = $unit.Number
                     $fix = @{ kind = 'none'; unit = $target; find = ''; text = '' }
-                    if ($null -ne $rule.replacement) { $fix = @{ kind = 'replace'; unit = $target; find = $find; text = $rule.replacement } }
+                    $replacement = if ($null -ne $rule.retryReplacement -and $user.Contains('CORREZIONI SCARTATE')) { $rule.retryReplacement } else { $rule.replacement }
+                    if ($null -ne $replacement) { $fix = @{ kind = 'replace'; unit = $target; find = $find; text = $replacement } }
                     elseif ($rule.insert) { $fix = @{ kind = 'insert'; unit = $target; find = ''; text = $rule.insert } }
                     elseif ($rule.glossaryInsert) { $fix = @{ kind = 'insert'; unit = $glossary[0].Number; find = ''; text = $rule.glossaryInsert } }
                     $verdict[$property.Name].Add(@{ unit = $unit.Number; excerpt = $rule.match; explanation = 'viola la regola'; fix = $fix })
@@ -526,6 +527,37 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
 
         It "E il ramo della PR non riceve commit" {
             Get-FeatureTip $repository | Should -Be $repository.Feature
+        }
+    }
+
+    Context "Scenario: una correzione scartata torna al modello con il motivo" {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(@{
+                    match            = 'È importante sottolineare che i dati'
+                    rule             = $Filler
+                    replacement      = 'I dati, che sono quelli dei cittadini, degli enti, degli operatori e dei servizi collegati alla piattaforma in ogni ambiente di sviluppo, di collaudo e di produzione'
+                    retryReplacement = 'I dati' })
+            $repository = New-OriginRepository { param($d) Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' "gira su Azure.`n`nÈ importante sottolineare che i dati restano in Italia." }
+            $res = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+            $requests = Get-StubRequests
+        }
+
+        AfterAll { Remove-Repository $repository }
+
+        It "Dato una correzione scartata perché porta una frase oltre il massimo" {
+            $requests.Count | Should -Be 3
+        }
+
+        It "Quando il modello giudica di nuovo l'unità, riceve il motivo dello scarto" {
+            $user = Get-UserMessage $requests[1]
+            $user | Should -BeLike '*`[3`*`] È importante sottolineare*'
+            $user | Should -BeLike "*CORREZIONI SCARTATE NEL GIRO PRECEDENTE*``[3``] ${Filler}: la correzione porta una frase a * parole, massimo 25*"
+        }
+
+        It "Allora la seconda correzione si applica e la verifica passa" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+            Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike '*I dati restano in Italia.*'
         }
     }
 
