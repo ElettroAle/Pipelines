@@ -329,6 +329,45 @@ Giudizio dello stile (`styleMode`, `CI/Scripts/Test-DocumentationStyle.ps1`):
   lo script riprova fino a tre volte; se il modello non risponde la verifica fallisce nominando il
   motivo.
 
+### Pubblicazione nella wiki (publish-arc42-wiki)
+
+Dopo il merge su `main` il documento arc42 si pubblica nella wiki di progetto di Azure DevOps
+(`CI/Agnostic/publish-arc42-wiki.yaml`, `CI/Scripts/Publish-Arc42Wiki.ps1`):
+
+- Ogni sezione diventa una pagina sotto `wikiRoot` (default `Architettura`), nell'ordine dei numeri; le
+  decisioni diventano sottopagine della sezione 9 e la tabella che le elenca riceve la colonna «Stato».
+- I marcatori `<!-- vista: … -->` diventano i diagrammi C4 esportati in Mermaid dalla Structurizr CLI, e i
+  blocchi ` ```mermaid ` la sintassi della wiki `::: mermaid`. I link alle sezioni e alle decisioni portano
+  alle pagine; gli altri link relativi al file nel repository.
+- Un commit solo nel repository git della wiki tocca soltanto `wikiRoot` e la sua voce in testa all'ordine
+  della radice: le release note e le altre pagine restano come sono. Se la wiki cambia nel frattempo, il
+  push si riprova sopra il commit nuovo; se non cambia nulla, nessun commit.
+
+```yaml
+resources:
+  repositories:
+    - repository: infrastructure
+      type: github
+      name: ElettroAle/Pipelines
+      endpoint: github.com_ElettroAle
+    - repository: project_wiki
+      type: git
+      name: MyProject.wiki
+      ref: wikiMaster
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include: [docs/*]
+
+extends:
+  template: V3/CI/Agnostic/publish-arc42-wiki.yaml@infrastructure
+  parameters:
+    checkoutRepository: self
+    wikiRepository: project_wiki
+```
+
 ---
 
 ## Test Suite
@@ -381,6 +420,7 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | `CI/Scripts/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, sostituzioni reciproche, ADR `accepted` non modificati rispetto al ramo di destinazione della PR |
 | `CI/Scripts/Test-Arc42Document.ps1` | Struttura di un documento arc42 (`arc42-verify.yaml`): un file per sezione con nome e titolo del template ufficiale; release, URL e SHA-256 per lingua fissati nello script |
 | `CI/Scripts/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container `Applicazione`, marcatori di vista nelle sezioni |
+| `CI/Scripts/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 in Mermaid, un commit solo che non tocca le altre pagine |
 | `CI/Scripts/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
 | `CI/Scripts/Test-Documentation.ps1` | Controlli comuni a ogni documento (`documentation-verify.yaml`): rimandi esistenti, soglie numeriche di leggibilità |
 | `CI/Scripts/Test-DocumentationStyle.ps1` | Giudizio dello stile di un documento (`documentation-style.yaml`) con un modello Azure OpenAI che riceve la guida di stile del repository come istruzioni |

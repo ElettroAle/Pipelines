@@ -1,5 +1,5 @@
-# Accesso alla Structurizr CLI per Test-C4Model.ps1: valida il modello C4
-# scritto in Structurizr DSL e lo esporta in JSON.
+# Accesso alla Structurizr CLI per Test-C4Model.ps1 e Publish-Arc42Wiki.ps1: valida il modello C4
+# scritto in Structurizr DSL, lo esporta in JSON ed esporta le sue viste in Mermaid.
 
 $StructurizrVersion = '2025.11.09'
 # L'archivio e' unico per tutte le piattaforme: gira sulla JVM.
@@ -57,11 +57,15 @@ function Get-StructurizrLibraries {
     return $libraries
 }
 
+function Get-StructurizrClassPath {
+    # Classpath esplicito: su Linux pwsh espanderebbe il carattere jolly 'lib/*' in piu' argomenti.
+    return (Get-ChildItem -Path (Get-StructurizrLibraries) -Filter '*.jar').FullName -join [IO.Path]::PathSeparator
+}
+
 # Esporta il workspace in JSON; se il DSL non e' valido restituisce l'errore della CLI.
 function Export-StructurizrWorkspace([string]$WorkspaceDsl) {
     $java = Get-StructurizrJava
-    # Classpath esplicito: su Linux pwsh espanderebbe il carattere jolly 'lib/*' in piu' argomenti.
-    $classPath = (Get-ChildItem -Path (Get-StructurizrLibraries) -Filter '*.jar').FullName -join [IO.Path]::PathSeparator
+    $classPath = Get-StructurizrClassPath
     $outputDir = Join-Path ([IO.Path]::GetTempPath()) "structurizr-$(New-Guid)"
     try {
         $output = & $java -cp $classPath com.structurizr.cli.StructurizrCliApplication export -workspace $WorkspaceDsl -format json -output $outputDir 2>&1
@@ -74,6 +78,27 @@ function Export-StructurizrWorkspace([string]$WorkspaceDsl) {
             return [pscustomobject]@{ Workspace = $null; Error = ($reason -replace '^[\w.]+Exception:\s*', '' -replace ' of .+?\.dsl', '') }
         }
         return [pscustomobject]@{ Workspace = (Get-Content -Raw $exported.FullName | ConvertFrom-Json); Error = $null }
+    }
+    finally {
+        Remove-Item -Recurse -Force $outputDir -ErrorAction SilentlyContinue
+    }
+}
+
+# Esporta ogni vista del workspace in Mermaid: chiave della vista -> testo del diagramma.
+function Export-StructurizrMermaid([string]$WorkspaceDsl) {
+    $java = Get-StructurizrJava
+    $classPath = Get-StructurizrClassPath
+    $outputDir = Join-Path ([IO.Path]::GetTempPath()) "structurizr-$(New-Guid)"
+    try {
+        $output = & $java -cp $classPath com.structurizr.cli.StructurizrCliApplication export -workspace $WorkspaceDsl -format mermaid -output $outputDir 2>&1
+        $exitCode = $LASTEXITCODE
+        $global:LASTEXITCODE = 0
+        if ($exitCode -ne 0) { throw "esportazione delle viste in Mermaid non riuscita: $(@($output | ForEach-Object { "$_" }) | Select-Object -Last 1)" }
+        $views = @{}
+        foreach ($file in (Get-ChildItem -Path $outputDir -Filter 'structurizr-*.mmd')) {
+            $views[$file.BaseName -replace '^structurizr-', ''] = [IO.File]::ReadAllText($file.FullName)
+        }
+        return $views
     }
     finally {
         Remove-Item -Recurse -Force $outputDir -ErrorAction SilentlyContinue
