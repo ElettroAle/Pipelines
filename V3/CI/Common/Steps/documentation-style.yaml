@@ -3,20 +3,28 @@
 # Giudica lo stile delle sezioni di un documento con un modello Azure OpenAI
 # (V3/CI/Scripts/Test-DocumentationStyle.ps1): la guida di stile del repository e'
 # l'istruzione del modello. L'accesso al modello passa dalla service connection con un
-# token Entra ID, senza chiavi.
+# token Entra ID, senza chiavi. In modalita' fix le correzioni del modello, validate e
+# rigiudicate, tornano sul ramo della PR con un commit dell'identita' della build, che
+# deve poter contribuire al repository.
 #
 # Riusato da:
 #   CI/Agnostic/quality-docs.yaml
+#   CI/Agnostic/quality-arc42.yaml
 #
 # Parametri
 # ─────────
-#   mode               → 'off' (default) | 'warn' (segnala senza bloccare) | 'enforce'
+#   mode               → 'off' (default) | 'warn' (segnala senza bloccare) | 'enforce' |
+#                        'fix' (corregge in una PR, poi blocca come enforce se resta un rilievo)
 #   docsDirectory      → cartella delle sezioni del documento (default: docs/architecture)
 #   guide              → guida di stile del repository, istruzione del modello (default: docs/STYLE.md)
 #   glossary           → file del glossario in docsDirectory, contesto del giudizio e non giudicato (default: nessuno)
 #   serviceConnection  → service connection Azure con il ruolo Cognitive Services OpenAI User [REQUIRED se mode non e' off]
 #   endpoint           → endpoint della risorsa Azure OpenAI, es. https://<nome>.openai.azure.com [REQUIRED se mode non e' off]
 #   model              → nome del deployment del modello [REQUIRED se mode non e' off]
+#   gulpease, maxWords, abbreviations, decisionsDirectory → soglie dei controlli oggettivi, rieseguiti sul
+#                        testo corretto prima di pubblicarlo (come in documentation-verify.yaml)
+#   maxRounds          → giri massimi di giudizio in modalita' fix, l'ultimo solo di verifica (default: 3)
+#   seed               → seme del modello, per giudizi ripetibili (default: 1919)
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -25,7 +33,7 @@ parameters:
   - name: mode
     type: string
     default: 'off'
-    values: ['off', 'warn', 'enforce']
+    values: ['off', 'warn', 'enforce', 'fix']
 
   - name: docsDirectory
     type: string
@@ -51,6 +59,30 @@ parameters:
     type: string
     default: ''
 
+  - name: gulpease
+    type: number
+    default: 0
+
+  - name: maxWords
+    type: number
+    default: 0
+
+  - name: abbreviations
+    type: object
+    default: []
+
+  - name: decisionsDirectory
+    type: string
+    default: 'docs/decisions'
+
+  - name: maxRounds
+    type: number
+    default: 3
+
+  - name: seed
+    type: number
+    default: 1919
+
   - name: templatesDirectory
     type: string
     default: '$(Pipeline.Workspace)/pipeline-templates'
@@ -68,10 +100,19 @@ steps:
         scriptPath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Test-DocumentationStyle.ps1'
         workingDirectory: '$(Build.SourcesDirectory)'
       env:
-        GATE_MODE: ${{ parameters.mode }}
+        GATE_MODE: ${{ replace(parameters.mode, 'fix', 'enforce') }}
+        STYLE_FIX: ${{ eq(parameters.mode, 'fix') }}
+        STYLE_MAX_ROUNDS: ${{ parameters.maxRounds }}
+        STYLE_JUDGE_SEED: ${{ parameters.seed }}
         DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
         STYLE_GUIDE: ${{ parameters.guide }}
         DOCS_GLOSSARY: ${{ parameters.glossary }}
         TARGET_BRANCH: $(System.PullRequest.TargetBranch)
+        SOURCE_BRANCH: $(System.PullRequest.SourceBranch)
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+        READABILITY_GULPEASE: ${{ parameters.gulpease }}
+        READABILITY_MAX_WORDS: ${{ parameters.maxWords }}
+        READABILITY_ABBREVIATIONS: ${{ join(';', parameters.abbreviations) }}
+        DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}
         STYLE_JUDGE_ENDPOINT: ${{ parameters.endpoint }}
         STYLE_JUDGE_MODEL: ${{ parameters.model }}
