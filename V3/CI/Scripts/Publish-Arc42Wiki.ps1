@@ -50,6 +50,14 @@ function Read-Markdown([string]$Path) {
     return [pscustomobject]@{ Title = $title; Status = $status; Body = $body.TrimStart("`n") }
 }
 
+# Il titolo di una decisione e' una frase intera, troppo lunga per il nome di una pagina: il nome
+# viene dal file, «0001-hard-link-tra-ambienti.md» diventa «0001 Hard link tra ambienti».
+function Get-DecisionPageName([string]$FileName) {
+    $words = [IO.Path]::GetFileNameWithoutExtension($FileName) -split '-'
+    $title = ($words | Select-Object -Skip 1) -join ' '
+    return "$($words[0]) $($title.Substring(0, 1).ToUpperInvariant())$($title.Substring(1))"
+}
+
 function New-Page([string]$Source, [string]$Name, [string]$ParentPath, $Markdown) {
     return [pscustomobject]@{
         Source   = $Source
@@ -67,7 +75,7 @@ function Get-DocumentPages {
         $number = [int]([regex]::Match($file.Name, $SectionFilePattern).Groups[1].Value)
         $markdown = Read-Markdown $file.FullName
         if (-not $markdown.Title) { throw "$($file.Name): la sezione non ha un titolo" }
-        [pscustomobject]@{ Number = $number; Page = New-Page (ConvertTo-RepositoryPath $file.FullName) "$number. $($markdown.Title)" $rootPath $markdown }
+        [pscustomobject]@{ Number = $number; Page = New-Page (ConvertTo-RepositoryPath $file.FullName) "$number. $(ConvertTo-PlainText $markdown.Title)" $rootPath $markdown }
     }
     $sections = @($sections | Sort-Object Number)
     if (-not $sections) { throw "nessuna sezione in $docsDirectory" }
@@ -76,9 +84,7 @@ function Get-DocumentPages {
     $decisionsParent = if ($decisionsSection) { $decisionsSection.Page } else { $null }
     $decisionsPath = if ($decisionsParent) { $decisionsParent.WikiPath } else { $rootPath }
     $decisions = foreach ($file in (Get-ChildItem -Path $decisionsDirectory -File -ErrorAction SilentlyContinue | Where-Object Name -Match $DecisionFilePattern | Sort-Object Name)) {
-        $markdown = Read-Markdown $file.FullName
-        $id = [regex]::Match($file.Name, $DecisionFilePattern).Groups[1].Value
-        New-Page (ConvertTo-RepositoryPath $file.FullName) "$id $($markdown.Title)" $decisionsPath $markdown
+        New-Page (ConvertTo-RepositoryPath $file.FullName) (Get-DecisionPageName $file.Name) $decisionsPath (Read-Markdown $file.FullName)
     }
 
     $topLevel = [Collections.Generic.List[object]]::new()

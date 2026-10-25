@@ -196,6 +196,27 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
         }
     }
 
+    Context "Scenario: nomi delle pagine leggibili" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-ValidDocs
+            Edit-Docs $docs 'docs/architecture/05_building_block_view.md' '# Building Block View' '# *Building Block View*'
+            Edit-Docs $docs 'docs/decisions/0001-esempio.md' '# Esempio' "# Il BFF e' l'unico ingresso del Client per ogni richiesta che arriva dal browser"
+            $res = Invoke-WikiPublish $docs $wiki
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora il nome della pagina di una sezione e' il suo titolo in testo semplice" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            Get-WikiPage $wiki 'Architettura/5.-Building-Block-View.md' | Should -Not -BeNullOrEmpty
+            Get-WikiPage $wiki 'Architettura/.order' | Should -Not -Match '%2A'
+        }
+
+        It "E il nome della pagina di una decisione viene dal nome del suo file, non dal titolo" {
+            Get-WikiPage $wiki 'Architettura/9.-Decisioni-di-progettazione/.order' | Should -Be '0001-Esempio'
+        }
+    }
+
     Context "Scenario: i link portano alle pagine della wiki" {
         BeforeAll {
             $wiki = New-Wiki
