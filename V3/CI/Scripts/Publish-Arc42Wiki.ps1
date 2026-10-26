@@ -1,12 +1,13 @@
 # Pubblica un documento arc42 nella wiki di progetto di Azure DevOps. Le sezioni diventano pagine
 # sotto WIKI_ROOT, nell'ordine dei loro numeri, e le decisioni diventano sottopagine della sezione 9.
 # Il nome di default di WIKI_ROOT e la colonna dello stato seguono la lingua del documento.
-# I marcatori di vista diventano i diagrammi C4 esportati in Mermaid, e i link puntano alle pagine.
-# Si scrive nel repository git della wiki con un commit solo, che tocca soltanto WIKI_ROOT e la sua
-# voce nell'ordine della radice: le altre pagine della wiki restano come sono.
+# I marcatori di vista diventano le immagini dei diagrammi C4, disegnate con C4-PlantUML, e i link
+# puntano alle pagine. Si scrive nel repository git della wiki con un commit solo, che tocca soltanto
+# WIKI_ROOT, le sue immagini e la sua voce nell'ordine della radice: il resto della wiki resta com'e'.
 
 . "$PSScriptRoot/MarkdownText.ps1"
 . "$PSScriptRoot/Structurizr.ps1"
+. "$PSScriptRoot/PlantUml.ps1"
 
 $ErrorActionPreference = 'Stop'
 
@@ -22,6 +23,8 @@ $DecisionFilePattern = '^(\d{4})-.+\.md$'
 # Nel template arc42 la sezione 9 raccoglie le decisioni: le loro pagine stanno sotto la sua.
 $DecisionsSectionNumber = 9
 $MaxPushAttempts = 3
+# La wiki tiene immagini e allegati nella cartella .attachments della radice.
+$AttachmentsFolder = '.attachments'
 $LinkPattern = '(\[[^\]]*\]\()([^)\s]+)(\))'
 $ExternalLinkPattern = '^(?:[a-z][a-z0-9+.-]*:|#)'
 # Il nome di file di una pagina scrive gli spazi come trattini, quindi codifica il trattino stesso
@@ -148,14 +151,11 @@ function Add-DecisionStatus([string[]]$Table, $Page, [hashtable]$PagesBySource) 
     return $rows
 }
 
-# I diagrammi di Structurizr scrivono le etichette in HTML con stili: la wiki le mostra meglio come
-# testo con gli a capo.
-function ConvertTo-WikiMermaid([string]$Diagram) {
-    $plain = $Diagram -replace "`r`n", "`n" -replace '</div>\s*<div[^>]*>', '<br/>' -replace '</?div[^>]*>', ''
-    return @('::: mermaid') + @($plain.TrimEnd("`n") -split "`n") + @(':::')
+function Get-ViewImagePath([string]$View) {
+    return "$AttachmentsFolder/$(ConvertTo-WikiName $wikiRoot)/$View.png"
 }
 
-function Convert-PageBody($Page, [hashtable]$PagesBySource, [hashtable]$Views) {
+function Convert-PageBody($Page, [hashtable]$PagesBySource, [hashtable]$Views, [hashtable]$ShownViews) {
     $output = [Collections.Generic.List[string]]::new()
     $table = [Collections.Generic.List[string]]::new()
     $fence = $null
@@ -181,7 +181,8 @@ function Convert-PageBody($Page, [hashtable]$PagesBySource, [hashtable]$Views) {
         elseif ($line -match $ViewMarkerPattern) {
             $key = $Matches[1]
             if (-not $Views.ContainsKey($key)) { throw "$($Page.Source): la vista $key non esiste nel modello C4" }
-            foreach ($diagramLine in (ConvertTo-WikiMermaid $Views[$key])) { $output.Add($diagramLine) }
+            $ShownViews[$key] = $Views[$key]
+            $output.Add("![$key](/$(Get-ViewImagePath $key))")
         }
         else { $output.Add((Convert-Links $line $Page $PagesBySource)) }
     }
@@ -216,13 +217,32 @@ function Update-RootOrder([string]$RootName) {
     [IO.File]::WriteAllText($orderFile, ((@($RootName) + $entries) -join "`n") + "`n")
 }
 
-function Write-Document($Pages, [hashtable]$Contents) {
+function Write-ViewImages([hashtable]$Images) {
+    foreach ($view in $Images.Keys) {
+        $path = Join-Path $wikiDirectory (Get-ViewImagePath $view)
+        New-Item -ItemType Directory -Force -Path (Split-Path $path) | Out-Null
+        [IO.File]::WriteAllBytes($path, $Images[$view])
+    }
+}
+
+function Write-Document($Pages, [hashtable]$Contents, [hashtable]$Images) {
     $rootName = ConvertTo-WikiName $wikiRoot
-    Remove-Item -Recurse -Force (Join-Path $wikiDirectory $rootName), (Join-Path $wikiDirectory "$rootName.md") -ErrorAction SilentlyContinue
+    $imagesFolder = "$AttachmentsFolder/$rootName"
+    Remove-Item -Recurse -Force (Join-Path $wikiDirectory $rootName), (Join-Path $wikiDirectory "$rootName.md"), (Join-Path $wikiDirectory $imagesFolder) -ErrorAction SilentlyContinue
     Write-WikiFile "$rootName.md" "[[_TOSP_]]`n"
     Write-PageTree $Pages $rootName $Contents
+    Write-ViewImages $Images
     Update-RootOrder $rootName
-    return $rootName
+    return [pscustomobject]@{ RootName = $rootName; ImagesFolder = $imagesFolder }
+}
+
+# git add rifiuta un percorso che non c'e' e non e' mai stato pubblicato: le immagini mancano a un
+# documento senza viste C4.
+function Get-DocumentPaths($Written) {
+    $paths = @("$($Written.RootName).md", $Written.RootName, '.order')
+    $imagesPublished = Test-Path (Join-Path $wikiDirectory $Written.ImagesFolder)
+    if ($imagesPublished -or (git -C $wikiDirectory ls-files -- $Written.ImagesFolder)) { $paths += $Written.ImagesFolder }
+    return $paths
 }
 
 function Invoke-WikiGit {
@@ -231,7 +251,7 @@ function Invoke-WikiGit {
     return $output
 }
 
-function Publish-Document($Pages, [hashtable]$Contents) {
+function Publish-Document($Pages, [hashtable]$Contents, [hashtable]$Images) {
     $authorization = if ($env:SYSTEM_ACCESSTOKEN) { @('-c', "http.extraheader=AUTHORIZATION: bearer $env:SYSTEM_ACCESSTOKEN") } else { @() }
     $name = if ($env:BUILD_REQUESTEDFOR) { $env:BUILD_REQUESTEDFOR } else { 'Architecture Wiki' }
     $email = if ($env:BUILD_REQUESTEDFOREMAIL) { $env:BUILD_REQUESTEDFOREMAIL } else { 'architecture-wiki@noreply.local' }
@@ -242,8 +262,8 @@ function Publish-Document($Pages, [hashtable]$Contents) {
     for ($attempt = 1; $attempt -le $MaxPushAttempts; $attempt++) {
         Invoke-WikiGit @authorization fetch -q origin $wikiBranch | Out-Null
         Invoke-WikiGit reset -q --hard FETCH_HEAD | Out-Null
-        $rootName = Write-Document $Pages $Contents
-        Invoke-WikiGit add -A -- "$rootName.md" $rootName .order | Out-Null
+        $written = Write-Document $Pages $Contents $Images
+        Invoke-WikiGit add -A -- @(Get-DocumentPaths $written) | Out-Null
         git -C $wikiDirectory diff --cached --quiet
         if ($LASTEXITCODE -eq 0) {
             Write-Host "La wiki mostra gia' il documento di $docsDirectory"
@@ -267,7 +287,12 @@ function Publish-Document($Pages, [hashtable]$Contents) {
 function Get-Views {
     $workspace = Join-Path $docsDirectory 'model/workspace.dsl'
     if (-not (Test-Path $workspace -PathType Leaf)) { return @{} }
-    return Export-StructurizrMermaid (Resolve-Path $workspace).Path
+    return Export-StructurizrC4PlantUml (Resolve-Path $workspace).Path
+}
+
+function Get-ViewImages([hashtable]$ShownViews) {
+    if (-not $ShownViews.Count) { return @{} }
+    return ConvertTo-PlantUmlPng $ShownViews (Get-StructurizrJava)
 }
 
 function Publish-Arc42Wiki {
@@ -276,9 +301,10 @@ function Publish-Arc42Wiki {
     $pagesBySource = @{}
     foreach ($page in (Get-AllPages $pages)) { $pagesBySource[$page.Source] = $page }
     $views = Get-Views
+    $shownViews = @{}
     $contents = @{}
-    foreach ($page in $pagesBySource.Values) { $contents[$page.Source] = Convert-PageBody $page $pagesBySource $views }
-    Publish-Document $pages $contents
+    foreach ($page in $pagesBySource.Values) { $contents[$page.Source] = Convert-PageBody $page $pagesBySource $views $shownViews }
+    Publish-Document $pages $contents (Get-ViewImages $shownViews)
 }
 
 try { Publish-Arc42Wiki }

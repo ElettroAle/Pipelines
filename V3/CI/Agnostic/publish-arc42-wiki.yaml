@@ -2,8 +2,8 @@
 #
 # Pubblica un documento arc42 nella wiki di progetto di Azure DevOps
 # (V3/CI/Scripts/Publish-Arc42Wiki.ps1): una pagina per sezione sotto wikiRoot, le decisioni
-# sotto la sezione 9, i diagrammi C4 esportati in Mermaid. Un commit solo nel repository della
-# wiki, che tocca soltanto wikiRoot e la sua voce nell'ordine della radice.
+# sotto la sezione 9, i diagrammi C4 come immagini C4-PlantUML. Un commit solo nel repository della
+# wiki, che tocca soltanto wikiRoot, le sue immagini e la sua voce nell'ordine della radice.
 #
 # Il repo consumer dichiara due repository resource: `infrastructure` (questo repo, con gli
 # script) e il repository della wiki, il cui alias passa in wikiRepository. Con "Protect access
