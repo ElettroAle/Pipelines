@@ -1,0 +1,70 @@
+# ── CD Step: Terraform Plan ───────────────────────────────────────────────────
+#
+# Calcola il piano di una configurazione Terraform su Azure e lo rende
+# leggibile: nel log, nel riepilogo della run (scheda Extensions) e nella
+# cartella del piano, che il chiamante pubblica come artifact per l'apply.
+#
+# Accesso ad Azure solo con la service connection ARM in workload identity
+# federation: il token OIDC del task AzureCLI passa a Terraform (ARM_USE_OIDC),
+# nessuna chiave o segreto. Il backend azurerm deve dichiarare
+# use_azuread_auth = true.
+#
+# Riusato da:
+#   CD/Agnostic/deploy-azure-terraform.yaml  (stage Plan)
+#
+# Parametri
+# ─────────
+#   azureServiceConnection → service connection ARM (workload identity federation)
+#   workingDirectory       → cartella della configurazione Terraform
+#   varFile                → file di variabili, relativo a workingDirectory
+#   planDirectory          → cartella in cui scrivere tfplan e plan.txt
+#                            (default: $(Build.ArtifactStagingDirectory)/terraform)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: azureServiceConnection
+    type: string
+
+  - name: workingDirectory
+    type: string
+
+  - name: varFile
+    type: string
+
+  - name: planDirectory
+    type: string
+    default: '$(Build.ArtifactStagingDirectory)/terraform'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: AzureCLI@2
+    displayName: 'Terraform plan'
+    inputs:
+      azureSubscription: '${{ parameters.azureServiceConnection }}'
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      addSpnToEnvironment: true
+      workingDirectory: '${{ parameters.workingDirectory }}'
+      inlineScript: |
+        set -euo pipefail
+        export ARM_CLIENT_ID="$servicePrincipalId"
+        export ARM_TENANT_ID="$tenantId"
+        export ARM_OIDC_TOKEN="$idToken"
+        export ARM_USE_OIDC=true
+        export ARM_USE_CLI=false
+        plan_dir="${{ parameters.planDirectory }}"
+        mkdir -p "$plan_dir"
+        terraform init -input=false -no-color
+        terraform plan -input=false -no-color \
+          -var-file="${{ parameters.varFile }}" \
+          -out="$plan_dir/tfplan" | tee "$plan_dir/plan.txt"
+        {
+          echo "## Piano Terraform"
+          echo
+          echo '```'
+          terraform show -no-color "$plan_dir/tfplan"
+          echo '```'
+        } > "$plan_dir/plan.md"
+        echo "##vso[task.uploadsummary]$plan_dir/plan.md"

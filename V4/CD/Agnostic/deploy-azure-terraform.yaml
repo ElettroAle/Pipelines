@@ -1,0 +1,129 @@
+# ── CD: Deploy Agnostic — Terraform → Azure ───────────────────────────────────
+#
+# Entry point per una configurazione Terraform su Azure: il piano si mostra su
+# ogni run, si applica solo sul ramo di rilascio e solo dopo l'approvazione
+# sull'ambiente ADO.
+#
+# Flusso
+# ──────
+#   Stage Plan (sempre: build validation di una PR o integrazione)
+#     1. Installa Terraform
+#     2. terraform-plan: init + plan, riepilogo nella run, artifact del piano
+#   Stage Apply (solo su applyBranch, mai in una PR)
+#     deployment job sull'ambiente ADO: l'approvazione configurata
+#     sull'ambiente (Approvals and checks) ferma lo stage finché chi la deve
+#     dare non l'ha data.
+#     1. Checkout, installa Terraform, scarica l'artifact del piano
+#     2. terraform-apply: applica il piano approvato
+#
+# Prerequisiti
+# ────────────
+#   - Service connection ARM in workload identity federation.
+#   - Backend azurerm con use_azuread_auth = true, dichiarato nella
+#     configurazione: l'identità della service connection deve poter scrivere
+#     lo stato (Storage Blob Data Contributor sul contenitore).
+#   - Ambiente ADO `targetEnvironment` con un controllo di approvazione.
+#   - .terraform.lock.hcl versionato con gli hash linux_amd64.
+#
+# Parametri richiesti
+# ───────────────────
+#   azureServiceConnection → service connection ARM
+#   workingDirectory       → cartella della configurazione, relativa al repository
+#   varFile                → file di variabili, relativo a workingDirectory
+#   targetEnvironment      → ambiente ADO con l'approvazione dell'apply
+#
+# Parametri opzionali
+# ───────────────────
+#   applyBranch      → unico ramo che applica (default: refs/heads/main)
+#   terraformVersion → versione della CLI (default: 1.15.8)
+#   pool             → pool degli agent (default: ubuntu-latest)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: azureServiceConnection
+    displayName: 'Service connection ARM (workload identity federation)'
+    type: string
+
+  - name: workingDirectory
+    displayName: 'Cartella della configurazione Terraform'
+    type: string
+
+  - name: varFile
+    displayName: 'File di variabili, relativo alla cartella'
+    type: string
+
+  - name: targetEnvironment
+    displayName: 'Ambiente ADO con l''approvazione dell''apply'
+    type: string
+
+  - name: applyBranch
+    displayName: 'Unico ramo che applica il piano'
+    type: string
+    default: 'refs/heads/main'
+
+  - name: terraformVersion
+    displayName: 'Versione di Terraform'
+    type: string
+    default: '1.15.8'
+
+  - name: pool
+    type: object
+    default:
+      vmImage: 'ubuntu-latest'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+stages:
+  - stage: Plan
+    displayName: 'Terraform plan'
+    jobs:
+      - job: Plan
+        displayName: 'Plan — ${{ parameters.workingDirectory }}'
+        pool: ${{ parameters.pool }}
+        steps:
+          - checkout: self
+
+          - template: ../Common/Steps/terraform-install.yaml
+            parameters:
+              terraformVersion: '${{ parameters.terraformVersion }}'
+
+          - template: ../Common/Steps/terraform-plan.yaml
+            parameters:
+              azureServiceConnection: '${{ parameters.azureServiceConnection }}'
+              workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.workingDirectory }}'
+              varFile: '${{ parameters.varFile }}'
+              planDirectory: '$(Build.ArtifactStagingDirectory)/terraform'
+
+          - publish: '$(Build.ArtifactStagingDirectory)/terraform'
+            artifact: 'terraform-plan'
+            displayName: 'Pubblica il piano'
+
+  - stage: Apply
+    displayName: 'Terraform apply su ${{ parameters.targetEnvironment }}'
+    dependsOn: Plan
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], '${{ parameters.applyBranch }}'), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - deployment: Apply
+        displayName: 'Apply — ${{ parameters.workingDirectory }}'
+        pool: ${{ parameters.pool }}
+        environment: '${{ parameters.targetEnvironment }}'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - download: current
+                  artifact: 'terraform-plan'
+                  displayName: 'Scarica il piano'
+
+                - template: ../Common/Steps/terraform-install.yaml
+                  parameters:
+                    terraformVersion: '${{ parameters.terraformVersion }}'
+
+                - template: ../Common/Steps/terraform-apply.yaml
+                  parameters:
+                    azureServiceConnection: '${{ parameters.azureServiceConnection }}'
+                    workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.workingDirectory }}'
+                    planFile: '$(Pipeline.Workspace)/terraform-plan/tfplan'

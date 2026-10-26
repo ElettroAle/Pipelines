@@ -1,0 +1,36 @@
+# ── CD Step: Installazione di Terraform ───────────────────────────────────────
+#
+# Scarica la CLI di Terraform dalla release ufficiale HashiCorp e la mette nel
+# PATH del job. Non richiede estensioni del marketplace.
+#
+# Riusato da:
+#   CD/Agnostic/deploy-azure-terraform.yaml  (stage Plan e Apply)
+#
+# Parametri
+# ─────────
+#   terraformVersion → versione esatta della CLI (default: $(terraformVersion))
+#
+# Solo agent Linux x64.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: terraformVersion
+    type: string
+    default: '$(terraformVersion)'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - bash: |
+      set -euo pipefail
+      target="$(Agent.ToolsDirectory)/terraform/${{ parameters.terraformVersion }}"
+      if [ ! -x "$target/terraform" ]; then
+        mkdir -p "$target"
+        curl -fsSL -o "$(Agent.TempDirectory)/terraform.zip" \
+          "https://releases.hashicorp.com/terraform/${{ parameters.terraformVersion }}/terraform_${{ parameters.terraformVersion }}_linux_amd64.zip"
+        unzip -o -q "$(Agent.TempDirectory)/terraform.zip" -d "$target"
+      fi
+      echo "##vso[task.prependpath]$target"
+      "$target/terraform" version
+    displayName: 'Terraform ${{ parameters.terraformVersion }}'
