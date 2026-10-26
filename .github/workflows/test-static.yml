@@ -5,12 +5,14 @@ on:
     branches: ["**"]
     paths:
       - "V3/**"
+      - "V4/**"
       - "Tests/static/**"
       - ".github/workflows/test-static.yml"
   pull_request:
     branches: [main]
     paths:
       - "V3/**"
+      - "V4/**"
       - "Tests/static/**"
 
 jobs:
@@ -32,8 +34,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r Tests/static/requirements.txt
 
-      - name: YAML Lint (V3/)
-        run: yamllint -c Tests/static/.yamllint.yaml V3/
+      - name: YAML Lint (V3/, V4/)
+        run: yamllint -c Tests/static/.yamllint.yaml V3/ V4/
 
       - name: Check template references
         run: python Tests/static/check-references.py
