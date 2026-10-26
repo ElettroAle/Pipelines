@@ -52,7 +52,7 @@ Tests/
 # Da root del repo
 
 # 1. YAML Lint su tutta V3/
-yamllint -c Tests/static/.yamllint.yaml V3/
+yamllint -c Tests/static/.yamllint.yaml V3/ V4/
 
 # 2. Verifica che ogni 'template: path/file.yaml' esista su disco
 python Tests/static/check-references.py
@@ -247,7 +247,7 @@ I workflow si attivano automaticamente su ogni PR verso `main` e su ogni push.
 
 | Workflow | File | Trigger |
 |---|---|---|
-| Static Analysis | `.github/workflows/test-static.yml` | modifiche in `V3/**` o `Tests/static/**` |
+| Static Analysis | `.github/workflows/test-static.yml` | modifiche in `V3/**`, `V4/**` o `Tests/static/**` |
 | Script Unit Tests | `.github/workflows/test-scripts.yml` | modifiche in `V3/CI/Scripts/**` o `Tests/scripts/**` |
 | Template Expansion Preview | `.github/workflows/test-preview.yml` | `workflow_dispatch` (da abilitare, vedi Livello 3) |
 

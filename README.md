@@ -15,7 +15,7 @@ componibili e utility di alto livello pronte all'uso.
 Pipelines/
 ├── V1/   ← Prima generazione (legacy, non modificare)
 ├── V2/   ← Seconda generazione (legacy, non modificare)
-└── V3/   ← Versione corrente
+├── V3/   ← Versione corrente
     ├── CI/
     │   ├── Scripts/                    Script condivisi (SemVer, versioning, copertura scenari)
     │   ├── Modules/                    Moduli atomici agnostici (stages/jobs)
@@ -36,6 +36,10 @@ Pipelines/
         ├── terraform-plan.yaml         Build validation su PR
         ├── terraform-apply.yaml        Apply automatico su merge a main
         └── terraform-deploy.yaml       ⚠ Deprecato — usa plan + apply separati
+└── V4/   ← Template nuovi accanto a V3 (vedi V4/README.md)
+    └── CD/
+        ├── Agnostic/deploy-azure-terraform.yaml   Terraform: plan su ogni run, apply approvato
+        └── Common/Steps/terraform-*.yaml          install, plan, apply
 ```
 
 ---
@@ -407,7 +411,7 @@ La libreria include una suite di test a 2 livelli che gira su GitHub Actions sen
 ```bash
 # Livello 1 — da root del repo
 pip install -r Tests/static/requirements.txt
-yamllint -c Tests/static/.yamllint.yaml V3/
+yamllint -c Tests/static/.yamllint.yaml V3/ V4/
 python Tests/static/check-references.py
 python Tests/static/check-parameters.py
 ```
@@ -423,7 +427,7 @@ I workflow si attivano automaticamente su ogni push e su ogni PR verso `main`, *
 
 | Workflow | Trigger (path) |
 |---|---|
-| `test-static.yml` | `V3/**`, `Tests/static/**` |
+| `test-static.yml` | `V3/**`, `V4/**`, `Tests/static/**` |
 | `test-scripts.yml` | `V3/CI/Scripts/**`, `Tests/scripts/**` |
 
 Documentazione completa: [`Tests/README.md`](Tests/README.md)

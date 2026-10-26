@@ -14,6 +14,7 @@
 #     1. Sopprime auto-download artifact
 #     2. Scarica il Pipeline Artifact dalla CI (latestFromBranch)
 #     3. functionApp-deploy: zipDeploy sulla Function App di destinazione
+#        (one deploy su Flex Consumption)
 #
 # Parametri richiesti
 # ───────────────────
@@ -40,6 +41,9 @@
 #                              (default: true)
 #   appType                  → tipo di Function App
 #                              (default: 'functionAppLinux')
+#   isFlexConsumption        → true per una Function App sul piano Flex Consumption:
+#                              il pacchetto va nel contenitore di deployment dell'app
+#                              e diventa attivo solo a rilascio riuscito (default: false)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -75,6 +79,11 @@ parameters:
     type: string
     default: 'functionAppLinux'
     # Valori: 'functionApp' (Windows) | 'functionAppLinux' (Linux)
+
+  - name: isFlexConsumption
+    displayName: 'Function App su piano Flex Consumption'
+    type: boolean
+    default: false
 
   - name: stageName
     displayName: 'Identificativo dello stage'
@@ -139,3 +148,4 @@ stages:
                     functionAppName: '${{ parameters.functionAppName }}'
                     packagePath: '$(Pipeline.Workspace)/${{ parameters.ciPipelineResourceAlias }}/${{ parameters.packagePattern }}'
                     appType: '${{ parameters.appType }}'
+                    isFlexConsumption: ${{ parameters.isFlexConsumption }}

@@ -1,0 +1,49 @@
+# ── CD Step: Terraform Apply ──────────────────────────────────────────────────
+#
+# Applica il piano salvato da terraform-plan.yaml, così com'è: niente piano
+# ricalcolato, quindi si applica esattamente ciò che è stato approvato. Se lo
+# stato è cambiato dopo il piano, Terraform rifiuta il piano e il job fallisce.
+#
+# Accesso ad Azure come in terraform-plan.yaml (OIDC, nessun segreto).
+#
+# Riusato da:
+#   CD/Agnostic/deploy-azure-terraform.yaml  (stage Apply)
+#
+# Parametri
+# ─────────
+#   azureServiceConnection → service connection ARM (workload identity federation)
+#   workingDirectory       → cartella della configurazione Terraform
+#   planFile               → piano salvato dallo stage Plan
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: azureServiceConnection
+    type: string
+
+  - name: workingDirectory
+    type: string
+
+  - name: planFile
+    type: string
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: AzureCLI@2
+    displayName: 'Terraform apply'
+    inputs:
+      azureSubscription: '${{ parameters.azureServiceConnection }}'
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      addSpnToEnvironment: true
+      workingDirectory: '${{ parameters.workingDirectory }}'
+      inlineScript: |
+        set -euo pipefail
+        export ARM_CLIENT_ID="$servicePrincipalId"
+        export ARM_TENANT_ID="$tenantId"
+        export ARM_OIDC_TOKEN="$idToken"
+        export ARM_USE_OIDC=true
+        export ARM_USE_CLI=false
+        terraform init -input=false -no-color
+        terraform apply -input=false -no-color "${{ parameters.planFile }}"
