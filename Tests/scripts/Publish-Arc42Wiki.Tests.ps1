@@ -79,11 +79,13 @@ BeforeAll {
         return ($content -join "`n")
     }
 
-    # git show scrive i byte del file cosi' come sono solo se l'uscita va in un file.
+    # I byte si leggono da un clone: su Linux PowerShell ridirige l'uscita di un processo come
+    # testo e rompe un file binario.
     function Get-WikiFileBytes($Wiki, [string]$Path) {
-        $file = Join-Path $Wiki.Root "blob-$(New-Guid)"
-        $process = Start-Process git -ArgumentList '-C', $Wiki.Origin, 'show', "wikiMaster:$Path" -RedirectStandardOutput $file -RedirectStandardError "$file.err" -NoNewWindow -Wait -PassThru
-        if ($process.ExitCode -ne 0) { return $null }
+        $clone = Join-Path $Wiki.Root "read-$(New-Guid)"
+        git clone -q -b wikiMaster $Wiki.Origin $clone 2>&1 | Out-Null
+        $file = Join-Path $clone $Path
+        if (-not (Test-Path -LiteralPath $file)) { return $null }
         return [IO.File]::ReadAllBytes($file)
     }
 
