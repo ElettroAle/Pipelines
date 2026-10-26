@@ -13,8 +13,10 @@
 # ─────────
 #   checkoutRepository → repository del documento [REQUIRED]
 #   wikiRepository     → alias della repository resource della wiki [REQUIRED]
+#   language           → lingua del documento, es. 'IT' o 'EN' (V3/CI/Scripts/Languages) [REQUIRED]
 #   wikiBranch         → ramo della wiki (default: wikiMaster, il ramo della wiki di progetto)
-#   wikiRoot           → pagina della wiki sotto cui nasce il documento (default: Architettura)
+#   wikiRoot           → pagina della wiki sotto cui nasce il documento (default: il nome
+#                        dell'architettura nella lingua del documento, es. Architettura o Architecture)
 #   docsDirectory      → cartella delle sezioni (default: docs/architecture)
 #   decisionsDirectory → cartella degli ADR (default: docs/decisions)
 #   pool               → pool del job (default: hosted ubuntu-latest)
@@ -28,13 +30,16 @@ parameters:
   - name: wikiRepository
     type: string
 
+  - name: language
+    type: string
+
   - name: wikiBranch
     type: string
     default: 'wikiMaster'
 
   - name: wikiRoot
     type: string
-    default: 'Architettura'
+    default: ''
 
   - name: docsDirectory
     type: string
@@ -56,7 +61,7 @@ stages:
     displayName: 'Publish to the wiki'
     jobs:
       - job: PublishWiki
-        displayName: 'Publish ${{ parameters.docsDirectory }} under /${{ parameters.wikiRoot }}'
+        displayName: 'Publish ${{ parameters.docsDirectory }} to the wiki'
         pool: ${{ parameters.pool }}
         steps:
           - checkout: ${{ parameters.checkoutRepository }}
@@ -79,6 +84,7 @@ stages:
             env:
               DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
               DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}
+              DOCUMENT_LANGUAGE: ${{ parameters.language }}
               WIKI_DIRECTORY: '$(Pipeline.Workspace)/wiki'
               WIKI_ROOT: ${{ parameters.wikiRoot }}
               WIKI_BRANCH: ${{ parameters.wikiBranch }}

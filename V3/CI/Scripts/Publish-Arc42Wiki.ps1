@@ -1,5 +1,6 @@
 # Pubblica un documento arc42 nella wiki di progetto di Azure DevOps. Le sezioni diventano pagine
 # sotto WIKI_ROOT, nell'ordine dei loro numeri, e le decisioni diventano sottopagine della sezione 9.
+# Il nome di default di WIKI_ROOT e la colonna dello stato seguono la lingua del documento.
 # I marcatori di vista diventano i diagrammi C4 esportati in Mermaid, e i link puntano alle pagine.
 # Si scrive nel repository git della wiki con un commit solo, che tocca soltanto WIKI_ROOT e la sua
 # voce nell'ordine della radice: le altre pagine della wiki restano come sono.
@@ -12,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
 $decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }
 $wikiDirectory = $env:WIKI_DIRECTORY
-$wikiRoot = if ($env:WIKI_ROOT) { $env:WIKI_ROOT } else { 'Architettura' }
+$wikiRoot = if ($env:WIKI_ROOT) { $env:WIKI_ROOT } else { $DocumentLanguage.WikiRoot }
 $wikiBranch = if ($env:WIKI_BRANCH) { $env:WIKI_BRANCH } else { 'wikiMaster' }
 $repositoryUrl = "$($env:SYSTEM_COLLECTIONURI)$($env:SYSTEM_TEAMPROJECT)/_git/$($env:BUILD_REPOSITORY_NAME)"
 
@@ -23,7 +24,6 @@ $DecisionsSectionNumber = 9
 $MaxPushAttempts = 3
 $LinkPattern = '(\[[^\]]*\]\()([^)\s]+)(\))'
 $ExternalLinkPattern = '^(?:[a-z][a-z0-9+.-]*:|#)'
-$StatusLabels = @{ proposed = 'proposta'; accepted = 'accettata'; rejected = 'respinta'; deprecated = 'deprecata'; superseded = 'sostituita' }
 # Il nome di file di una pagina scrive gli spazi come trattini, quindi codifica il trattino stesso
 # e i caratteri che un nome di file non ammette; il simbolo di percentuale va per primo.
 $EncodedCharacters = @('%', '-', ':', '<', '>', '*', '?', '|', '#', '"', '\', '/')
@@ -133,7 +133,7 @@ function Get-RowDecision([string]$Row, $Page, [hashtable]$PagesBySource) {
 }
 
 function Get-StatusLabel([string]$Status) {
-    if ($StatusLabels.ContainsKey($Status)) { return $StatusLabels[$Status] }
+    if ($DocumentLanguage.StatusLabels.ContainsKey($Status)) { return $DocumentLanguage.StatusLabels[$Status] }
     return $Status
 }
 
@@ -143,7 +143,7 @@ function Add-DecisionStatus([string[]]$Table, $Page, [hashtable]$PagesBySource) 
     if ($Table.Count -lt 3 -or $Table[1] -notmatch $TableSeparatorPattern) { return $Table }
     $decisions = @($Table | Select-Object -Skip 2 | ForEach-Object { Get-RowDecision $_ $Page $PagesBySource })
     if ($decisions.Count -ne ($Table.Count - 2) -or @($decisions | Where-Object { -not $_ }).Count) { return $Table }
-    $rows = @("$($Table[0].TrimEnd()) Stato |", "$($Table[1].TrimEnd()) --- |")
+    $rows = @("$($Table[0].TrimEnd()) $($DocumentLanguage.StatusColumn) |", "$($Table[1].TrimEnd()) --- |")
     for ($i = 2; $i -lt $Table.Count; $i++) { $rows += "$($Table[$i].TrimEnd()) $(Get-StatusLabel $decisions[$i - 2].Status) |" }
     return $rows
 }
@@ -250,7 +250,7 @@ function Publish-Document($Pages, [hashtable]$Contents) {
             return
         }
         $global:LASTEXITCODE = 0
-        Invoke-WikiGit -c "user.name=$name" -c "user.email=$email" commit -q -m "${wikiRoot}: documento al commit $source" | Out-Null
+        Invoke-WikiGit -c "user.name=$name" -c "user.email=$email" commit -q -m "${wikiRoot} @ $source" | Out-Null
         git -C $wikiDirectory @authorization push -q origin "HEAD:refs/heads/$wikiBranch" 2>&1 | ForEach-Object { Write-Host $_ }
         if ($LASTEXITCODE -eq 0) {
             Write-Host "Wiki aggiornata: $(@(Get-AllPages $Pages).Count) pagine sotto /$wikiRoot"

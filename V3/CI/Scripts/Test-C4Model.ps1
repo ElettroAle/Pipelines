@@ -1,7 +1,8 @@
 # Modello C4 di un documento, scritto in Structurizr DSL in model/workspace.dsl della cartella
 # del documento: modello valido, viste di contesto, dei container e di deployment, una vista dei
-# componenti per ogni container con il tag Applicazione, ogni vista mostrata in una sezione con
-# il marcatore <!-- vista: chiave --> e ogni marcatore rivolto a una vista esistente.
+# componenti per ogni container con il tag delle applicazioni, ogni vista mostrata in una sezione
+# con il marcatore di vista e ogni marcatore rivolto a una vista esistente. Tag e marcatore seguono
+# la lingua del documento: in italiano Applicazione e <!-- vista: chiave -->.
 
 . "$PSScriptRoot/VerificationGate.ps1"
 . "$PSScriptRoot/MarkdownText.ps1"
@@ -10,7 +11,7 @@
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
 $WorkspaceDsl = Join-Path $docsDirectory 'model/workspace.dsl'
 
-$ApplicationTag = 'Applicazione'
+$ApplicationTag = $DocumentLanguage.ApplicationTag
 $ModelScope = 'modello C4'
 $RequiredLevels = [ordered]@{ systemContextViews = 'vista di contesto'; containerViews = 'vista dei container'; deploymentViews = 'vista di deployment' }
 $ViewKinds = @('systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews', 'dynamicViews', 'deploymentViews')

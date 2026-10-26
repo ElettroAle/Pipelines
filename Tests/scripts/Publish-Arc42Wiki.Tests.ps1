@@ -56,8 +56,9 @@ BeforeAll {
         return [pscustomobject]@{ Root = $root; Origin = $origin; Seed = $seed; Checkout = $checkout }
     }
 
-    function Invoke-WikiPublish([System.Collections.IDictionary]$Docs, $Wiki) {
+    function Invoke-WikiPublish([System.Collections.IDictionary]$Docs, $Wiki, [string]$Language = '') {
         return Invoke-DocsScript $ScriptPath $Docs @{
+            DOCUMENT_LANGUAGE     = $Language
             WIKI_DIRECTORY        = $Wiki.Checkout
             SYSTEM_COLLECTIONURI  = 'https://dev.azure.com/Org/'
             SYSTEM_TEAMPROJECT    = 'Progetto'
@@ -318,6 +319,32 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
 
         It "E la wiki non cambia" {
             Get-WikiCommitCount $wiki | Should -Be $commits
+        }
+    }
+
+    Context "Scenario: documento in inglese" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = ConvertTo-EnglishConventions (New-ValidDocs)
+            Add-DecisionIndex $docs
+            $res = Invoke-WikiPublish $docs $wiki 'EN'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora il documento nasce sotto Architecture" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            Get-WikiPage $wiki 'Architecture.md' | Should -Be '[[_TOSP_]]'
+            Get-WikiPage $wiki '.order' | Should -Be "Architecture`nRelease-notes"
+        }
+
+        It "E l'indice delle decisioni ha la colonna Status" {
+            Get-WikiPage $wiki 'Architecture/9.-Decisioni-di-progettazione.md' | Should -Match '\| Decisione \| Scelta \| Status \|[\s\S]*\| accepted \|'
+        }
+
+        It "E il marcatore view diventa il diagramma" {
+            $page = Get-WikiPage $wiki 'Architecture/3.-Ambito-e-contesto-del-sistema.md'
+            $page | Should -Match '(?m)^::: mermaid$'
+            $page | Should -Not -Match '<!-- view:'
         }
     }
 }

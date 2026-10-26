@@ -12,7 +12,8 @@
 # Parametri
 # ─────────
 #   checkoutRepository → repository da fare checkout [REQUIRED]
-#   adrMode            → off | warn | enforce (default: enforce)
+#   language           → lingua del documento, es. 'IT' o 'EN' (V3/CI/Scripts/Languages, default: IT)
+#   adrMode           → off | warn | enforce (default: enforce)
 #   decisionsDirectory → cartella degli ADR (default: docs/decisions)
 #   docsMode           → off | warn | enforce (default: off, finché il repo non ha la documentazione)
 #   docsDirectory      → cartella del documento (default: docs/architecture)
@@ -34,6 +35,10 @@
 parameters:
   - name: checkoutRepository
     type: string
+
+  - name: language
+    type: string
+    default: 'IT'
 
   - name: adrMode
     type: string
@@ -106,6 +111,9 @@ stages:
       pool: ${{ parameters.pool }}
       checkoutPipelineTemplates: true
       buildAndTestSteps:
+        - template: ../Common/Steps/document-language.yaml
+          parameters:
+            language: ${{ parameters.language }}
         - template: ../Common/Steps/adr-verify.yaml
           parameters:
             mode: ${{ parameters.adrMode }}
