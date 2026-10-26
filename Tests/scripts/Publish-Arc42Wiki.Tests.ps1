@@ -8,7 +8,8 @@
     Il documento e' quello valido della fixture condivisa. La wiki e' un repository git locale con
     un origin bare sul ramo wikiMaster, gia' popolato con le release note e una pagina che la
     pubblicazione non possiede. Lo script gira come in pipeline: richiede Java 17 o successivo per
-    esportare le viste C4 (STRUCTURIZR_JAVA, JAVA_HOME_17_X64 o JAVA_HOME).
+    esportare e disegnare le viste C4 (STRUCTURIZR_JAVA, JAVA_HOME_17_X64 o JAVA_HOME). PLANTUML_JAR
+    evita lo scaricamento di PlantUML.
 #>
 
 BeforeAll {
@@ -17,6 +18,8 @@ BeforeAll {
     $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-arc42-wiki-$(New-Guid)"
     $ReleaseNotes = "# AI`n`n## 1.2.0`n`n- Nuova funzione`n"
+    $ReleaseNotesImage = 'immagine delle release note'
+    $PngSignature = [byte[]](0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
 
     function Invoke-Git([string]$Directory) {
         $output = git -C $Directory @args 2>&1
@@ -50,6 +53,7 @@ BeforeAll {
         Set-WikiFile $seed 'Release-notes/.order' "AI`n"
         Set-WikiFile $seed 'Release-notes/AI.md' $ReleaseNotes
         Set-WikiFile $seed 'Indice.md' "# Indice`n"
+        Set-WikiFile $seed '.attachments/release-notes.png' $ReleaseNotesImage
         Add-WikiCommit $seed 'Release notes'
         $checkout = Join-Path $root 'checkout'
         git clone -q -b wikiMaster $origin $checkout 2>&1 | Out-Null
@@ -73,6 +77,20 @@ BeforeAll {
         $content = git -C $Wiki.Origin show "wikiMaster:$Path" 2>$null
         if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0; return $null }
         return ($content -join "`n")
+    }
+
+    # I byte si leggono da un clone: su Linux PowerShell ridirige l'uscita di un processo come
+    # testo e rompe un file binario.
+    function Get-WikiFileBytes($Wiki, [string]$Path) {
+        $clone = Join-Path $Wiki.Root "read-$(New-Guid)"
+        git clone -q -b wikiMaster $Wiki.Origin $clone 2>&1 | Out-Null
+        $file = Join-Path $clone $Path
+        if (-not (Test-Path -LiteralPath $file)) { return $null }
+        return [IO.File]::ReadAllBytes($file)
+    }
+
+    function Test-Png([byte[]]$Bytes) {
+        return $Bytes.Count -gt $PngSignature.Count -and -not (Compare-Object ($Bytes | Select-Object -First $PngSignature.Count) $PngSignature)
     }
 
     function Get-WikiCommitCount($Wiki) {
@@ -143,12 +161,11 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
         }
     }
 
-    Context "Schema dello scenario: diagrammi disegnati nella wiki — <vista>" -ForEach @(
-        @{ vista = 'contesto (C4 livello 1)'; pagina = 'Architettura/3.-Ambito-e-contesto-del-sistema.md'; elemento = 'Cittadino' }
-        @{ vista = 'container (C4 livello 2)'; pagina = 'Architettura/5.-Building-Block-View.md'; elemento = 'API del Motore' }
-        @{ vista = 'componenti del Worker (livello 3)'; pagina = 'Architettura/5.-Building-Block-View.md'; elemento = 'Coda' }
-        @{ vista = 'deployment di produzione'; pagina = 'Architettura/7.-Deployment-View.md'; elemento = 'Azure' }
-        @{ vista = 'sequenza in Mermaid'; pagina = 'Architettura/6.-Runtime-View.md'; elemento = 'sequenceDiagram' }
+    Context "Schema dello scenario: diagrammi C4 disegnati nella wiki — <vista>" -ForEach @(
+        @{ vista = 'contesto (C4 livello 1)'; pagina = 'Architettura/3.-Ambito-e-contesto-del-sistema.md'; chiave = 'contesto' }
+        @{ vista = 'container (C4 livello 2)'; pagina = 'Architettura/5.-Building-Block-View.md'; chiave = 'contenitori' }
+        @{ vista = 'componenti del Worker (livello 3)'; pagina = 'Architettura/5.-Building-Block-View.md'; chiave = 'componenti-worker' }
+        @{ vista = 'deployment di produzione'; pagina = 'Architettura/7.-Deployment-View.md'; chiave = 'deployment-produzione' }
     ) {
         BeforeAll {
             $wiki = New-Wiki
@@ -157,16 +174,76 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
         }
         AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
 
-        It "Allora la pagina mostra il diagramma disegnato" {
+        It "Allora la pagina mostra l'immagine della vista" {
             $res.ExitCode | Should -Be 0 -Because $res.Output
-            $page | Should -Match '(?m)^::: mermaid$'
-            $page | Should -Match ([regex]::Escape($elemento))
+            $page | Should -Match ([regex]::Escape("![$chiave](/.attachments/Architettura/$chiave.png)"))
         }
 
-        It "E non il suo sorgente" {
+        It "E l'immagine e' il diagramma disegnato in PNG" {
+            Test-Png (Get-WikiFileBytes $wiki ".attachments/Architettura/$chiave.png") | Should -BeTrue
+        }
+
+        It "E la pagina non mostra il marcatore" {
             $page | Should -Not -Match '<!-- vista:'
+        }
+    }
+
+    Context "Scenario: diagramma Mermaid disegnato nella wiki" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $res = Invoke-WikiPublish (New-ValidDocs) $wiki
+            $page = Get-WikiPage $wiki 'Architettura/6.-Runtime-View.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora la pagina mostra il diagramma nella sintassi della wiki" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $page | Should -Match '(?m)^::: mermaid\n\s*sequenceDiagram'
+        }
+
+        It "E non il blocco Markdown" {
             $page | Should -Not -Match '```mermaid'
-            $page | Should -Not -Match '<div'
+        }
+    }
+
+    Context "Scenario: un documento senza viste C4" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-ValidDocs
+            foreach ($path in @($docs.Keys)) {
+                if ($docs[$path] -is [string]) { $docs[$path] = $docs[$path] -replace '(?m)^<!-- vista: [\w-]+ -->\r?\n', '' }
+            }
+            $res = Invoke-WikiPublish $docs $wiki
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora la pubblicazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            Get-WikiPage $wiki 'Architettura.md' | Should -Be '[[_TOSP_]]'
+        }
+
+        It "E nessuna immagine nasce sotto Architettura" {
+            git -C $wiki.Origin ls-tree -r --name-only wikiMaster -- .attachments/Architettura | Should -BeNullOrEmpty
+        }
+    }
+
+    Context "Scenario: una vista tolta dal documento perde la sua immagine" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-ValidDocs
+            $null = Invoke-WikiPublish $docs $wiki
+            Edit-Docs $docs 'docs/architecture/07_deployment_view.md' '<!-- vista: deployment-produzione -->' ''
+            $res = Invoke-WikiPublish $docs $wiki
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora l'immagine della vista non c'e' piu'" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            Get-WikiFileBytes $wiki '.attachments/Architettura/deployment-produzione.png' | Should -BeNullOrEmpty
+        }
+
+        It "E le immagini delle viste ancora mostrate restano" {
+            Test-Png (Get-WikiFileBytes $wiki '.attachments/Architettura/contesto.png') | Should -BeTrue
         }
     }
 
@@ -258,6 +335,10 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
             Get-WikiPage $wiki 'Indice.md' | Should -Be '# Indice'
         }
 
+        It "E un allegato che la pubblicazione non possiede resta" {
+            Get-WikiPage $wiki '.attachments/release-notes.png' | Should -Be $ReleaseNotesImage
+        }
+
         It "E l'ordine della radice aggiunge Architettura in testa, senza togliere le altre voci" {
             Get-WikiPage $wiki '.order' | Should -Be "Architettura`nRelease-notes"
         }
@@ -341,10 +422,11 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
             Get-WikiPage $wiki 'Architecture/9.-Decisioni-di-progettazione.md' | Should -Match '\| Decisione \| Scelta \| Status \|[\s\S]*\| accepted \|'
         }
 
-        It "E il marcatore view diventa il diagramma" {
+        It "E il marcatore view diventa l'immagine del diagramma" {
             $page = Get-WikiPage $wiki 'Architecture/3.-Ambito-e-contesto-del-sistema.md'
-            $page | Should -Match '(?m)^::: mermaid$'
+            $page | Should -Match ([regex]::Escape('![contesto](/.attachments/Architecture/contesto.png)'))
             $page | Should -Not -Match '<!-- view:'
+            Test-Png (Get-WikiFileBytes $wiki '.attachments/Architecture/contesto.png') | Should -BeTrue
         }
     }
 }

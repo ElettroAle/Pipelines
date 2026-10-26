@@ -1,5 +1,5 @@
 # Accesso alla Structurizr CLI per Test-C4Model.ps1 e Publish-Arc42Wiki.ps1: valida il modello C4
-# scritto in Structurizr DSL, lo esporta in JSON ed esporta le sue viste in Mermaid.
+# scritto in Structurizr DSL, lo esporta in JSON ed esporta le sue viste in C4-PlantUML.
 
 $StructurizrVersion = '2025.11.09'
 # L'archivio e' unico per tutte le piattaforme: gira sulla JVM.
@@ -84,18 +84,18 @@ function Export-StructurizrWorkspace([string]$WorkspaceDsl) {
     }
 }
 
-# Esporta ogni vista del workspace in Mermaid: chiave della vista -> testo del diagramma.
-function Export-StructurizrMermaid([string]$WorkspaceDsl) {
+# Esporta ogni vista del workspace in C4-PlantUML: chiave della vista -> testo del diagramma.
+function Export-StructurizrC4PlantUml([string]$WorkspaceDsl) {
     $java = Get-StructurizrJava
     $classPath = Get-StructurizrClassPath
     $outputDir = Join-Path ([IO.Path]::GetTempPath()) "structurizr-$(New-Guid)"
     try {
-        $output = & $java -cp $classPath com.structurizr.cli.StructurizrCliApplication export -workspace $WorkspaceDsl -format mermaid -output $outputDir 2>&1
+        $output = & $java -cp $classPath com.structurizr.cli.StructurizrCliApplication export -workspace $WorkspaceDsl -format plantuml/c4plantuml -output $outputDir 2>&1
         $exitCode = $LASTEXITCODE
         $global:LASTEXITCODE = 0
-        if ($exitCode -ne 0) { throw "esportazione delle viste in Mermaid non riuscita: $(@($output | ForEach-Object { "$_" }) | Select-Object -Last 1)" }
+        if ($exitCode -ne 0) { throw "esportazione delle viste in C4-PlantUML non riuscita: $(@($output | ForEach-Object { "$_" }) | Select-Object -Last 1)" }
         $views = @{}
-        foreach ($file in (Get-ChildItem -Path $outputDir -Filter 'structurizr-*.mmd')) {
+        foreach ($file in (Get-ChildItem -Path $outputDir -Filter 'structurizr-*.puml')) {
             $views[$file.BaseName -replace '^structurizr-', ''] = [IO.File]::ReadAllText($file.FullName)
         }
         return $views

@@ -358,12 +358,16 @@ Dopo il merge su `main` il documento arc42 si pubblica nella wiki di progetto di
 - Ogni sezione diventa una pagina sotto `wikiRoot` (default il nome della lingua, `Architettura` o
   `Architecture`), nell'ordine dei numeri; le decisioni diventano sottopagine della sezione 9, quella
   delle decisioni nel template arc42, e la tabella che le elenca riceve la colonna dello stato.
-- I marcatori di vista diventano i diagrammi C4 esportati in Mermaid dalla Structurizr CLI, e i
-  blocchi ` ```mermaid ` la sintassi della wiki `::: mermaid`. I link alle sezioni e alle decisioni portano
-  alle pagine; gli altri link relativi al file nel repository.
-- Un commit solo nel repository git della wiki tocca soltanto `wikiRoot` e la sua voce in testa all'ordine
-  della radice: le release note e le altre pagine restano come sono. Se la wiki cambia nel frattempo, il
-  push si riprova sopra il commit nuovo; se non cambia nulla, nessun commit.
+- I marcatori di vista diventano le immagini PNG delle viste C4: la Structurizr CLI le esporta in
+  C4-PlantUML e PlantUML (versione fissata, SHA-256 verificato) le disegna con le librerie C4 interne e il
+  layout smetana, senza Graphviz e senza rete. Le immagini stanno in `.attachments/<wikiRoot>/<vista>.png`.
+  Con la proprieta' `c4plantuml.tags` delle viste, colori e forme vengono dagli stili del modello, che
+  allora dichiara anche quelli di `Person`, `Software System`, `Container` e `Component`.
+- I blocchi ` ```mermaid ` diventano la sintassi della wiki `::: mermaid`. I link alle sezioni e alle
+  decisioni portano alle pagine; gli altri link relativi al file nel repository.
+- Un commit solo nel repository git della wiki tocca soltanto `wikiRoot`, le sue immagini e la sua voce in
+  testa all'ordine della radice: le release note e le altre pagine restano come sono. Se la wiki cambia nel
+  frattempo, il push si riprova sopra il commit nuovo; se non cambia nulla, nessun commit.
 
 ```yaml
 resources:
@@ -443,13 +447,14 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | `CI/Scripts/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, sostituzioni reciproche, ADR `accepted` non modificati rispetto al ramo di destinazione della PR |
 | `CI/Scripts/Test-Arc42Document.ps1` | Struttura di un documento arc42 (`arc42-verify.yaml`): un file per sezione con nome e titolo del template ufficiale; release, URL e SHA-256 per lingua fissati nello script |
 | `CI/Scripts/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, marcatori di vista nelle sezioni |
-| `CI/Scripts/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 in Mermaid, un commit solo che non tocca le altre pagine |
+| `CI/Scripts/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |
 | `CI/Scripts/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
 | `CI/Scripts/Test-Documentation.ps1` | Controlli comuni a ogni documento (`documentation-verify.yaml`): rimandi esistenti, soglie numeriche di leggibilità |
 | `CI/Scripts/Test-DocumentationStyle.ps1` | Giudizio dello stile di un documento (`documentation-style.yaml`) con un modello Azure OpenAI che riceve la guida di stile del repository come istruzioni |
 | `CI/Scripts/VerificationGate.ps1` | Parte comune degli script di verifica della documentazione: modalità `off`/`warn`/`enforce`, rilievi `##vso[task.logissue]`, codice di uscita |
 | `CI/Scripts/MarkdownText.ps1` | Lettura delle sezioni Markdown di un documento (blocchi, parti, marcatori di vista, diagrammi) e misure di leggibilità (frasi, parole, indice Gulpease) |
-| `CI/Scripts/Structurizr.ps1` | Scarica la Structurizr CLI (versione fissata, SHA-256 verificato), sceglie un Java 17 o successivo ed esporta il modello C4 in JSON e le viste in Mermaid |
+| `CI/Scripts/Structurizr.ps1` | Scarica la Structurizr CLI (versione fissata, SHA-256 verificato), sceglie un Java 17 o successivo ed esporta il modello C4 in JSON e le viste in C4-PlantUML |
+| `CI/Scripts/PlantUml.ps1` | Scarica PlantUML (versione fissata, SHA-256 verificato) e disegna i diagrammi in PNG con una sola JVM, layout smetana |
 | `CI/Scripts/DocumentLanguage.ps1` | Carica da `CI/Scripts/Languages/<lingua>.psd1` le convenzioni della lingua del documento (`DOCUMENT_LANGUAGE`, default `IT`); una lingua senza file fa fallire lo script nominandola |
 | `CI/Scripts/Mermaid.ps1`, `CI/Scripts/mermaid/` | Installa con `npm ci` il parser Mermaid fissato dal lockfile e ricava, per ogni diagramma, il tipo o l'errore con la riga |
 | `CI/Scripts/ScenarioCoverage.cs` | File-based app .NET 10: verifica che ogni scenario dei `.feature` sia stato eseguito e superato, leggendo i Cucumber Messages del runner BDD |
