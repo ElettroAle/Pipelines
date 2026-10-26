@@ -1,7 +1,9 @@
 # Lettura delle sezioni Markdown di un documento e misure di leggibilita' del loro testo,
 # per gli script di verifica della documentazione.
 
-$ViewMarkerPattern = '^\s*<!--\s*vista:\s*([\w-]+)\s*-->\s*$'
+. "$PSScriptRoot/DocumentLanguage.ps1"
+
+$ViewMarkerPattern = '^\s*<!--\s*' + [regex]::Escape($DocumentLanguage.ViewMarker) + ':\s*([\w-]+)\s*-->\s*$'
 $CommentPattern = '^\s*<!--.*-->\s*$'
 $HeadingPattern = '^(#{1,6})\s+(.+?)\s*#*\s*$'
 $HeadingAttributesPattern = '\s*\{#[^}]*\}\s*$'

@@ -1,0 +1,91 @@
+# ── CI Agnostic: Publish arc42 wiki ───────────────────────────────────────────
+#
+# Pubblica un documento arc42 nella wiki di progetto di Azure DevOps
+# (V3/CI/Scripts/Publish-Arc42Wiki.ps1): una pagina per sezione sotto wikiRoot, le decisioni
+# sotto la sezione 9, i diagrammi C4 esportati in Mermaid. Un commit solo nel repository della
+# wiki, che tocca soltanto wikiRoot e la sua voce nell'ordine della radice.
+#
+# Il repo consumer dichiara due repository resource: `infrastructure` (questo repo, con gli
+# script) e il repository della wiki, il cui alias passa in wikiRepository. Con "Protect access
+# to repositories in YAML pipelines" il System.AccessToken scrive solo nei repository dichiarati.
+#
+# Parametri
+# ─────────
+#   checkoutRepository → repository del documento [REQUIRED]
+#   wikiRepository     → alias della repository resource della wiki [REQUIRED]
+#   language           → lingua del documento, es. 'IT' o 'EN' (V3/CI/Scripts/Languages) [REQUIRED]
+#   wikiBranch         → ramo della wiki (default: wikiMaster, il ramo della wiki di progetto)
+#   wikiRoot           → pagina della wiki sotto cui nasce il documento (default: il nome
+#                        dell'architettura nella lingua del documento, es. Architettura o Architecture)
+#   docsDirectory      → cartella delle sezioni (default: docs/architecture)
+#   decisionsDirectory → cartella degli ADR (default: docs/decisions)
+#   pool               → pool del job (default: hosted ubuntu-latest)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: checkoutRepository
+    type: string
+
+  - name: wikiRepository
+    type: string
+
+  - name: language
+    type: string
+
+  - name: wikiBranch
+    type: string
+    default: 'wikiMaster'
+
+  - name: wikiRoot
+    type: string
+    default: ''
+
+  - name: docsDirectory
+    type: string
+    default: 'docs/architecture'
+
+  - name: decisionsDirectory
+    type: string
+    default: 'docs/decisions'
+
+  - name: pool
+    type: object
+    default:
+      vmImage: 'ubuntu-latest'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+stages:
+  - stage: Wiki
+    displayName: 'Publish to the wiki'
+    jobs:
+      - job: PublishWiki
+        displayName: 'Publish ${{ parameters.docsDirectory }} to the wiki'
+        pool: ${{ parameters.pool }}
+        steps:
+          - checkout: ${{ parameters.checkoutRepository }}
+            path: s
+
+          - checkout: infrastructure
+            path: pipeline-templates
+
+          - checkout: ${{ parameters.wikiRepository }}
+            path: wiki
+
+          - template: ../Common/Steps/ensure-java.yaml
+
+          - task: PowerShell@2
+            displayName: 'Publish ${{ parameters.docsDirectory }} to the wiki'
+            inputs:
+              filePath: '$(Pipeline.Workspace)/pipeline-templates/V3/CI/Scripts/Publish-Arc42Wiki.ps1'
+              workingDirectory: '$(Pipeline.Workspace)/s'
+              pwsh: true
+            env:
+              DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
+              DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}
+              DOCUMENT_LANGUAGE: ${{ parameters.language }}
+              WIKI_DIRECTORY: '$(Pipeline.Workspace)/wiki'
+              WIKI_ROOT: ${{ parameters.wikiRoot }}
+              WIKI_BRANCH: ${{ parameters.wikiBranch }}
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)

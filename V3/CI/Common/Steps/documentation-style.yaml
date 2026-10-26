@@ -24,7 +24,7 @@
 #   gulpease, maxWords, abbreviations, decisionsDirectory → soglie dei controlli oggettivi, rieseguiti sul
 #                        testo corretto prima di pubblicarlo (come in documentation-verify.yaml)
 #   maxRounds          → giri massimi di giudizio in modalita' fix, l'ultimo solo di verifica (default: 4)
-#   seed               → seme del modello, per giudizi ripetibili (default: 1919)
+#   seed               → seme del modello, per giudizi ripetibili (default: 1)
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ parameters:
 
   - name: seed
     type: number
-    default: 1919
+    default: 1
 
   - name: templatesDirectory
     type: string

@@ -1,14 +1,15 @@
-# Verifica il corpus degli ADR (MADR con intestazioni italiane) di un repository.
+# Verifica il corpus degli ADR (MADR, intestazioni nella lingua del documento) di un repository.
 # Si valida l'intero corpus, non solo i file della PR: cosi' resta sempre pulito.
 
 . "$PSScriptRoot/VerificationGate.ps1"
+. "$PSScriptRoot/DocumentLanguage.ps1"
 
 $decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }
 # Fuori da una PR ADO lascia la macro non espansa: non c'e' un ramo di destinazione.
 $targetBranch = $env:TARGET_BRANCH -replace '^refs/heads/', '' -replace '^\$\(.*\)$', ''
 
 $AllowedStatuses = @('proposed', 'accepted', 'rejected', 'deprecated', 'superseded')
-$RequiredSections = @('Contesto e problema', 'Opzioni considerate', 'Esito della decisione')
+$RequiredSections = $DocumentLanguage.AdrSections
 $DecisionFilePattern = '^\d{4}-[a-z0-9-]+\.md$'
 
 # Sostituire una decisione accettata ne cambia solo lo stato e il rimando alla sostituta.

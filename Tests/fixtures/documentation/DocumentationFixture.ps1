@@ -163,6 +163,16 @@ I termini sono in ordine alfabetico.
     return $docs
 }
 
+# Lo stesso documento con le convenzioni inglesi (Languages/EN.psd1): marcatori di vista e tag
+# dei container. Il testo resta quello italiano, perche' le convenzioni non lo riguardano.
+function ConvertTo-EnglishConventions([System.Collections.IDictionary]$Docs) {
+    foreach ($path in @($Docs.Keys)) {
+        if ($null -eq $Docs[$path]) { continue }
+        $Docs[$path] = $Docs[$path].Replace('<!-- vista:', '<!-- view:').Replace('"Applicazione"', '"Application"')
+    }
+    return $Docs
+}
+
 function Edit-Docs([System.Collections.IDictionary]$Docs, [string]$Path, [string]$Old, [string]$New) {
     if (-not $Docs[$Path].Contains($Old)) { throw "Fixture: '$Old' assente da $Path" }
     $Docs[$Path] = $Docs[$Path].Replace($Old, $New)

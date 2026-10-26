@@ -18,7 +18,7 @@ BeforeAll {
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-model-$(New-Guid)"
 
     function Invoke-ModelCheck([System.Collections.IDictionary]$Docs, [hashtable]$Environment = @{}) {
-        $variables = @{ GATE_MODE = '' }
+        $variables = @{ GATE_MODE = ''; DOCUMENT_LANGUAGE = '' }
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
         return Invoke-DocsScript $ScriptPath $Docs $variables
     }
@@ -113,5 +113,35 @@ Describe "Test-C4Model — strumenti e modalità" {
         $res = Invoke-ModelCheck $docs @{ GATE_MODE = 'off' }
         $res.ExitCode | Should -Be 0
         Get-Issues $res.Output | Should -BeNullOrEmpty
+    }
+}
+
+Describe "Test-C4Model — lingua del documento" {
+
+    It "In inglese riconosce il marcatore view e il tag Application" {
+        $res = Invoke-ModelCheck (ConvertTo-EnglishConventions (New-ValidDocs)) @{ DOCUMENT_LANGUAGE = 'EN' }
+        $res.ExitCode | Should -Be 0 -Because $res.Output
+        Get-Issues $res.Output | Should -BeNullOrEmpty
+    }
+
+    It "In inglese un container Application senza vista dei componenti si segnala" {
+        $docs = New-ValidDocs
+        Edit-Docs $docs 'docs/architecture/model/workspace.dsl' "        component worker `"componenti-worker`" {`n            include *`n        }`n" ''
+        Edit-Docs $docs 'docs/architecture/05_building_block_view.md' "<!-- vista: componenti-worker -->`n" ''
+        $res = Invoke-ModelCheck (ConvertTo-EnglishConventions $docs) @{ DOCUMENT_LANGUAGE = 'EN' }
+        $res.ExitCode | Should -Be 1
+        Get-Issues $res.Output | Where-Object { $_ -match 'container senza vista dei componenti \(Worker\)' } | Should -Not -BeNullOrEmpty -Because $res.Output
+    }
+
+    It "In inglese un marcatore italiano non mostra la vista" {
+        $res = Invoke-ModelCheck (New-ValidDocs) @{ DOCUMENT_LANGUAGE = 'EN' }
+        $res.ExitCode | Should -Be 1
+        Get-Issues $res.Output | Where-Object { $_ -match 'vista non mostrata in nessuna sezione \(contesto\)' } | Should -Not -BeNullOrEmpty
+    }
+
+    It "Una lingua senza il suo file fallisce e la nomina" {
+        $res = Invoke-ModelCheck (New-ValidDocs) @{ DOCUMENT_LANGUAGE = 'XX' }
+        $res.ExitCode | Should -Not -Be 0
+        $res.Output | Should -Match 'lingua del documento non supportata: XX'
     }
 }

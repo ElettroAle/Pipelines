@@ -83,7 +83,7 @@ BeforeAll {
     }
 
     function Invoke-AdrCheck {
-        param([hashtable]$Main = @{}, [hashtable]$PullRequest = @{}, [string]$Mode = '', [string]$TargetBranch = 'refs/heads/main')
+        param([hashtable]$Main = @{}, [hashtable]$PullRequest = @{}, [string]$Mode = '', [string]$TargetBranch = 'refs/heads/main', [string]$Language = '')
 
         $fixture = New-PullRequestRepo -Main $Main -PullRequest $PullRequest
         Push-Location $fixture.Repo
@@ -91,12 +91,13 @@ BeforeAll {
             $env:GATE_MODE = $Mode
             $env:TARGET_BRANCH = $TargetBranch
             $env:DECISIONS_DIRECTORY = $DecisionsDirectory
+            $env:DOCUMENT_LANGUAGE = $Language
             $output = & pwsh -NoProfile -NonInteractive -File $ScriptPath 2>&1
             return @{ ExitCode = $LASTEXITCODE; Output = ($output -join "`n") }
         }
         finally {
             Pop-Location
-            $env:GATE_MODE = $env:TARGET_BRANCH = $env:DECISIONS_DIRECTORY = $null
+            $env:GATE_MODE = $env:TARGET_BRANCH = $env:DECISIONS_DIRECTORY = $env:DOCUMENT_LANGUAGE = $null
             Remove-Item -Recurse -Force $fixture.Root -ErrorAction SilentlyContinue
         }
     }
@@ -259,5 +260,32 @@ Describe "Test-AdrCorpus — regole del corpus" {
         }
 
         (Get-Issues $res.Output 'error').Count | Should -Be 3
+    }
+}
+
+
+Describe "Test-AdrCorpus — lingua del documento" {
+
+    BeforeAll {
+        $EnglishSections = @('Context and Problem Statement', 'Considered Options', 'Decision Outcome')
+    }
+
+    It "In inglese una decisione con le sezioni MADR inglesi e' ben formata" {
+        $res = Invoke-AdrCheck -Language EN -PullRequest @{ '0001-example' = (New-Decision -Sections $EnglishSections) }
+
+        $res.ExitCode | Should -Be 0 -Because $res.Output
+    }
+
+    It "In inglese una decisione con le sezioni italiane manca di quelle inglesi" {
+        $res = Invoke-AdrCheck -Language EN -PullRequest @{ '0001-esempio' = (New-Decision) }
+
+        Get-Issues $res.Output 'error' | Where-Object { $_ -match "sezione mancante 'Decision Outcome'" } | Should -Not -BeNullOrEmpty
+    }
+
+    It "Una lingua senza il suo file fallisce e la nomina" {
+        $res = Invoke-AdrCheck -Language XX -PullRequest @{ '0001-esempio' = (New-Decision) }
+
+        $res.ExitCode | Should -Not -Be 0
+        $res.Output | Should -Match 'lingua del documento non supportata: XX'
     }
 }
