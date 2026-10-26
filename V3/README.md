@@ -96,9 +96,8 @@ Nessuna governance Git. Usato per ambienti senza SemVer o tagging.
 | `CI/Agnostic/quality-arc42.yaml` | Quality gate di un documento arc42 (Gitleaks + verifica degli ADR + struttura sul template arc42 + controlli comuni + diagrammi iniettati dal consumer + giudizio dello stile con un modello) |
 | `CI/Agnostic/quality-docs.yaml` | Quality gate documentazione senza formato proprio (Gitleaks + verifica degli ADR + controlli comuni + diagrammi iniettati dal consumer + giudizio dello stile con un modello) |
 | `CD/Agnostic/deploy-azure-appService.yaml` | Download artifact CI + deploy su Azure App Service |
-| `CD/Agnostic/deploy-azure-functionApp.yaml` | Download artifact CI + deploy su Azure Function App (one deploy su Flex Consumption con `isFlexConsumption`), poi gli step `postDeploySteps` del raccordo, es. una verifica che fa fallire il rilascio |
+| `CD/Agnostic/deploy-azure-functionApp.yaml` | Download artifact CI + deploy su Azure Function App (one deploy su Flex Consumption con `isFlexConsumption`) |
 | `CD/Agnostic/deploy-angular-staticWebApp.yaml` | Download artifact CI + deploy su Azure Static Web Apps |
-| `CD/Agnostic/deploy-azure-terraform.yaml` | Terraform su Azure: piano su ogni run (anche build validation di PR), apply del piano salvato solo sul ramo di rilascio e dopo l'approvazione sull'ambiente ADO; accesso OIDC senza segreti |
 
 ### GitFlow
 Branch-conditional: `dev` → `staging` → `main`. Set-Versioning con tagging Git.
@@ -161,39 +160,11 @@ Tutto su `main`. La CI produce artifact pre-release, la CD promote taglia il tag
 | `webAppName` | *(obbligatorio)* | Nome completo App Service |
 | `packagePath` | `$(packagePath)` | Glob path del .zip da deployare |
 
-### `CD/Common/Steps/functionApp-verify.yaml`
-| Parametro | Default | Descrizione |
-|---|---|---|
-| `azureServiceConnection` | *(obbligatorio)* | Service connection ARM in Azure DevOps |
-| `resourceGroupName` | *(obbligatorio)* | Gruppo di risorse della Function App |
-| `functionAppName` | *(obbligatorio)* | Nome completo Function App |
-| `scriptPath` | `$(verifyScriptPath)` | Script PowerShell del repo applicativo che riceve `-BaseUrl` e `-FunctionKey` ed esce con 0 solo a verifica superata |
-
 ### `CD/Common/Steps/staticWebApp-deploy.yaml`
 | Parametro | Default | Descrizione |
 |---|---|---|
 | `swaDeploymentToken` | *(obbligatorio)* | Token di deployment Azure Static Web Apps |
 | `appLocation` | `$(appLocation)` | Path locale della directory da deployare |
-
-### `CD/Common/Steps/terraform-install.yaml`
-| Parametro | Default | Descrizione |
-|---|---|---|
-| `terraformVersion` | `$(terraformVersion)` | Versione esatta della CLI, scaricata da releases.hashicorp.com (agent Linux x64) |
-
-### `CD/Common/Steps/terraform-plan.yaml`
-| Parametro | Default | Descrizione |
-|---|---|---|
-| `azureServiceConnection` | *(obbligatorio)* | Service connection ARM in workload identity federation |
-| `workingDirectory` | *(obbligatorio)* | Cartella della configurazione Terraform |
-| `varFile` | *(obbligatorio)* | File di variabili, relativo a `workingDirectory` |
-| `planDirectory` | `$(Build.ArtifactStagingDirectory)/terraform` | Dove scrivere `tfplan`, `plan.txt` e il riepilogo `plan.md` |
-
-### `CD/Common/Steps/terraform-apply.yaml`
-| Parametro | Default | Descrizione |
-|---|---|---|
-| `azureServiceConnection` | *(obbligatorio)* | Service connection ARM in workload identity federation |
-| `workingDirectory` | *(obbligatorio)* | Cartella della configurazione Terraform |
-| `planFile` | *(obbligatorio)* | Piano salvato dallo stage Plan: si applica senza ricalcolarlo |
 
 ---
 
