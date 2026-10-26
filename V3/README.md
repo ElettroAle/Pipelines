@@ -96,7 +96,7 @@ Nessuna governance Git. Usato per ambienti senza SemVer o tagging.
 | `CI/Agnostic/quality-arc42.yaml` | Quality gate di un documento arc42 (Gitleaks + verifica degli ADR + struttura sul template arc42 + controlli comuni + diagrammi iniettati dal consumer + giudizio dello stile con un modello) |
 | `CI/Agnostic/quality-docs.yaml` | Quality gate documentazione senza formato proprio (Gitleaks + verifica degli ADR + controlli comuni + diagrammi iniettati dal consumer + giudizio dello stile con un modello) |
 | `CD/Agnostic/deploy-azure-appService.yaml` | Download artifact CI + deploy su Azure App Service |
-| `CD/Agnostic/deploy-azure-functionApp.yaml` | Download artifact CI + deploy su Azure Function App |
+| `CD/Agnostic/deploy-azure-functionApp.yaml` | Download artifact CI + deploy su Azure Function App (one deploy su Flex Consumption con `isFlexConsumption`) |
 | `CD/Agnostic/deploy-angular-staticWebApp.yaml` | Download artifact CI + deploy su Azure Static Web Apps |
 
 ### GitFlow
