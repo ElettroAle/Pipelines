@@ -14,6 +14,8 @@
 #     1. Sopprime auto-download artifact
 #     2. Scarica il Pipeline Artifact dalla CI (latestFromBranch)
 #     3. functionApp-deploy: zipDeploy sulla Function App di destinazione
+#        (one deploy su Flex Consumption)
+#     4. postDeploySteps: gli step del raccordo dopo il rilascio (es. una verifica)
 #
 # Parametri richiesti
 # ───────────────────
@@ -40,6 +42,11 @@
 #                              (default: true)
 #   appType                  → tipo di Function App
 #                              (default: 'functionAppLinux')
+#   isFlexConsumption        → true per una Function App sul piano Flex Consumption:
+#                              il pacchetto va nel contenitore di deployment dell'app
+#                              e diventa attivo solo a rilascio riuscito (default: false)
+#   postDeploySteps          → step eseguiti nel job di deploy dopo il rilascio; uno
+#                              step che fallisce fa fallire il rilascio (default: nessuno)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -75,6 +82,16 @@ parameters:
     type: string
     default: 'functionAppLinux'
     # Valori: 'functionApp' (Windows) | 'functionAppLinux' (Linux)
+
+  - name: isFlexConsumption
+    displayName: 'Function App su piano Flex Consumption'
+    type: boolean
+    default: false
+
+  - name: postDeploySteps
+    displayName: 'Step dopo il rilascio'
+    type: stepList
+    default: []
 
   - name: stageName
     displayName: 'Identificativo dello stage'
@@ -139,3 +156,8 @@ stages:
                     functionAppName: '${{ parameters.functionAppName }}'
                     packagePath: '$(Pipeline.Workspace)/${{ parameters.ciPipelineResourceAlias }}/${{ parameters.packagePattern }}'
                     appType: '${{ parameters.appType }}'
+                    isFlexConsumption: ${{ parameters.isFlexConsumption }}
+
+                # ── 4. Step dopo il rilascio ─────────────────────────────────
+                - ${{ each step in parameters.postDeploySteps }}:
+                  - ${{ step }}

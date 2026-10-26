@@ -15,6 +15,8 @@
 #                            (default: variabile $(packagePath))
 #   appType                → tipo di Function App
 #                            (default: 'functionAppLinux')
+#   isFlexConsumption      → true sul piano Flex Consumption: il task usa one deploy
+#                            al posto di zipDeploy (default: false)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -34,6 +36,10 @@ parameters:
     default: 'functionAppLinux'
     # Valori: 'functionApp' (Windows) | 'functionAppLinux' (Linux)
 
+  - name: isFlexConsumption
+    type: boolean
+    default: false
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
@@ -44,4 +50,7 @@ steps:
       appType: '${{ parameters.appType }}'
       appName: '${{ parameters.functionAppName }}'
       package: '${{ parameters.packagePath }}'
-      deploymentMethod: 'zipDeploy'
+      ${{ if parameters.isFlexConsumption }}:
+        isFlexConsumption: true
+      ${{ else }}:
+        deploymentMethod: 'zipDeploy'
