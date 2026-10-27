@@ -1,13 +1,14 @@
 # Giudica lo stile delle sezioni di un documento con un modello linguistico: la guida di stile del
 # repository e' l'istruzione del modello, e la pipeline non conosce nessuna regola. Un solo giudizio
 # copre tutte le regole: la sezione arriva in unita' numerate e la risposta ha una voce per regola.
-# In una PR si giudicano le righe cambiate dall'ultimo giudizio superato; con STYLE_FIX le correzioni
-# del modello, validate e rigiudicate in giri limitati, tornano sul ramo della PR.
+# In una PR si giudicano le righe cambiate dall'ultimo giudizio superato, anche nelle decisioni; con
+# STYLE_FIX le correzioni del modello, validate e rigiudicate in giri limitati, tornano sul ramo della PR.
 
 . "$PSScriptRoot/VerificationGate.ps1"
 . "$PSScriptRoot/MarkdownText.ps1"
 
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
+$decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }
 $guidePath = if ($env:STYLE_GUIDE) { $env:STYLE_GUIDE } else { 'docs/STYLE.md' }
 $glossaryFileName = $env:DOCS_GLOSSARY
 $targetBranch = $env:TARGET_BRANCH -replace '^refs/heads/', '' -replace '^\$\(.*\)$', ''
@@ -92,8 +93,8 @@ function Get-GuideRules([string]$Guide) {
     return @($selected | ForEach-Object Title)
 }
 
-function Get-SectionFiles {
-    return @(Get-ChildItem -Path $docsDirectory -File -ErrorAction SilentlyContinue | Where-Object Name -Match $SectionFilePattern | Sort-Object Name)
+function Get-SectionFiles([string]$Directory) {
+    return @(Get-ChildItem -Path $Directory -File -ErrorAction SilentlyContinue | Where-Object Name -Match $SectionFilePattern | Sort-Object Name)
 }
 
 function ConvertTo-RepositoryPath([string]$Path) {
@@ -112,7 +113,7 @@ function Get-ChangedLines([string[]]$Range) {
     $changed = @{}
     $file = $null
     $previous = ''
-    git -c core.quotePath=false diff -U0 --no-color --no-ext-diff --relative @Range -- $docsDirectory $guidePath | ForEach-Object {
+    git -c core.quotePath=false diff -U0 --no-color --no-ext-diff --relative @Range -- $docsDirectory $decisionsDirectory $guidePath | ForEach-Object {
         if ($previous.StartsWith('--- ') -and $_ -match '^\+\+\+ (?:b/)?(.+?)\t?$') {
             $file = if ($Matches[1] -eq '/dev/null') { $null } else { $Matches[1] }
             if ($file -and -not $changed.ContainsKey($file)) { $changed[$file] = [Collections.Generic.HashSet[int]]::new() }
@@ -141,7 +142,7 @@ function Select-CommonLines([hashtable]$First, [hashtable]$Second) {
 
 # In una PR si giudica cio' che la PR cambia e che nessun giudizio superato ha gia' visto: il
 # segno e' il trailer dell'ultimo commit della PR che ha superato il giudizio. Fuori da una PR, o
-# se cambia la guida, si giudica tutto.
+# se cambia la guida, si giudica tutto il documento; le decisioni gia' integrate non si rigiudicano.
 function Get-ReviewScope {
     $everything = @{ All = $true; PullRequest = $false }
     if (-not $targetBranch) { return $everything }
@@ -531,20 +532,22 @@ function Invoke-SectionReview($File, $Context) {
 }
 
 function Test-ObjectiveChecks {
-    $output = & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -File "$PSScriptRoot/Test-Documentation.ps1" 2>&1
-    $output | ForEach-Object { Write-Host $_ }
-    if ($LASTEXITCODE -eq 0) { return }
-    $global:LASTEXITCODE = 0
-    return New-Issue $JudgeScope 'correzioni non pubblicate' 'i controlli oggettivi falliscono sul testo corretto'
+    foreach ($check in 'Test-Documentation.ps1', 'Test-AdrCorpus.ps1') {
+        $output = & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -File "$PSScriptRoot/$check" 2>&1
+        $output | ForEach-Object { Write-Host $_ }
+        if ($LASTEXITCODE -eq 0) { continue }
+        $global:LASTEXITCODE = 0
+        return New-Issue $JudgeScope 'correzioni non pubblicate' 'i controlli oggettivi falliscono sul testo corretto'
+    }
 }
 
 function Show-Corrections {
-    git diff --quiet -- $docsDirectory
+    git diff --quiet -- $docsDirectory $decisionsDirectory
     if ($LASTEXITCODE -eq 0) { return $false }
     $global:LASTEXITCODE = 0
     Write-Host '##[group]Correzioni del giudizio dello stile'
-    git -c core.quotePath=false --no-pager diff --stat -- $docsDirectory | ForEach-Object { Write-Host $_ }
-    git -c core.quotePath=false --no-pager diff -- $docsDirectory | ForEach-Object { Write-Host $_ }
+    git -c core.quotePath=false --no-pager diff --stat -- $docsDirectory $decisionsDirectory | ForEach-Object { Write-Host $_ }
+    git -c core.quotePath=false --no-pager diff -- $docsDirectory $decisionsDirectory | ForEach-Object { Write-Host $_ }
     Write-Host '##[endgroup]'
     return $true
 }
@@ -556,7 +559,7 @@ function Publish-Corrections([string]$Source) {
     $messageFile = [IO.Path]::GetTempFileName()
     $worktree = Join-Path ([IO.Path]::GetTempPath()) "style-judge-$(New-Guid)"
     try {
-        git diff --full-index --binary --output=$patchFile -- $docsDirectory
+        git diff --full-index --binary --output=$patchFile -- $docsDirectory $decisionsDirectory
         $out = git worktree add -q --detach $worktree $Source 2>&1
         if ($LASTEXITCODE -ne 0) { return New-Issue $JudgeScope 'correzioni non pubblicate' "copia del ramo non creata: $out" }
         $corrected = (Get-Item $patchFile).Length -gt 0
@@ -587,7 +590,7 @@ function Get-StyleIssues {
     $setup = Read-JudgeSetup
     if ($setup.Issue) { return $setup.Issue }
 
-    $sections = Get-SectionFiles
+    $sections = Get-SectionFiles $docsDirectory
     $glossaryFile = $sections | Where-Object { $glossaryFileName -and $_.Name -eq $glossaryFileName } | Select-Object -First 1
     $scope = Get-ReviewScope
     $fix = $fixRequested -and $scope.PullRequest -and [bool]$sourceBranch
@@ -602,10 +605,18 @@ function Get-StyleIssues {
         Glossary = if ($glossaryFile) { Read-Document $glossaryFile.FullName } else { $null }
     }
 
+    $reviews = @($sections | Where-Object { -not $glossaryFile -or $_.FullName -ne $glossaryFile.FullName } | ForEach-Object { @{ File = $_; Context = $context } })
+    if ($scope.PullRequest) {
+        $decisionContext = $context.Clone()
+        $decisionContext.Scope = $scope.Clone()
+        $decisionContext.Scope.All = $false
+        $reviews += @(Get-SectionFiles $decisionsDirectory | ForEach-Object { @{ File = $_; Context = $decisionContext } })
+    }
+
     $issues = @()
-    foreach ($file in ($sections | Where-Object { -not $glossaryFile -or $_.FullName -ne $glossaryFile.FullName })) {
-        try { $issues += @(Invoke-SectionReview $file $context) }
-        catch { return New-Issue $JudgeScope 'verifica non eseguita' "$($file.Name): $($_.Exception.Message)" }
+    foreach ($review in $reviews) {
+        try { $issues += @(Invoke-SectionReview $review.File $review.Context) }
+        catch { return New-Issue $JudgeScope 'verifica non eseguita' "$($review.File.Name): $($_.Exception.Message)" }
     }
     Write-Host "Giudizio dello stile: $($script:Usage.Requests) richieste, $($script:Usage.Input) token in ingresso, $($script:Usage.Output) in uscita"
     if (-not $fix) { return $issues }

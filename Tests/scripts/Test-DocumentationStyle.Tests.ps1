@@ -121,6 +121,8 @@ Niente frasi che annunciano cosa dira' il testo.
     $Filler = 'Niente riempitivi'
     $SelfReference = 'Il testo parla della piattaforma, non di se stesso'
     $FixEnvironment = @{ TARGET_BRANCH = 'refs/heads/main'; SOURCE_BRANCH = 'refs/heads/feature'; STYLE_FIX = 'true'; READABILITY_MAX_WORDS = '25' }
+    $ExistingDecision = "---`nstatus: accepted`n---`n`n# Copie dei dati`n`n## Contesto e problema`n`nServono copie dei dati.`n`n## Opzioni considerate`n`n- Copie in Italia.`n`n## Esito della decisione`n`nLe copie restano in Italia.`n"
+    $NewDecision = "---`nstatus: accepted`n---`n`n# Copie cifrate`n`n## Contesto e problema`n`nServono copie dei dati.`n`n## Opzioni considerate`n`n- Copie in Italia.`n`n## Esito della decisione`n`nLe copie restano in Italia.`n"
 
     function Get-FixEnvironment([hashtable]$Overrides) {
         $environment = $FixEnvironment.Clone()
@@ -656,6 +658,70 @@ Describe "Test-DocumentationStyle — cosa si manda al modello" {
             Remove-Item -Recurse -Force $root
             Get-JudgedFiles | Should -Be @('01-introduzione-e-obiettivi.md', '02-vincoli.md')
         }
+
+        It "Giudica una decisione nuova" {
+            $root = New-PullRequestRepository { param($d) $d['docs/decisions/0002-nuova.md'] = $NewDecision }
+            Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main' } | Out-Null
+            Remove-Item -Recurse -Force $root
+            Get-JudgedFiles | Should -Be @('0002-nuova.md')
+        }
+
+        It "Giudica le righe cambiate di una decisione esistente" {
+            Set-StubRules @(
+                @{ match = 'Le copie restano'; rule = $Filler; everywhere = $true }
+                @{ match = 'Inoltre'; rule = $Filler; everywhere = $true })
+            $root = New-PullRequestRepository -Base { param($d) $d['docs/decisions/0001-esistente.md'] = $ExistingDecision } `
+                -Change { param($d) Edit-Docs $d 'docs/decisions/0001-esistente.md' 'Le copie restano in Italia.' "Le copie restano in Italia.`n`nInoltre si cifrano." }
+            $res = Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main' }
+            Remove-Item -Recurse -Force $root
+            $issues = Get-Issues $res.Output
+            $issues | Where-Object { $_ -like '*«Inoltre»*' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+            $issues | Where-Object { $_ -like '*«Le copie restano»*' } | Should -BeNullOrEmpty
+        }
+
+        It "Non giudica le decisioni esistenti se cambia la guida" {
+            $root = New-PullRequestRepository -Base { param($d) $d['docs/decisions/0001-esistente.md'] = $ExistingDecision } `
+                -Change { param($d) Edit-Docs $d 'docs/STYLE.md' 'si toglie.' 'si toglie sempre.' }
+            Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main' } | Out-Null
+            Remove-Item -Recurse -Force $root
+            Get-JudgedFiles | Should -Be @('01-introduzione-e-obiettivi.md', '02-vincoli.md')
+        }
+
+        It "Legge le decisioni dalla cartella dichiarata" {
+            $root = New-PullRequestRepository { param($d) $d['adr/0002-nuova.md'] = $NewDecision }
+            Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main'; DECISIONS_DIRECTORY = 'adr' } | Out-Null
+            Remove-Item -Recurse -Force $root
+            Get-JudgedFiles | Should -Be @('0002-nuova.md')
+        }
+    }
+
+    It "Fuori da una PR non giudica le decisioni" {
+        $docs = New-Docs
+        $docs['docs/decisions/0001-esistente.md'] = $ExistingDecision
+        Invoke-StyleCheck $docs | Out-Null
+        Get-JudgedFiles | Should -Be @('01-introduzione-e-obiettivi.md', '02-vincoli.md')
+    }
+}
+
+Describe "Test-DocumentationStyle — correzioni in una decisione nuova" {
+
+    BeforeAll {
+        Reset-Stub
+        Set-StubRules @(@{ match = 'È importante sottolineare che le copie'; rule = $Filler; replacement = 'Le copie' })
+        $repository = New-OriginRepository { param($d) $d['docs/decisions/0002-nuova.md'] = $NewDecision.Replace('Le copie restano', 'È importante sottolineare che le copie restano') }
+        $res = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+    }
+
+    AfterAll { Remove-Repository $repository }
+
+    It "Allora il ramo della PR riceve la decisione corretta con il segno del giudizio superato" {
+        Get-FeatureFile $repository 'docs/decisions/0002-nuova.md' | Should -BeLike '*Le copie restano in Italia.*' -Because ($res.Output)
+        Get-FeatureFile $repository 'docs/decisions/0002-nuova.md' | Should -Not -BeLike '*È importante*'
+        Invoke-Git -C $repository.Bare log -1 --format=%B feature | Should -Contain 'Style-Judge: clean'
+    }
+
+    It "E la verifica passa" {
+        $res.ExitCode | Should -Be 0 -Because ($res.Output)
     }
 }
 
