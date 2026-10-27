@@ -75,6 +75,8 @@ stages:
 
           - template: ../Common/Steps/ensure-java.yaml
 
+          - template: ../Common/Steps/ensure-fonts.yaml
+
           - task: PowerShell@2
             displayName: 'Publish ${{ parameters.docsDirectory }} to the wiki'
             inputs:
