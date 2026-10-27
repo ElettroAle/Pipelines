@@ -63,8 +63,7 @@ steps:
     displayName: 'Angular Build'
     workingDirectory: $(Build.SourcesDirectory)/${{ parameters.projectName }}
 
-  # PowerShell (non bash): gli agent self-hosted Windows di questo runtime non hanno
-  # bash.exe garantito sul PATH. Individua dinamicamente la cartella di output reale
+  # PowerShell (non bash): un agent Windows non ha bash.exe garantito sul PATH. Individua dinamicamente la cartella di output reale
   # di ng build (varia tra 'dist/<project>' e 'dist/<project>/browser' a seconda
   # della versione Angular) cercando index.html, poi copia il suo contenuto.
   - powershell: |

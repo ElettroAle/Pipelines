@@ -7,14 +7,15 @@
 # sugli stessi agent dove le Angular falliscono con "JAVA_HOME not found".
 #
 # Il JDK finisce in Agent.ToolsDirectory, che sopravvive alla pulizia del
-# workspace: su un pool self-hosted il download lo paga solo la prima run
-# di ogni macchina.
+# workspace: su un agent che resta tra una run e l'altra il download lo paga
+# solo la prima run di ogni macchina.
 #
 # Uno step per OS invece di un unico script pwsh: PowerShell Core non e'
-# installato sugli agent Windows self-hosted.
+# garantito su un agent Windows.
 #
 # Riusato da:
 #   CI/Common/Steps/angular-sonar.yaml
+#   CI/Common/Steps/arc42-wiki-publish.yaml
 #   CI/Common/Steps/c4-verify.yaml
 #
 # Parametri
