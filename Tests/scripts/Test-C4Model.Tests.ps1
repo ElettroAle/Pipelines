@@ -22,6 +22,10 @@ BeforeAll {
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
         return Invoke-DocsScript $ScriptPath $Docs $variables
     }
+
+    function Add-TechnicalSystem([System.Collections.IDictionary]$Docs) {
+        Edit-Docs $Docs 'docs/architecture/model/workspace.dsl' '        utente -> client "usa"' "        ricerca = softwareSystem `"Ricerca web`" `"Motori di ricerca`" `"Tecnico`"`n        utente -> client `"usa`"`n        motore -> ricerca `"cerca`""
+    }
 }
 
 AfterAll {
@@ -35,6 +39,20 @@ Describe "Funzionalità: Verifica del modello C4" {
     Context "Scenario: modello completo e mostrato nelle sezioni" {
         BeforeAll {
             $res = Invoke-ModelCheck (New-ValidDocs)
+        }
+
+        It "Allora la verifica passa" {
+            Get-Issues $res.Output | Should -BeNullOrEmpty -Because ($res.Output)
+            $res.ExitCode | Should -Be 0
+        }
+    }
+
+    Context "Scenario: elemento tecnico escluso dalla vista di contesto" {
+        BeforeAll {
+            $docs = New-ValidDocs
+            Add-TechnicalSystem $docs
+            Edit-Docs $docs 'docs/architecture/model/workspace.dsl' "systemContext sistema `"contesto`" {`n            include *" "systemContext sistema `"contesto`" {`n            include *`n            exclude `"element.tag==Tecnico`""
+            $res = Invoke-ModelCheck $docs
         }
 
         It "Allora la verifica passa" {
@@ -76,6 +94,11 @@ Describe "Funzionalità: Verifica del modello C4" {
             difetto  = 'un marcatore verso una vista inesistente'
             elemento = '^Ambito e contesto del sistema: vista inesistente \(nessuna\)'
             Mutate   = { param($d) Edit-Docs $d 'docs/architecture/03_context_and_scope.md' 'vista: contesto' "vista: contesto -->`n<!-- vista: nessuna" }
+        }
+        @{
+            difetto  = 'il sistema "Ricerca web" con il tag tecnico nella vista di contesto'
+            elemento = '^modello C4: elemento tecnico nella vista di contesto \(Ricerca web\)'
+            Mutate   = { param($d) Add-TechnicalSystem $d }
         }
         @{
             difetto  = 'un documento senza modello'
@@ -131,6 +154,14 @@ Describe "Test-C4Model — lingua del documento" {
         $res = Invoke-ModelCheck (ConvertTo-EnglishConventions $docs) @{ DOCUMENT_LANGUAGE = 'EN' }
         $res.ExitCode | Should -Be 1
         Get-Issues $res.Output | Where-Object { $_ -match 'container senza vista dei componenti \(Worker\)' } | Should -Not -BeNullOrEmpty -Because $res.Output
+    }
+
+    It "In inglese un sistema con il tag Technical nella vista di contesto si segnala" {
+        $docs = New-ValidDocs
+        Add-TechnicalSystem $docs
+        $res = Invoke-ModelCheck (ConvertTo-EnglishConventions $docs) @{ DOCUMENT_LANGUAGE = 'EN' }
+        $res.ExitCode | Should -Be 1
+        Get-Issues $res.Output | Where-Object { $_ -match 'elemento tecnico nella vista di contesto \(Ricerca web\)' } | Should -Not -BeNullOrEmpty -Because $res.Output
     }
 
     It "In inglese un marcatore italiano non mostra la vista" {

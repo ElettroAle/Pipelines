@@ -168,7 +168,7 @@ I termini sono in ordine alfabetico.
 function ConvertTo-EnglishConventions([System.Collections.IDictionary]$Docs) {
     foreach ($path in @($Docs.Keys)) {
         if ($null -eq $Docs[$path]) { continue }
-        $Docs[$path] = $Docs[$path].Replace('<!-- vista:', '<!-- view:').Replace('"Applicazione"', '"Application"')
+        $Docs[$path] = $Docs[$path].Replace('<!-- vista:', '<!-- view:').Replace('"Applicazione"', '"Application"').Replace('"Tecnico"', '"Technical"')
     }
     return $Docs
 }
