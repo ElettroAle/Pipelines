@@ -23,11 +23,11 @@ BeforeAll {
     $ContextDiagram = @'
 @startuml
 !include <C4/C4_Context>
-Person(cittadino, "Cittadino", $descr="Scrive all'assistente.")
-System(dxp, "Aidea DXP", $descr="Assistente conversazionale.")
-System_Ext(entra, "Entra ID", $descr="Identita'.")
-Rel(cittadino, dxp, "Scrive")
-Rel(dxp, entra, "Autentica", $techn="OIDC")
+Person(utente, "Utente", $descr="Usa il sistema.")
+System(sistema, "Sistema", $descr="Il sistema descritto.")
+System_Ext(identita, "Provider di identita'", $descr="Autentica gli utenti.")
+Rel(utente, sistema, "Usa")
+Rel(sistema, identita, "Autentica", $techn="OIDC")
 SHOW_LEGEND()
 @enduml
 '@
