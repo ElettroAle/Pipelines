@@ -18,6 +18,7 @@ $model = $env:STYLE_JUDGE_MODEL
 $seed = if ($env:STYLE_JUDGE_SEED) { [int]$env:STYLE_JUDGE_SEED } else { 1 }
 $fixRequested = $env:STYLE_FIX -eq 'true'
 $maxRounds = if ($env:STYLE_MAX_ROUNDS) { [math]::Max(1, [int]$env:STYLE_MAX_ROUNDS) } else { 4 }
+$maxFindings = if ("$env:STYLE_MAX_FINDINGS" -match '^-?\d+$') { [int]$env:STYLE_MAX_FINDINGS } else { 0 }
 $maximumWords = [int]$env:READABILITY_MAX_WORDS
 $abbreviations = @("$env:READABILITY_ABBREVIATIONS" -split ';' | ForEach-Object Trim | Where-Object { $_ })
 
@@ -519,8 +520,8 @@ function Get-PendingText($Segment) {
 
 # Ogni giro giudica le unita' segnate e, con la correzione attiva, applica le correzioni e segna
 # per il giro dopo le unita' corrette e quelle con una correzione scartata, che torna al modello
-# con il motivo. All'ultimo giro le correzioni valide si applicano e si pubblicano, ma non sono
-# ancora giudicate: ogni unita' con un rilievo resta in sospeso e il giudizio dopo rilegge solo quelle.
+# con il motivo. All'ultimo giro le correzioni valide si applicano senza un nuovo giudizio e restano
+# le violazioni senza una correzione applicabile.
 function Invoke-SectionReview($File, $Context) {
     $document = Read-Document $File.FullName
     $title = (ConvertFrom-MarkdownSection ([IO.File]::ReadAllText($File.FullName))).Title
@@ -543,7 +544,7 @@ function Invoke-SectionReview($File, $Context) {
         if (-not $findings) { return }
 
         if (-not $Context.Fix) {
-            $findings | ForEach-Object { New-FindingIssue $title $_ '' }
+            $findings | ForEach-Object { $Context.Remaining.Add(@{ Issue = (New-FindingIssue $title $_ ''); Pending = $null }) }
             return
         }
         $previous = $rejections
@@ -552,14 +553,11 @@ function Invoke-SectionReview($File, $Context) {
         Save-Document $document
         if ($Context.Glossary) { Save-Document $Context.Glossary }
         if ($round -eq $Context.Rounds) {
-            $reasonsByFinding = @{}
-            foreach ($rejection in $rejected) { $reasonsByFinding[$rejection.Finding] = $rejection.Reason }
-            $pendingUnits = [Collections.Generic.HashSet[object]]::new()
-            foreach ($finding in $findings) {
-                $unit = $units[$finding.Unit]
-                $reasons = @(@($previous[$unit]) + $reasonsByFinding[$finding] | Where-Object { $_ }) -join '; '
-                New-FindingIssue $title $finding $reasons
-                if ($unit -and $pendingUnits.Add($unit)) { $Context.Pending.Add("$relativePath`t$(Get-PendingText $unit)") }
+            foreach ($rejection in $rejected) {
+                $unit = $units[$rejection.Finding.Unit]
+                $reasons = @(@($previous[$unit]) + $rejection.Reason | Where-Object { $_ }) -join '; '
+                $pending = if ($unit) { "$relativePath`t$(Get-PendingText $unit)" } else { $null }
+                $Context.Remaining.Add(@{ Issue = (New-FindingIssue $title $rejection.Finding $reasons); Pending = $pending })
             }
             return
         }
@@ -607,8 +605,8 @@ function Publish-Corrections([string]$Source, [string[]]$Pending) {
             $out = git -C $worktree apply --3way --whitespace=nowarn $patchFile 2>&1
             if ($LASTEXITCODE -ne 0) { return New-Issue $JudgeScope 'correzioni non pubblicate' "correzioni non applicabili al ramo: $out" }
         }
-        $subject = if ($corrected) { 'docs: apply the style judge corrections' } elseif ($Pending) { 'docs: record the style judgement with pending findings' } else { 'docs: record the passed style judgement' }
-        $pendingLines = @($Pending | ForEach-Object { "${PendingTrailer}: $_" })
+        $pendingLines = @($Pending | Where-Object { $_ } | ForEach-Object { "${PendingTrailer}: $_" })
+        $subject = if ($corrected) { 'docs: apply the style judge corrections' } elseif ($pendingLines) { 'docs: record the style judgement with pending findings' } else { 'docs: record the passed style judgement' }
         [IO.File]::WriteAllText($messageFile, "$subject`n`n" + (@($pendingLines) + $CleanTrailer -join "`n") + "`n")
         $name = if ($env:BUILD_REQUESTEDFOR) { $env:BUILD_REQUESTEDFOR } else { 'Quality Gate' }
         $email = if ($env:BUILD_REQUESTEDFOREMAIL) { $env:BUILD_REQUESTEDFOREMAIL } else { 'quality-gate@noreply.local' }
@@ -637,14 +635,14 @@ function Get-StyleIssues {
     $fix = $fixRequested -and $scope.PullRequest -and [bool]$sourceBranch
     if ($fixRequested -and -not $fix) { Write-Host 'Correzione automatica non attiva fuori da una PR: il giudizio verifica soltanto' }
     $context = @{
-        Scope    = $scope
-        Fix      = $fix
-        Rounds   = if ($fix) { $maxRounds } else { 1 }
-        Rules    = $setup.Rules
-        System   = $Instructions + $setup.Guide
-        Schema   = New-FindingsSchema $setup.Rules
-        Glossary = if ($glossaryFile) { Read-Document $glossaryFile.FullName } else { $null }
-        Pending  = [Collections.Generic.List[string]]::new()
+        Scope     = $scope
+        Fix       = $fix
+        Rounds    = if ($fix) { $maxRounds } else { 1 }
+        Rules     = $setup.Rules
+        System    = $Instructions + $setup.Guide
+        Schema    = New-FindingsSchema $setup.Rules
+        Glossary  = if ($glossaryFile) { Read-Document $glossaryFile.FullName } else { $null }
+        Remaining = [Collections.Generic.List[object]]::new()
     }
 
     $reviews = @($sections | Where-Object { -not $glossaryFile -or $_.FullName -ne $glossaryFile.FullName } | ForEach-Object { @{ File = $_; Context = $context } })
@@ -661,17 +659,32 @@ function Get-StyleIssues {
         catch { return New-Issue $JudgeScope 'verifica non eseguita' "$($review.File.Name): $($_.Exception.Message)" }
     }
     Write-Host "Giudizio dello stile: $($script:Usage.Requests) richieste, $($script:Usage.Input) token in ingresso, $($script:Usage.Output) in uscita"
+    $remaining = @($context.Remaining | ForEach-Object { $_.Issue } | Select-Object -Unique)
+    $tolerated = $maxFindings -lt 0 -or $remaining.Count -le $maxFindings
+    if ($tolerated) { $script:Tolerated = $remaining } else { $issues += $remaining }
     if (-not $fix) { return $issues }
 
-    # Le correzioni si pubblicano anche se resta qualche violazione: il lavoro gia' pagato non si
-    # perde e il giudizio dopo rilegge solo le righe cambiate e le violazioni rimaste.
+    # Le correzioni si pubblicano anche se restano violazioni oltre la soglia: il lavoro gia' pagato
+    # non si perde, e il giudizio dopo rilegge solo le righe cambiate e le unita' rimaste in sospeso.
     $corrected = Show-Corrections
     if (-not $script:Usage.Requests) { return $issues }
     if ($corrected) {
         $objective = Test-ObjectiveChecks
         if ($objective) { return @($issues) + $objective }
     }
-    return @($issues) + @(Publish-Corrections $scope.Source $context.Pending)
+    $pending = if ($tolerated) { @() } else { @($context.Remaining | ForEach-Object { $_.Pending } | Where-Object { $_ } | Select-Object -Unique) }
+    return @($issues) + @(Publish-Corrections $scope.Source $pending)
 }
 
-Invoke-Verification { Get-StyleIssues } "Stile del documento in $docsDirectory conforme alla guida" 'Giudizio dello stile disattivato'
+# Le violazioni entro la soglia restano visibili come avvisi; la verifica passa con esito parziale.
+function Write-ToleratedFindings([string[]]$Findings) {
+    $Findings | ForEach-Object { Write-Host "##vso[task.logissue type=warning]$_" }
+    Write-Host "##vso[task.complete result=SucceededWithIssues;]"
+}
+
+$script:Tolerated = @()
+Invoke-Verification {
+    $issues = @(Get-StyleIssues)
+    if (-not $issues -and $script:Tolerated) { Write-ToleratedFindings $script:Tolerated }
+    $issues
+} "Stile del documento in $docsDirectory conforme alla guida" 'Giudizio dello stile disattivato'

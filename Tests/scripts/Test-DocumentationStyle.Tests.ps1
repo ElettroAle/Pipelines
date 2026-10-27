@@ -175,7 +175,7 @@ Niente frasi che annunciano cosa dira' il testo.
             $Root = Join-Path ([IO.Path]::GetTempPath()) "pester-style-$(New-Guid)"
             Write-Docs $Docs $Root
         }
-        $variables = @{ GATE_MODE = $Mode; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; TARGET_BRANCH = ''; SOURCE_BRANCH = ''; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_FIX = ''; STYLE_MAX_ROUNDS = ''; STYLE_JUDGE_SEED = ''; READABILITY_MAX_WORDS = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = '' }
+        $variables = @{ GATE_MODE = $Mode; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; TARGET_BRANCH = ''; SOURCE_BRANCH = ''; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_FIX = ''; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_JUDGE_SEED = ''; READABILITY_MAX_WORDS = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = '' }
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
 
         Push-Location $Root
@@ -580,27 +580,48 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
             @(Get-StubRequests).Count | Should -Be 3
         }
 
-        It "E la verifica fallisce nominando le violazioni rimaste" {
-            $res.ExitCode | Should -Be 1
-            Get-Issues $res.Output | Where-Object { $_.StartsWith("Vincoli: $Filler («gira su Azure»") } | Should -Not -BeNullOrEmpty -Because ($res.Output)
-        }
-
         It "E il ramo della PR riceve le correzioni dei giri fatti" {
             Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike '*gira su Azure davvero davvero davvero in Italia.*'
+            Invoke-Git -C $repository.Bare log -1 --format=%B feature | Should -Contain 'Style-Judge: clean'
             Invoke-Git -C $repository.Bare rev-parse 'feature^' | Should -Be $repository.Feature
         }
 
-        It "E le unità con violazioni rimaste restano in sospeso" {
+        It "E la verifica passa, perché l'ultima correzione si è applicata" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+    }
+
+    Context "Scenario: violazioni rimaste oltre la soglia" {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(@{ match = 'gira su Azure in Italia'; rule = $Filler; find = 'testo assente'; replacement = 'gira in Italia' })
+            $repository = New-OriginRepository { param($d) Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' 'gira su Azure in Italia.' }
+            $res = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+        }
+
+        AfterAll { Remove-Repository $repository }
+
+        It "Dato la soglia di default, zero violazioni tollerate" {
+            @(Get-StubRequests).Count | Should -Be 4
+        }
+
+        It "Allora la verifica fallisce nominando la violazione rimasta" {
+            $res.ExitCode | Should -Be 1
+            Get-Issues $res.Output | Where-Object { $_.StartsWith("Vincoli: $Filler («gira su Azure in Italia»") } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+
+        It "E il ramo della PR riceve il segno del giudizio con l'unità in sospeso" {
             $message = Invoke-Git -C $repository.Bare log -1 --format=%B feature
             $message | Should -Contain 'Style-Judge: clean'
-            @($message | Where-Object { $_ -like "Style-Judge-Pending: docs/architecture/02-vincoli.md`t*gira su Azure davvero*" }).Count | Should -Be 1
+            @($message | Where-Object { $_ -like "Style-Judge-Pending: docs/architecture/02-vincoli.md`t*gira su Azure in Italia*" }).Count | Should -Be 1
+            Invoke-Git -C $repository.Bare rev-parse 'feature^' | Should -Be $repository.Feature
         }
 
         Context "Scenario: il giudizio dopo rilegge solo le unità in sospeso" {
             BeforeAll {
                 Update-BuildToFeature $repository
                 Reset-Stub
-                $again = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment (Get-FixEnvironment @{ STYLE_MAX_ROUNDS = '3' })
+                $again = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
                 $requests = @(Get-StubRequests)
             }
 
@@ -611,7 +632,7 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
             It "E nella sezione è segnata solo quell'unità" {
                 $marked = [regex]::Matches((Get-UserMessage $requests[0]), '\[\d+\*\] .*')
                 @($marked).Count | Should -Be 1
-                $marked[0].Value | Should -BeLike '*gira su Azure davvero*'
+                $marked[0].Value | Should -BeLike '*gira su Azure in Italia*'
             }
 
             It "E la verifica passa quando l'unità in sospeso non ha più violazioni" {
@@ -620,6 +641,71 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
                 $message | Should -Contain 'Style-Judge: clean'
                 $message | Where-Object { $_ -like 'Style-Judge-Pending:*' } | Should -BeNullOrEmpty
             }
+        }
+    }
+
+    Context "Scenario: violazioni rimaste entro la soglia" {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(@{ match = 'gira su Azure in Italia'; rule = $Filler; find = 'testo assente'; replacement = 'gira in Italia' })
+            $repository = New-OriginRepository { param($d) Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' 'gira su Azure in Italia.' }
+            $res = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment (Get-FixEnvironment @{ STYLE_MAX_FINDINGS = '1' })
+        }
+
+        AfterAll { Remove-Repository $repository }
+
+        It "Allora la violazione resta come avviso che nomina la sezione e la regola" {
+            Get-Issues $res.Output 'warning' | Where-Object { $_.StartsWith("Vincoli: $Filler («gira su Azure in Italia»") } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+
+        It "E la verifica passa con esito parziale" {
+            Get-Issues $res.Output | Should -BeNullOrEmpty
+            $res.Output | Should -Match 'task\.complete result=SucceededWithIssues'
+            $res.ExitCode | Should -Be 0
+        }
+
+        It "E il ramo della PR riceve il segno del giudizio senza unità in sospeso" {
+            $message = Invoke-Git -C $repository.Bare log -1 --format=%B feature
+            $message | Should -Contain 'Style-Judge: clean'
+            $message | Where-Object { $_ -like 'Style-Judge-Pending:*' } | Should -BeNullOrEmpty
+        }
+
+        Context "Scenario: il giudizio dopo non rifà il lavoro" {
+            BeforeAll {
+                Update-BuildToFeature $repository
+                Reset-Stub
+                $again = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment (Get-FixEnvironment @{ STYLE_MAX_FINDINGS = '1' })
+            }
+
+            It "Allora il modello non riceve richieste e la verifica passa" {
+                @(Get-StubRequests).Count | Should -Be 0
+                $again.ExitCode | Should -Be 0 -Because ($again.Output)
+            }
+        }
+    }
+
+    Context "Schema dello scenario: la soglia delle violazioni tollerate — <soglia>" -ForEach @(
+        @{ soglia = '2'; uscita = 1; livello = 'error' }
+        @{ soglia = '3'; uscita = 0; livello = 'warning' }
+        @{ soglia = '-1'; uscita = 0; livello = 'warning' }
+    ) {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(
+                @{ match = 'È importante sottolineare che'; rule = $Filler }
+                @{ match = 'Va detto che'; rule = $Filler }
+                @{ match = 'In questa sezione vedremo che'; rule = $SelfReference })
+            $docs = New-Docs
+            $docs['docs/architecture/02-vincoli.md'] = "# Vincoli`n`nIn questa sezione vedremo che la piattaforma gira su Azure.`n`nÈ importante sottolineare che i dati restano in Italia.`n`n- Va detto che le reti sono separate.`n"
+            $res = Invoke-StyleCheck $docs -Environment @{ STYLE_MAX_FINDINGS = $soglia }
+        }
+
+        It "Dato tre violazioni, la verifica le nomina tutte e tre al livello della soglia" {
+            @(Get-Issues $res.Output $livello).Count | Should -Be 3 -Because ($res.Output)
+        }
+
+        It "E l'esito dipende dalla soglia" {
+            $res.ExitCode | Should -Be $uscita
         }
     }
 }
