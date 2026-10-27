@@ -63,7 +63,7 @@ Describe "Funzionalità: Verifica del modello C4" {
             elemento = '^modello C4: livello mancante \(vista di deployment\)'
             Mutate   = {
                 param($d)
-                Edit-Docs $d 'docs/architecture/model/workspace.dsl' "        deployment dxp produzione `"deployment-produzione`" {`n            include *`n        }`n" ''
+                Edit-Docs $d 'docs/architecture/model/workspace.dsl' "        deployment sistema produzione `"deployment-produzione`" {`n            include *`n        }`n" ''
                 Edit-Docs $d 'docs/architecture/07_deployment_view.md' "<!-- vista: deployment-produzione -->`n" ''
             }
         }

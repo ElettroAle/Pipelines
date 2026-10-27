@@ -131,7 +131,7 @@ Niente frasi che annunciano cosa dira' il testo.
     function New-Docs {
         $docs = [ordered]@{}
         $docs['docs/STYLE.md'] = $Guide
-        $docs['docs/architecture/01-introduzione-e-obiettivi.md'] = "# Introduzione e obiettivi`n`nLa piattaforma aiuta il cittadino a parlare con il comune.`n"
+        $docs['docs/architecture/01-introduzione-e-obiettivi.md'] = "# Introduzione e obiettivi`n`nLa piattaforma aiuta il utente a parlare con l'assistenza.`n"
         $docs['docs/architecture/02-vincoli.md'] = "# Vincoli`n`nLa piattaforma gira su Azure.`n"
         $docs['docs/architecture/03-glossario.md'] = "# Glossario`n`n**Azure**: il cloud di Microsoft.`n"
         return $docs

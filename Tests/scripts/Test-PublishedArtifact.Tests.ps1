@@ -39,7 +39,7 @@ BeforeAll {
     function Invoke-ArtifactCheck([string]$ArtifactName) {
         $env:ARTIFACT_NAME = $ArtifactName
         $env:SYSTEM_COLLECTIONURI = "http://localhost:$port/"
-        $env:SYSTEM_TEAMPROJECT = 'Aidea.Dxp'
+        $env:SYSTEM_TEAMPROJECT = 'Progetto'
         $env:BUILD_BUILDID = '4946'
         $env:SYSTEM_ACCESSTOKEN = 'token-di-test'
         try {
@@ -121,7 +121,7 @@ Describe "Test-PublishedArtifact — interrogazione dell'API" {
         $BuildApi.Artifacts = @()
         Invoke-ArtifactCheck 'app-production-2.2.0' | Out-Null
 
-        $BuildApi.Requests[0].Path | Should -Be '/Aidea.Dxp/_apis/build/builds/4946/artifacts'
+        $BuildApi.Requests[0].Path | Should -Be '/Progetto/_apis/build/builds/4946/artifacts'
         $BuildApi.Requests[0].Authorization | Should -Be 'Bearer token-di-test'
     }
 

@@ -23,8 +23,8 @@ function New-ValidDocs {
     $docs['docs/architecture/model/workspace.dsl'] = @'
 workspace "Piattaforma" {
     model {
-        cittadino = person "Cittadino"
-        dxp = softwareSystem "Piattaforma" {
+        utente = person "Utente"
+        sistema = softwareSystem "Piattaforma" {
             client = container "Client" "Interfaccia web" "Angular" "Applicazione" {
                 pagine = component "Pagine"
             }
@@ -38,7 +38,7 @@ workspace "Piattaforma" {
                 coda = component "Coda"
             }
         }
-        cittadino -> client "usa"
+        utente -> client "usa"
         client -> bff "chiama"
         bff -> motore "inoltra"
         motore -> worker "accoda"
@@ -50,10 +50,10 @@ workspace "Piattaforma" {
         }
     }
     views {
-        systemContext dxp "contesto" {
+        systemContext sistema "contesto" {
             include *
         }
-        container dxp "contenitori" {
+        container sistema "contenitori" {
             include *
         }
         component client "componenti-client" {
@@ -68,14 +68,14 @@ workspace "Piattaforma" {
         component worker "componenti-worker" {
             include *
         }
-        deployment dxp produzione "deployment-produzione" {
+        deployment sistema produzione "deployment-produzione" {
             include *
         }
     }
 }
 '@
     $docs['docs/architecture/01_introduction_and_goals.md'] = New-Section 'Introduzione e obiettivi' 'a cosa serve la piattaforma?' @'
-La piattaforma aiuta il cittadino a parlare con un operatore del comune.
+La piattaforma aiuta il utente a parlare con un operatore dell'assistenza.
 
 Il Backend for Frontend (BFF) riceve le richieste del Client. L'interfaccia di programmazione del Motore (API) esegue il lavoro.
 '@
@@ -85,7 +85,7 @@ La piattaforma gira su Azure. Il codice vive nei repository del progetto.
     $docs['docs/architecture/03_context_and_scope.md'] = New-Section 'Ambito e contesto del sistema' 'chi usa la piattaforma?' @'
 <!-- vista: contesto -->
 
-Il Cittadino usa la Piattaforma dal telefono o dal computer.
+Il Utente usa la Piattaforma dal telefono o dal computer.
 '@
     $docs['docs/architecture/04_solution_strategy.md'] = New-Section 'Strategia della soluzione' 'come è divisa la piattaforma?' @'
 La piattaforma divide il lavoro fra applicazioni piccole. Ogni applicazione fa una cosa sola.
@@ -93,7 +93,7 @@ La piattaforma divide il lavoro fra applicazioni piccole. Ogni applicazione fa u
     $docs['docs/architecture/05_building_block_view.md'] = (New-Section 'Building Block View' 'di quali parti è fatta la piattaforma?' @'
 <!-- vista: contenitori -->
 
-Il Cittadino usa il Client per aprire una richiesta.
+Il Utente usa il Client per aprire una richiesta.
 
 Il Client chiama il BFF per ogni richiesta.
 
@@ -145,7 +145,7 @@ La decisione [0001-esempio](../decisions/0001-esempio.md) sceglie il BFF come un
 Il quadro delle applicazioni è nella [vista dei building block](05_building_block_view.md#in-breve).
 '@
     $docs['docs/architecture/10_quality_requirements.md'] = New-Section 'Requisiti di Qualità' 'quanto deve essere veloce la piattaforma?' @'
-Una risposta arriva al cittadino in meno di due secondi.
+Una risposta arriva al utente in meno di due secondi.
 '@
     $docs['docs/architecture/11_technical_risks.md'] = New-Section 'Rischi e debiti tecnici' 'cosa può andare storto?' @'
 Un guasto dell'API del Motore ferma le richieste nuove.
