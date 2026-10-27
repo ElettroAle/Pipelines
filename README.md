@@ -314,6 +314,9 @@ Modello C4 (`c4-verify.yaml`, `CI/Scripts/Test-C4Model.ps1`):
 - Il modello è `model/workspace.dsl` nella cartella del documento: il DSL è valido e ha vista di contesto,
   vista dei container e vista di deployment; ogni container con il tag delle applicazioni (`Applicazione`
   in italiano) ha la sua vista dei componenti.
+- Una vista di contesto mostra solo il livello di business: una persona o un sistema con il tag tecnico
+  (`Tecnico` in italiano) resta fuori, ad esempio con `exclude "element.tag==Tecnico"`, e compare dalla
+  vista dei container in giù.
 - Una sezione mostra una vista con il marcatore di vista (`<!-- vista: <chiave> -->` in italiano); ogni vista è mostrata da
   almeno una sezione e ogni marcatore nomina una vista esistente. Senza questo step i marcatori non si
   controllano.
@@ -448,7 +451,7 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | `CI/Scripts/Test-PublishedArtifact.ps1` | Prima dell'upload dell'artifact negli orchestratori GitFlow e TrunkFlow: se la run lo ha già pubblicato (rerun dello stage) setta `artifactAlreadyPublished` e l'upload si salta; se la verifica non riesce l'upload procede |
 | `CI/Scripts/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, sostituzioni reciproche, ADR `accepted` non modificati rispetto al ramo di destinazione della PR |
 | `CI/Scripts/Test-Arc42Document.ps1` | Struttura di un documento arc42 (`arc42-verify.yaml`): un file per sezione con nome e titolo del template ufficiale; release, URL e SHA-256 per lingua fissati nello script |
-| `CI/Scripts/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, marcatori di vista nelle sezioni |
+| `CI/Scripts/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, nessun elemento tecnico nelle viste di contesto, marcatori di vista nelle sezioni |
 | `CI/Scripts/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |
 | `CI/Scripts/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
 | `CI/Scripts/Test-Documentation.ps1` | Controlli comuni a ogni documento (`documentation-verify.yaml`): rimandi esistenti, soglie numeriche di leggibilità |
