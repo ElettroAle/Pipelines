@@ -24,6 +24,8 @@ $abbreviations = @("$env:READABILITY_ABBREVIATIONS" -split ';' | ForEach-Object 
 $SectionFilePattern = '^\d+[_-].+\.md$'
 $JudgeScope = 'giudizio dello stile'
 $CleanTrailer = 'Style-Judge: clean'
+$PendingTrailer = 'Style-Judge-Pending'
+$PendingTextLength = 80
 $MaxAttempts = 3
 $RequestTimeoutSeconds = 600
 $WrapWidth = 110
@@ -157,7 +159,20 @@ function Get-ReviewScope {
         $changed = Select-CommonLines $changed (Get-ChangedLines @($marker, 'HEAD'))
     }
     $guide = ConvertTo-RepositoryPath (Resolve-Path $guidePath).Path
-    return @{ All = $changed.ContainsKey($guide); PullRequest = $true; Lines = $changed; Source = $source }
+    return @{ All = $changed.ContainsKey($guide); PullRequest = $true; Lines = $changed; Source = $source; Pending = (Get-PendingUnits $marker) }
+}
+
+# Le violazioni rimaste dall'ultimo giudizio sono nel suo commit, una per riga: il file e l'inizio
+# del testo dell'unita'. Si cercano per testo perche' i commit dopo possono spostare le righe.
+function Get-PendingUnits([string]$Marker) {
+    $pending = @{}
+    if (-not $Marker) { return $pending }
+    foreach ($line in @(git log -n 1 --format=%B $Marker)) {
+        if ($line -notmatch "^${PendingTrailer}: ([^\t]+)\t(.+)$") { continue }
+        if (-not $pending.ContainsKey($Matches[1])) { $pending[$Matches[1]] = [Collections.Generic.List[string]]::new() }
+        $pending[$Matches[1]].Add($Matches[2])
+    }
+    return $pending
 }
 
 #endregion
@@ -286,10 +301,14 @@ function Set-UnitText($Segment, [string]$Text) {
 function Set-InitialMarks($Document, $Scope, [string]$RelativePath) {
     [void](Update-Numbering $Document 1)
     $lines = $null
+    $pending = @()
     if (-not $Scope.All) { $lines = $Scope.Lines[$RelativePath] }
+    if ($Scope.Pending -and $Scope.Pending.ContainsKey($RelativePath)) { $pending = @($Scope.Pending[$RelativePath]) }
     foreach ($unit in (Get-Units $Document)) {
         $range = $unit.Start..($unit.Start + $unit.Lines.Count - 1)
-        $unit.Marked = $Scope.All -or ($lines -and @($range | Where-Object { $lines.Contains($_) }).Count -gt 0)
+        $changed = $lines -and @($range | Where-Object { $lines.Contains($_) }).Count -gt 0
+        $text = Get-PendingText $unit
+        $unit.Marked = $Scope.All -or $changed -or @($pending | Where-Object { $text.StartsWith($_) }).Count -gt 0
     }
 }
 
@@ -493,14 +512,21 @@ function New-FindingIssue([string]$Title, $Finding, [string]$Rejection) {
     return New-Issue $Title $Finding.Rule $detail
 }
 
-# Ogni giro giudica le unita' segnate e, se la correzione e' attiva e non e' l'ultimo giro,
-# applica le correzioni e segna per il giro dopo le unita' corrette e quelle con una correzione
-# scartata, che torna al modello con il motivo. L'ultimo giro verifica.
+function Get-PendingText($Segment) {
+    $text = (Get-UnitText $Segment) -replace '\s+', ' '
+    return $text.Substring(0, [math]::Min($PendingTextLength, $text.Length)).Trim()
+}
+
+# Ogni giro giudica le unita' segnate e, con la correzione attiva, applica le correzioni e segna
+# per il giro dopo le unita' corrette e quelle con una correzione scartata, che torna al modello
+# con il motivo. All'ultimo giro le correzioni valide si applicano e si pubblicano, ma non sono
+# ancora giudicate: ogni unita' con un rilievo resta in sospeso e il giudizio dopo rilegge solo quelle.
 function Invoke-SectionReview($File, $Context) {
     $document = Read-Document $File.FullName
     $title = (ConvertFrom-MarkdownSection ([IO.File]::ReadAllText($File.FullName))).Title
     if (-not $title) { $title = $File.Name }
-    Set-InitialMarks $document $Context.Scope (ConvertTo-RepositoryPath $File.FullName)
+    $relativePath = ConvertTo-RepositoryPath $File.FullName
+    Set-InitialMarks $document $Context.Scope $relativePath
     $rejections = @{}
 
     for ($round = 1; $round -le $Context.Rounds; $round++) {
@@ -516,18 +542,32 @@ function Invoke-SectionReview($File, $Context) {
         foreach ($unit in (Get-Units $document)) { $unit.Marked = $false }
         if (-not $findings) { return }
 
-        if (-not $Context.Fix -or $round -eq $Context.Rounds) {
-            $findings | ForEach-Object { New-FindingIssue $title $_ ($rejections[$units[$_.Unit]] -join '; ') }
+        if (-not $Context.Fix) {
+            $findings | ForEach-Object { New-FindingIssue $title $_ '' }
             return
         }
+        $previous = $rejections
         $rejections = @{}
-        foreach ($rejection in @(Invoke-Corrections $document $Context.Glossary $findings)) {
+        $rejected = @(Invoke-Corrections $document $Context.Glossary $findings)
+        Save-Document $document
+        if ($Context.Glossary) { Save-Document $Context.Glossary }
+        if ($round -eq $Context.Rounds) {
+            $reasonsByFinding = @{}
+            foreach ($rejection in $rejected) { $reasonsByFinding[$rejection.Finding] = $rejection.Reason }
+            $pendingUnits = [Collections.Generic.HashSet[object]]::new()
+            foreach ($finding in $findings) {
+                $unit = $units[$finding.Unit]
+                $reasons = @(@($previous[$unit]) + $reasonsByFinding[$finding] | Where-Object { $_ }) -join '; '
+                New-FindingIssue $title $finding $reasons
+                if ($unit -and $pendingUnits.Add($unit)) { $Context.Pending.Add("$relativePath`t$(Get-PendingText $unit)") }
+            }
+            return
+        }
+        foreach ($rejection in $rejected) {
             $unit = $units[$rejection.Finding.Unit]
             $unit.Marked = $true
             $rejections[$unit] = @($rejections[$unit]) + "$($rejection.Finding.Rule): $($rejection.Reason)" | Where-Object { $_ }
         }
-        Save-Document $document
-        if ($Context.Glossary) { Save-Document $Context.Glossary }
     }
 }
 
@@ -554,7 +594,7 @@ function Show-Corrections {
 
 # Le correzioni si applicano al commit di origine della PR, non al commit di merge della build, e
 # il commit porta il trailer che segna il giudizio superato.
-function Publish-Corrections([string]$Source) {
+function Publish-Corrections([string]$Source, [string[]]$Pending) {
     $patchFile = [IO.Path]::GetTempFileName()
     $messageFile = [IO.Path]::GetTempFileName()
     $worktree = Join-Path ([IO.Path]::GetTempPath()) "style-judge-$(New-Guid)"
@@ -567,8 +607,9 @@ function Publish-Corrections([string]$Source) {
             $out = git -C $worktree apply --3way --whitespace=nowarn $patchFile 2>&1
             if ($LASTEXITCODE -ne 0) { return New-Issue $JudgeScope 'correzioni non pubblicate' "correzioni non applicabili al ramo: $out" }
         }
-        $subject = if ($corrected) { 'docs: apply the style judge corrections' } else { 'docs: record the passed style judgement' }
-        [IO.File]::WriteAllText($messageFile, "$subject`n`n$CleanTrailer`n")
+        $subject = if ($corrected) { 'docs: apply the style judge corrections' } elseif ($Pending) { 'docs: record the style judgement with pending findings' } else { 'docs: record the passed style judgement' }
+        $pendingLines = @($Pending | ForEach-Object { "${PendingTrailer}: $_" })
+        [IO.File]::WriteAllText($messageFile, "$subject`n`n" + (@($pendingLines) + $CleanTrailer -join "`n") + "`n")
         $name = if ($env:BUILD_REQUESTEDFOR) { $env:BUILD_REQUESTEDFOR } else { 'Quality Gate' }
         $email = if ($env:BUILD_REQUESTEDFOREMAIL) { $env:BUILD_REQUESTEDFOREMAIL } else { 'quality-gate@noreply.local' }
         git -C $worktree add -A
@@ -603,6 +644,7 @@ function Get-StyleIssues {
         System   = $Instructions + $setup.Guide
         Schema   = New-FindingsSchema $setup.Rules
         Glossary = if ($glossaryFile) { Read-Document $glossaryFile.FullName } else { $null }
+        Pending  = [Collections.Generic.List[string]]::new()
     }
 
     $reviews = @($sections | Where-Object { -not $glossaryFile -or $_.FullName -ne $glossaryFile.FullName } | ForEach-Object { @{ File = $_; Context = $context } })
@@ -621,13 +663,15 @@ function Get-StyleIssues {
     Write-Host "Giudizio dello stile: $($script:Usage.Requests) richieste, $($script:Usage.Input) token in ingresso, $($script:Usage.Output) in uscita"
     if (-not $fix) { return $issues }
 
+    # Le correzioni si pubblicano anche se resta qualche violazione: il lavoro gia' pagato non si
+    # perde e il giudizio dopo rilegge solo le righe cambiate e le violazioni rimaste.
     $corrected = Show-Corrections
-    if ($issues -or -not $script:Usage.Requests) { return $issues }
+    if (-not $script:Usage.Requests) { return $issues }
     if ($corrected) {
         $objective = Test-ObjectiveChecks
-        if ($objective) { return $objective }
+        if ($objective) { return @($issues) + $objective }
     }
-    return Publish-Corrections $scope.Source
+    return @($issues) + @(Publish-Corrections $scope.Source $context.Pending)
 }
 
 Invoke-Verification { Get-StyleIssues } "Stile del documento in $docsDirectory conforme alla guida" 'Giudizio dello stile disattivato'

@@ -527,8 +527,11 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
             Get-Issues $res.Output | Where-Object { $_.StartsWith("${sezione}: $Filler («$($regola.match)»") } | Should -Not -BeNullOrEmpty -Because ($res.Output)
         }
 
-        It "E il ramo della PR non riceve commit" {
-            Get-FeatureTip $repository | Should -Be $repository.Feature
+        It "E il ramo della PR riceve il segno del giudizio con l'unità in sospeso" {
+            $message = Invoke-Git -C $repository.Bare log -1 --format=%B feature
+            $message | Should -Contain 'Style-Judge: clean'
+            $message | Where-Object { $_ -like "Style-Judge-Pending: docs/architecture/02-vincoli.md`t*" } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+            Invoke-Git -C $repository.Bare rev-parse 'feature^' | Should -Be $repository.Feature
         }
     }
 
@@ -582,8 +585,41 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
             Get-Issues $res.Output | Where-Object { $_.StartsWith("Vincoli: $Filler («gira su Azure»") } | Should -Not -BeNullOrEmpty -Because ($res.Output)
         }
 
-        It "E il ramo della PR non riceve commit" {
-            Get-FeatureTip $repository | Should -Be $repository.Feature
+        It "E il ramo della PR riceve le correzioni dei giri fatti" {
+            Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike '*gira su Azure davvero davvero davvero in Italia.*'
+            Invoke-Git -C $repository.Bare rev-parse 'feature^' | Should -Be $repository.Feature
+        }
+
+        It "E le unità con violazioni rimaste restano in sospeso" {
+            $message = Invoke-Git -C $repository.Bare log -1 --format=%B feature
+            $message | Should -Contain 'Style-Judge: clean'
+            @($message | Where-Object { $_ -like "Style-Judge-Pending: docs/architecture/02-vincoli.md`t*gira su Azure davvero*" }).Count | Should -Be 1
+        }
+
+        Context "Scenario: il giudizio dopo rilegge solo le unità in sospeso" {
+            BeforeAll {
+                Update-BuildToFeature $repository
+                Reset-Stub
+                $again = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment (Get-FixEnvironment @{ STYLE_MAX_ROUNDS = '3' })
+                $requests = @(Get-StubRequests)
+            }
+
+            It "Allora il modello giudica solo la sezione con l'unità in sospeso" {
+                Get-JudgedFiles | Select-Object -Unique | Should -Be @('02-vincoli.md')
+            }
+
+            It "E nella sezione è segnata solo quell'unità" {
+                $marked = [regex]::Matches((Get-UserMessage $requests[0]), '\[\d+\*\] .*')
+                @($marked).Count | Should -Be 1
+                $marked[0].Value | Should -BeLike '*gira su Azure davvero*'
+            }
+
+            It "E la verifica passa quando l'unità in sospeso non ha più violazioni" {
+                $again.ExitCode | Should -Be 0 -Because ($again.Output -join "`n")
+                $message = Invoke-Git -C $repository.Bare log -1 --format=%B feature
+                $message | Should -Contain 'Style-Judge: clean'
+                $message | Where-Object { $_ -like 'Style-Judge-Pending:*' } | Should -BeNullOrEmpty
+            }
         }
     }
 }
