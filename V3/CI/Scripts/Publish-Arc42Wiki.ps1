@@ -257,7 +257,7 @@ function Publish-Document($Pages, [hashtable]$Contents, [hashtable]$Images) {
     $email = if ($env:BUILD_REQUESTEDFOREMAIL) { $env:BUILD_REQUESTEDFOREMAIL } else { 'architecture-wiki@noreply.local' }
     $source = if ($env:BUILD_SOURCEVERSION) { $env:BUILD_SOURCEVERSION.Substring(0, [math]::Min(8, $env:BUILD_SOURCEVERSION.Length)) } else { 'locale' }
 
-    # Un'altra pipeline, come quella delle release note, puo' scrivere nella wiki nel frattempo: a
+    # Un'altra pipeline puo' scrivere nella wiki nel frattempo: a
     # ogni tentativo l'albero si riscrive sopra l'ultimo commit della wiki.
     for ($attempt = 1; $attempt -le $MaxPushAttempts; $attempt++) {
         Invoke-WikiGit @authorization fetch -q origin $wikiBranch | Out-Null

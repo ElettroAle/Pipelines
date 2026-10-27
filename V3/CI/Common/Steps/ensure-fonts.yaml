@@ -6,7 +6,7 @@
 # sudo, una volta per macchina.
 #
 # Riusato da:
-#   CI/Agnostic/publish-arc42-wiki.yaml
+#   CI/Common/Steps/arc42-wiki-publish.yaml
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
