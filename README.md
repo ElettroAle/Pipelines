@@ -243,7 +243,7 @@ parametri di formato e senza condizioni sul formato.
 | `adr-verify.yaml` | `Test-AdrCorpus.ps1` | corpus delle decisioni | MADR |
 | `arc42-verify.yaml` | `Test-Arc42Document.ps1` | un file per sezione con nome e titolo del template ufficiale | arc42 |
 | `c4-verify.yaml` | `Test-C4Model.ps1` | modello Structurizr valido e completo, viste mostrate nelle sezioni | C4 |
-| `mermaid-verify.yaml` | `Test-MermaidDiagrams.ps1` | diagrammi Mermaid validi | Mermaid |
+| `mermaid-verify.yaml` | `Test-MermaidDiagrams.ps1` | diagrammi Mermaid validi, nel documento e nelle decisioni | Mermaid |
 | `documentation-verify.yaml` | `Test-Documentation.ps1` | rimandi esistenti, soglie numeriche di leggibilità | nessun formato |
 | `documentation-style.yaml` | `Test-DocumentationStyle.ps1` | giudizio dello stile con la guida del repository | nessun formato |
 
@@ -259,6 +259,11 @@ container C4, nome della pagina e colonna dello stato nella wiki. `quality-arc42
 `arc42Language`, `quality-docs` da `language` (default `IT`); lo step `document-language.yaml` la
 dichiara in `DOCUMENT_LANGUAGE` per tutto il job, compresi gli step che il consumer inietta. Una lingua
 nuova è un file nuovo in `Languages/`, senza toccare gli script.
+
+**Cartelle del documento.** `docsDirectory` e `decisionsDirectory` si dichiarano una volta sola, nel
+template d'ingresso: lo step `document-directories.yaml` le mette in `DOCS_DIRECTORY` e
+`DECISIONS_DIRECTORY` per tutto il job, e gli step che il consumer inietta (`c4-verify.yaml`,
+`mermaid-verify.yaml`) le usano senza ripeterle. Un parametro passato allo step vince sulla dichiarazione.
 
 | Convenzione | `IT` | `EN` |
 |---|---|---|
@@ -330,7 +335,8 @@ Modello C4 (`c4-verify.yaml`, `CI/Scripts/Test-C4Model.ps1`):
 
 Diagrammi Mermaid (`mermaid-verify.yaml`, `CI/Scripts/Test-MermaidDiagrams.ps1`):
 
-- Ogni diagramma Mermaid delle sezioni passa dal parser: l'errore nomina sezione, file e riga.
+- Ogni diagramma Mermaid delle sezioni e delle decisioni passa dal parser: l'errore nomina sezione (o
+  titolo della decisione), file e riga. Una cartella che non esiste non ha diagrammi da verificare.
 - **Requisiti.** Node.js (dipendenze fissate da `CI/Scripts/mermaid/package-lock.json`); lo step lo
   prepara con `UseNode@1`. Senza Node.js la verifica fallisce nominando il controllo non eseguito.
 
@@ -457,7 +463,7 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | `CI/Scripts/Test-Arc42Document.ps1` | Struttura di un documento arc42 (`arc42-verify.yaml`): un file per sezione con nome e titolo del template ufficiale; release, URL e SHA-256 per lingua fissati nello script |
 | `CI/Scripts/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, nessun elemento tecnico nelle viste di contesto, marcatori di vista nelle sezioni |
 | `CI/Scripts/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |
-| `CI/Scripts/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
+| `CI/Scripts/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni e delle decisioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
 | `CI/Scripts/Test-Documentation.ps1` | Controlli comuni a ogni documento (`documentation-verify.yaml`): rimandi esistenti, soglie numeriche di leggibilità |
 | `CI/Scripts/Test-DocumentationStyle.ps1` | Giudizio dello stile di un documento (`documentation-style.yaml`) con un modello Azure OpenAI che riceve la guida di stile del repository come istruzioni |
 | `CI/Scripts/VerificationGate.ps1` | Parte comune degli script di verifica della documentazione: modalità `off`/`warn`/`enforce`, rilievi `##vso[task.logissue]`, codice di uscita |

@@ -115,6 +115,10 @@ stages:
         - template: ../Common/Steps/document-language.yaml
           parameters:
             language: ${{ parameters.arc42Language }}
+        - template: ../Common/Steps/document-directories.yaml
+          parameters:
+            docsDirectory: ${{ parameters.docsDirectory }}
+            decisionsDirectory: ${{ parameters.decisionsDirectory }}
         - template: ../Common/Steps/adr-verify.yaml
           parameters:
             mode: ${{ parameters.adrMode }}

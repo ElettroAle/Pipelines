@@ -14,7 +14,8 @@
 # Parametri
 # ─────────
 #   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
-#   docsDirectory      → cartella delle sezioni del documento (default: docs/architecture)
+#   docsDirectory      → cartella delle sezioni del documento (default: quella dichiarata da
+#                        document-directories.yaml, altrimenti docs/architecture)
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -27,7 +28,7 @@ parameters:
 
   - name: docsDirectory
     type: string
-    default: 'docs/architecture'
+    default: ''
 
   - name: templatesDirectory
     type: string
@@ -40,11 +41,12 @@ steps:
     - template: ensure-java.yaml
 
   - task: PowerShell@2
-    displayName: 'C4 model ${{ parameters.docsDirectory }} (${{ parameters.mode }})'
+    displayName: 'C4 model (${{ parameters.mode }})'
     inputs:
       filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Test-C4Model.ps1'
       workingDirectory: '$(Build.SourcesDirectory)'
       pwsh: true
     env:
       GATE_MODE: ${{ parameters.mode }}
-      DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
+      ${{ if ne(parameters.docsDirectory, '') }}:
+        DOCS_DIRECTORY: ${{ parameters.docsDirectory }}

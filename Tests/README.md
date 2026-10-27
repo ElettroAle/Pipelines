@@ -185,7 +185,7 @@ Richiede Node.js; il parser Mermaid si installa alla prima esecuzione.
 
 | Suite | Scenario testato |
 |---|---|
-| Verifica dei diagrammi Mermaid | Diagrammi validi; diagramma non valido con sezione, file e riga |
+| Verifica dei diagrammi Mermaid | Diagrammi validi; diagramma non valido con sezione, file e riga; diagramma non valido in una decisione; cartella delle decisioni dichiarata; documento senza decisioni |
 | Strumenti e modalità | Senza Node.js la verifica fallisce nominando il controllo non eseguito; `off` |
 
 #### `Test-Documentation.Tests.ps1`

@@ -58,6 +58,50 @@ Describe "Funzionalità: Verifica dei diagrammi Mermaid" {
             Get-Issues $res.Output | Where-Object { $_ -match "^Runtime View: diagramma non valido \(06_runtime_view\.md:$line\b" } | Should -Not -BeNullOrEmpty -Because ($res.Output)
         }
     }
+
+    Context "Scenario: un diagramma non valido in una decisione" {
+        BeforeAll {
+            $docs = New-ValidDocs
+            $docs['docs/decisions/0001-esempio.md'] += "`n``````mermaid`nclassDiagram`n    Porta <|..>> Adattatore`n```````n"
+            $res = Invoke-DiagramCheck $docs
+            $line = Get-LineNumber $docs['docs/decisions/0001-esempio.md'] 'Porta <|..>> Adattatore'
+        }
+
+        It "Allora la verifica fallisce" {
+            $res.ExitCode | Should -Be 1
+        }
+
+        It "E nomina la decisione, il file e la riga del diagramma" {
+            Get-Issues $res.Output | Where-Object { $_ -match "^Esempio: diagramma non valido \(0001-esempio\.md:$line\b" } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+    }
+
+    Context "Scenario: la cartella delle decisioni dichiarata dal consumer" {
+        BeforeAll {
+            $docs = New-ValidDocs
+            $docs.Remove('docs/decisions/0001-esempio.md')
+            $docs['adr/0001-esempio.md'] = "---`nstatus: accepted`n---`n`n# Esempio`n`n``````mermaid`nclassDiagram`n    Porta <|..>> Adattatore`n```````n"
+            $res = Invoke-DiagramCheck $docs @{ DECISIONS_DIRECTORY = 'adr' }
+        }
+
+        It "Allora la verifica legge le decisioni da quella cartella e fallisce" {
+            $res.ExitCode | Should -Be 1
+            Get-Issues $res.Output | Where-Object { $_ -match '^Esempio: diagramma non valido \(0001-esempio\.md:' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+    }
+
+    Context "Scenario: un documento senza decisioni" {
+        BeforeAll {
+            $docs = New-ValidDocs
+            $docs.Remove('docs/decisions/0001-esempio.md')
+            $res = Invoke-DiagramCheck $docs
+        }
+
+        It "Allora la verifica passa" {
+            Get-Issues $res.Output | Should -BeNullOrEmpty -Because ($res.Output)
+            $res.ExitCode | Should -Be 0
+        }
+    }
 }
 
 Describe "Test-MermaidDiagrams — strumenti e modalità" {
