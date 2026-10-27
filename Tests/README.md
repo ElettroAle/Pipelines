@@ -211,7 +211,8 @@ Il modello è sostituito da un endpoint locale che risponde come Azure OpenAI: r
 |---|---|
 | Giudizio dello stile | Documento conforme; sezione che viola una regola della guida (sezione e regola nominate); regola nuova nella guida senza cambiare la pipeline; modello non disponibile (tre tentativi, poi rilievo) |
 | Cosa si manda al modello | Una richiesta per sezione, glossario escluso e mandato come contesto; formato di risposta e deployment; in una PR solo le sezioni cambiate, nessuna chiamata senza sezioni cambiate, tutte se cambia la guida; decisione nuova, righe cambiate di una decisione esistente, decisioni esistenti non rigiudicate quando cambia la guida, cartella delle decisioni dichiarata, nessuna decisione fuori da una PR |
-| Correzioni in una decisione nuova | La decisione corretta torna sul ramo della PR con il segno del giudizio superato |
+| Correzioni in una decisione nuova | La decisione corretta torna sul ramo della PR con il segno del file giudicato |
+| Un file alla volta | Job interrotto a metà documento: il ramo della PR non cambia, il ramo di appoggio ha il commit della prima sezione; la build dopo lo porta sul ramo della PR senza chiamare il modello e fallisce con `giudizio ripreso`; quella dopo ancora giudica solo la seconda sezione. Modello che non risponde sulla seconda sezione: la prima è già sul ramo della PR e il giudizio dopo riparte dalla seconda. Violazioni entro la soglia in più sezioni: un commit per sezione e un commit finale con il segno del giudizio superato |
 | Correzioni con rilievi rimasti | Oltre la soglia la verifica fallisce, le correzioni dei giri tornano sul ramo e le unità rimaste restano in sospeso; il giudizio dopo rilegge solo quelle; entro la soglia la violazione resta come avviso, la verifica passa e il giudizio dopo non manda richieste; con soglia `-1` nessun limite |
 | Configurazione e modalità | Guida indicata dal parametro, guida mancante, endpoint assente, `warn`, `off` |
 

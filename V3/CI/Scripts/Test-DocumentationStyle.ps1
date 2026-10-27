@@ -1,8 +1,9 @@
 # Giudica lo stile delle sezioni di un documento con un modello linguistico: la guida di stile del
 # repository e' l'istruzione del modello, e la pipeline non conosce nessuna regola. Un solo giudizio
 # copre tutte le regole: la sezione arriva in unita' numerate e la risposta ha una voce per regola.
-# In una PR si giudicano le righe cambiate dall'ultimo giudizio superato, anche nelle decisioni; con
-# STYLE_FIX le correzioni del modello, validate e rigiudicate in giri limitati, tornano sul ramo della PR.
+# In una PR si giudicano le righe cambiate dall'ultimo giudizio di ogni file, anche nelle decisioni; con
+# STYLE_FIX le correzioni del modello, validate e rigiudicate in giri limitati, tornano sul ramo della PR
+# un file alla volta.
 
 . "$PSScriptRoot/VerificationGate.ps1"
 . "$PSScriptRoot/MarkdownText.ps1"
@@ -25,6 +26,10 @@ $abbreviations = @("$env:READABILITY_ABBREVIATIONS" -split ';' | ForEach-Object 
 $SectionFilePattern = '^\d+[_-].+\.md$'
 $JudgeScope = 'giudizio dello stile'
 $CleanTrailer = 'Style-Judge: clean'
+$DoneTrailer = 'Style-Judge-Done'
+$SideBranchPrefix = 'style-judge'
+# I commit del giudice non avviano le pipeline con trigger sui rami; la build della PR parte comunque.
+$SkipCi = '[skip ci]'
 $PendingTrailer = 'Style-Judge-Pending'
 $PendingTextLength = 80
 $MaxAttempts = 3
@@ -143,37 +148,60 @@ function Select-CommonLines([hashtable]$First, [hashtable]$Second) {
     return $common
 }
 
-# In una PR si giudica cio' che la PR cambia e che nessun giudizio superato ha gia' visto: il
-# segno e' il trailer dell'ultimo commit della PR che ha superato il giudizio. Fuori da una PR, o
-# se cambia la guida, si giudica tutto il documento; le decisioni gia' integrate non si rigiudicano.
+# In una PR si giudica cio' che la PR cambia e che nessun giudizio ha gia' visto. Il segno e' per
+# file: il commit del giudice nomina i file giudicati, e un commit con il trailer del giudizio
+# superato vale per tutti. Fuori da una PR si giudica tutto il documento.
 function Get-ReviewScope {
-    $everything = @{ All = $true; PullRequest = $false }
+    $everything = @{ PullRequest = $false }
     if (-not $targetBranch) { return $everything }
     git rev-parse --verify --quiet "origin/$targetBranch^{commit}" > $null
     if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0; return $everything }
 
     $source = Get-SourceCommit
-    $changed = Get-ChangedLines @("origin/$targetBranch...HEAD")
-    $marker = git log -n 1 --format=%H --grep "^$CleanTrailer`$" "origin/$targetBranch..$source"
-    if ($marker) {
-        Write-Host "Ultimo giudizio superato: $marker"
-        $changed = Select-CommonLines $changed (Get-ChangedLines @($marker, 'HEAD'))
+    return @{
+        PullRequest = $true
+        Source      = $source
+        Base        = Get-ChangedLines @("origin/$targetBranch...HEAD")
+        Judgements  = @(Get-Judgements "origin/$targetBranch..$source")
+        Since       = @{}
+        Guide       = ConvertTo-RepositoryPath (Resolve-Path $guidePath).Path
     }
-    $guide = ConvertTo-RepositoryPath (Resolve-Path $guidePath).Path
-    return @{ All = $changed.ContainsKey($guide); PullRequest = $true; Lines = $changed; Source = $source; Pending = (Get-PendingUnits $marker) }
 }
 
-# Le violazioni rimaste dall'ultimo giudizio sono nel suo commit, una per riga: il file e l'inizio
-# del testo dell'unita'. Si cercano per testo perche' i commit dopo possono spostare le righe.
-function Get-PendingUnits([string]$Marker) {
-    $pending = @{}
-    if (-not $Marker) { return $pending }
-    foreach ($line in @(git log -n 1 --format=%B $Marker)) {
-        if ($line -notmatch "^${PendingTrailer}: ([^\t]+)\t(.+)$") { continue }
-        if (-not $pending.ContainsKey($Matches[1])) { $pending[$Matches[1]] = [Collections.Generic.List[string]]::new() }
-        $pending[$Matches[1]].Add($Matches[2])
+# I commit del giudice, dal piu' recente: i file giudicati e, per file, l'inizio del testo delle
+# unita' con violazioni rimaste, cercate per testo perche' i commit dopo possono spostare le righe.
+function Get-Judgements([string]$Range) {
+    $separator = [char]0x1e
+    $log = (git log "--format=%H%n%B$separator" $Range) -join "`n"
+    foreach ($record in ($log -split $separator)) {
+        $lines = @($record.Trim() -split "`n")
+        if (-not $lines[0]) { continue }
+        $judgement = @{ Commit = $lines[0]; Clean = $lines -contains $CleanTrailer; Done = [Collections.Generic.HashSet[string]]::new(); Pending = @{} }
+        foreach ($line in $lines) {
+            if ($line -match "^${DoneTrailer}: (.+)$") { [void]$judgement.Done.Add($Matches[1]) }
+            if ($line -notmatch "^${PendingTrailer}: ([^\t]+)\t(.+)$") { continue }
+            if (-not $judgement.Pending.ContainsKey($Matches[1])) { $judgement.Pending[$Matches[1]] = [Collections.Generic.List[string]]::new() }
+            $judgement.Pending[$Matches[1]].Add($Matches[2])
+        }
+        if ($judgement.Clean -or $judgement.Done.Count) { $judgement }
     }
-    return $pending
+}
+
+# Le decisioni non si rigiudicano tutte quando cambia la guida: per loro WholeOnGuide e' falso.
+function Get-FileScope($Scope, [string]$RelativePath, [bool]$WholeOnGuide) {
+    if (-not $Scope.PullRequest) { return @{ All = $true; Lines = $null; Pending = @() } }
+    $judgement = $Scope.Judgements | Where-Object { $_.Clean -or $_.Done.Contains($RelativePath) } | Select-Object -First 1
+    $lines = $Scope.Base
+    $pending = @()
+    if ($judgement) {
+        if (-not $Scope.Since.ContainsKey($judgement.Commit)) {
+            Write-Host "Ultimo giudizio di ${RelativePath}: $($judgement.Commit)"
+            $Scope.Since[$judgement.Commit] = Select-CommonLines $Scope.Base (Get-ChangedLines @($judgement.Commit, 'HEAD'))
+        }
+        $lines = $Scope.Since[$judgement.Commit]
+        if ($judgement.Pending.ContainsKey($RelativePath)) { $pending = @($judgement.Pending[$RelativePath]) }
+    }
+    return @{ All = $WholeOnGuide -and $lines.ContainsKey($Scope.Guide); Lines = $lines[$RelativePath]; Pending = $pending }
 }
 
 #endregion
@@ -299,17 +327,14 @@ function Set-UnitText($Segment, [string]$Text) {
     $Segment.Lines = Format-Wrapped $Text.Substring($prefix.Length) $prefix $continuation
 }
 
-function Set-InitialMarks($Document, $Scope, [string]$RelativePath) {
+function Set-InitialMarks($Document, $FileScope) {
     [void](Update-Numbering $Document 1)
-    $lines = $null
-    $pending = @()
-    if (-not $Scope.All) { $lines = $Scope.Lines[$RelativePath] }
-    if ($Scope.Pending -and $Scope.Pending.ContainsKey($RelativePath)) { $pending = @($Scope.Pending[$RelativePath]) }
+    $lines = $FileScope.Lines
     foreach ($unit in (Get-Units $Document)) {
         $range = $unit.Start..($unit.Start + $unit.Lines.Count - 1)
         $changed = $lines -and @($range | Where-Object { $lines.Contains($_) }).Count -gt 0
         $text = Get-PendingText $unit
-        $unit.Marked = $Scope.All -or $changed -or @($pending | Where-Object { $text.StartsWith($_) }).Count -gt 0
+        $unit.Marked = $FileScope.All -or $changed -or @($FileScope.Pending | Where-Object { $text.StartsWith($_) }).Count -gt 0
     }
 }
 
@@ -522,12 +547,12 @@ function Get-PendingText($Segment) {
 # per il giro dopo le unita' corrette e quelle con una correzione scartata, che torna al modello
 # con il motivo. All'ultimo giro le correzioni valide si applicano senza un nuovo giudizio e restano
 # le violazioni senza una correzione applicabile.
-function Invoke-SectionReview($File, $Context) {
+function Invoke-SectionReview($File, $FileScope, $Context) {
     $document = Read-Document $File.FullName
     $title = (ConvertFrom-MarkdownSection ([IO.File]::ReadAllText($File.FullName))).Title
     if (-not $title) { $title = $File.Name }
     $relativePath = ConvertTo-RepositoryPath $File.FullName
-    Set-InitialMarks $document $Context.Scope $relativePath
+    Set-InitialMarks $document $FileScope
     $rejections = @{}
 
     for ($round = 1; $round -le $Context.Rounds; $round++) {
@@ -569,13 +594,13 @@ function Invoke-SectionReview($File, $Context) {
     }
 }
 
-function Test-ObjectiveChecks {
+function Test-ObjectiveChecks([string]$RelativePath) {
     foreach ($check in 'Test-Documentation.ps1', 'Test-AdrCorpus.ps1') {
         $output = & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -File "$PSScriptRoot/$check" 2>&1
         $output | ForEach-Object { Write-Host $_ }
         if ($LASTEXITCODE -eq 0) { continue }
         $global:LASTEXITCODE = 0
-        return New-Issue $JudgeScope 'correzioni non pubblicate' 'i controlli oggettivi falliscono sul testo corretto'
+        return New-Issue $JudgeScope 'correzioni non pubblicate' "i controlli oggettivi falliscono sul testo corretto di $RelativePath"
     }
 }
 
@@ -590,39 +615,116 @@ function Show-Corrections {
     return $true
 }
 
-# Le correzioni si applicano al commit di origine della PR, non al commit di merge della build, e
-# il commit porta il trailer che segna il giudizio superato.
-function Publish-Corrections([string]$Source, [string[]]$Pending) {
+function Undo-Corrections {
+    git checkout -q -- $docsDirectory $decisionsDirectory 2>&1 | Out-Null
+    $global:LASTEXITCODE = 0
+}
+
+# Le correzioni si applicano su una copia del commit di origine della PR, non sul commit di merge
+# della build. Ogni file giudicato ha il suo commit, che parte dal precedente e va sul ramo di
+# appoggio: un push sul ramo della PR avvierebbe una nuova build e annullerebbe questa. Il ramo della
+# PR riceve tutti i commit insieme a fine giudizio; se il job si interrompe, il giudizio dopo li ritrova.
+function New-Publisher([string]$Source) {
+    return @{ Source = $Source; Worktree = $null; Side = "$SideBranchPrefix/$Source"; Commits = 0 }
+}
+
+function Get-GitAuthorization {
+    if ($env:SYSTEM_ACCESSTOKEN) { return @('-c', "http.extraheader=AUTHORIZATION: bearer $env:SYSTEM_ACCESSTOKEN") }
+    return @()
+}
+
+function Remove-Publisher($Publisher) {
+    if (-not $Publisher -or -not $Publisher.Worktree) { return }
+    git worktree remove --force $Publisher.Worktree 2>&1 | Out-Null
+    $global:LASTEXITCODE = 0
+}
+
+function Remove-SideBranch([string]$Side) {
+    $authorization = Get-GitAuthorization
+    $out = git @authorization push -q origin --delete $Side 2>&1
+    if ($LASTEXITCODE -ne 0) { Write-Host "##vso[task.logissue type=warning]Ramo di appoggio $Side non cancellato: $out" }
+    $global:LASTEXITCODE = 0
+}
+
+# Porta sul ramo della PR i commit del ramo di appoggio. Il push avvia la build successiva.
+function Complete-Publisher($Publisher) {
+    if (-not $Publisher -or -not $Publisher.Commits) { return }
+    $authorization = Get-GitAuthorization
+    $out = git -C $Publisher.Worktree @authorization push -q origin "HEAD:refs/heads/$sourceBranch" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        $global:LASTEXITCODE = 0
+        return New-Issue $JudgeScope 'correzioni non pubblicate' "push sul ramo $sourceBranch non riuscito, il lavoro resta sul ramo $($Publisher.Side): $out"
+    }
+    Write-Host "Ramo $sourceBranch aggiornato con $($Publisher.Commits) commit del giudizio: la PR riparte dall'ultimo"
+    Remove-SideBranch $Publisher.Side
+}
+
+# Un giudizio interrotto ha lasciato i suoi commit sul ramo di appoggio dello stesso commit della PR:
+# si portano sul ramo della PR senza chiamare il modello, e la build che parte giudica il resto.
+function Resume-InterruptedJudgement([string]$Source) {
+    $side = "$SideBranchPrefix/$Source"
+    $authorization = Get-GitAuthorization
+    $found = git @authorization ls-remote origin "refs/heads/$side" 2>&1
+    if ($LASTEXITCODE -ne 0 -or -not "$found".Trim()) { $global:LASTEXITCODE = 0; return $null }
+    $out = git @authorization fetch -q origin "+refs/heads/${side}:refs/remotes/origin/$side" 2>&1
+    if ($LASTEXITCODE -eq 0) { $out = git @authorization push -q origin "refs/remotes/origin/${side}:refs/heads/$sourceBranch" 2>&1 }
+    if ($LASTEXITCODE -ne 0) {
+        $global:LASTEXITCODE = 0
+        return New-Issue $JudgeScope 'giudizio interrotto non ripreso' "push del ramo $side su $sourceBranch non riuscito: $out"
+    }
+    Remove-SideBranch $side
+    return New-Issue $JudgeScope 'giudizio ripreso' "i commit del giudizio interrotto sono sul ramo ${sourceBranch}: la verifica riparte da quel commit"
+}
+
+function Publish-Judgement($Publisher, [string]$Subject, [string[]]$Trailers) {
     $patchFile = [IO.Path]::GetTempFileName()
     $messageFile = [IO.Path]::GetTempFileName()
-    $worktree = Join-Path ([IO.Path]::GetTempPath()) "style-judge-$(New-Guid)"
     try {
+        if (-not $Publisher.Worktree) {
+            $worktree = Join-Path ([IO.Path]::GetTempPath()) "style-judge-$(New-Guid)"
+            $out = git worktree add -q --detach $worktree $Publisher.Source 2>&1
+            if ($LASTEXITCODE -ne 0) { return New-Issue $JudgeScope 'correzioni non pubblicate' "copia del ramo non creata: $out" }
+            $Publisher.Worktree = $worktree
+        }
         git diff --full-index --binary --output=$patchFile -- $docsDirectory $decisionsDirectory
-        $out = git worktree add -q --detach $worktree $Source 2>&1
-        if ($LASTEXITCODE -ne 0) { return New-Issue $JudgeScope 'correzioni non pubblicate' "copia del ramo non creata: $out" }
-        $corrected = (Get-Item $patchFile).Length -gt 0
-        if ($corrected) {
-            $out = git -C $worktree apply --3way --whitespace=nowarn $patchFile 2>&1
+        if ((Get-Item $patchFile).Length -gt 0) {
+            $out = git -C $Publisher.Worktree apply --3way --whitespace=nowarn $patchFile 2>&1
             if ($LASTEXITCODE -ne 0) { return New-Issue $JudgeScope 'correzioni non pubblicate' "correzioni non applicabili al ramo: $out" }
         }
-        $pendingLines = @($Pending | Where-Object { $_ } | ForEach-Object { "${PendingTrailer}: $_" })
-        $subject = if ($corrected) { 'docs: apply the style judge corrections' } elseif ($pendingLines) { 'docs: record the style judgement with pending findings' } else { 'docs: record the passed style judgement' }
-        [IO.File]::WriteAllText($messageFile, "$subject`n`n" + (@($pendingLines) + $CleanTrailer -join "`n") + "`n")
+        [IO.File]::WriteAllText($messageFile, "$Subject`n`n$SkipCi`n`n" + ($Trailers -join "`n") + "`n")
         $name = if ($env:BUILD_REQUESTEDFOR) { $env:BUILD_REQUESTEDFOR } else { 'Quality Gate' }
         $email = if ($env:BUILD_REQUESTEDFOREMAIL) { $env:BUILD_REQUESTEDFOREMAIL } else { 'quality-gate@noreply.local' }
-        git -C $worktree add -A
-        $out = git -C $worktree -c "user.name=$name" -c "user.email=$email" commit -q --allow-empty -F $messageFile 2>&1
+        git -C $Publisher.Worktree add -A
+        $out = git -C $Publisher.Worktree -c "user.name=$name" -c "user.email=$email" commit -q --allow-empty -F $messageFile 2>&1
         if ($LASTEXITCODE -ne 0) { return New-Issue $JudgeScope 'correzioni non pubblicate' "commit non riuscito: $out" }
-        $authorization = if ($env:SYSTEM_ACCESSTOKEN) { @('-c', "http.extraheader=AUTHORIZATION: bearer $env:SYSTEM_ACCESSTOKEN") } else { @() }
-        $out = git -C $worktree @authorization push -q origin "HEAD:refs/heads/$sourceBranch" 2>&1
-        if ($LASTEXITCODE -ne 0) { return New-Issue $JudgeScope 'correzioni non pubblicate' "push sul ramo $sourceBranch non riuscito: $out" }
-        Write-Host "Ramo $sourceBranch aggiornato con «$CleanTrailer»: la PR riparte da questo commit"
+        $authorization = Get-GitAuthorization
+        $out = git -C $Publisher.Worktree @authorization push -q origin "HEAD:refs/heads/$($Publisher.Side)" 2>&1
+        if ($LASTEXITCODE -ne 0) { return New-Issue $JudgeScope 'correzioni non pubblicate' "push sul ramo di appoggio $($Publisher.Side) non riuscito: $out" }
+        $Publisher.Commits++
+        git add -- $docsDirectory $decisionsDirectory
+        Write-Host "Ramo di appoggio $($Publisher.Side) aggiornato: $Subject"
     }
     finally {
-        git worktree remove --force $worktree 2>&1 | Out-Null
         Remove-Item $patchFile, $messageFile -ErrorAction SilentlyContinue
         $global:LASTEXITCODE = 0
     }
+}
+
+# Un file giudicato si pubblica subito, con le sue correzioni se superano i controlli oggettivi.
+# Se non li superano, le sue correzioni si scartano e il file resta da giudicare.
+function Publish-FileJudgement($Publisher, [string]$RelativePath, [string[]]$Pending) {
+    $corrected = Show-Corrections
+    if ($corrected) {
+        $objective = Test-ObjectiveChecks $RelativePath
+        if ($objective) {
+            Undo-Corrections
+            return @{ Issue = $objective; Stop = $false }
+        }
+    }
+    $pendingLines = @($Pending | Where-Object { $_ } | ForEach-Object { "${PendingTrailer}: $_" })
+    $subject = if ($corrected) { "docs: apply the style judge corrections to $RelativePath" } else { "docs: record the style judgement of $RelativePath" }
+    $issue = Publish-Judgement $Publisher $subject (@("${DoneTrailer}: $RelativePath") + $pendingLines)
+    return @{ Issue = $issue; Stop = [bool]$issue }
 }
 
 function Get-StyleIssues {
@@ -635,7 +737,6 @@ function Get-StyleIssues {
     $fix = $fixRequested -and $scope.PullRequest -and [bool]$sourceBranch
     if ($fixRequested -and -not $fix) { Write-Host 'Correzione automatica non attiva fuori da una PR: il giudizio verifica soltanto' }
     $context = @{
-        Scope     = $scope
         Fix       = $fix
         Rounds    = if ($fix) { $maxRounds } else { 1 }
         Rules     = $setup.Rules
@@ -645,35 +746,52 @@ function Get-StyleIssues {
         Remaining = [Collections.Generic.List[object]]::new()
     }
 
-    $reviews = @($sections | Where-Object { -not $glossaryFile -or $_.FullName -ne $glossaryFile.FullName } | ForEach-Object { @{ File = $_; Context = $context } })
-    if ($scope.PullRequest) {
-        $decisionContext = $context.Clone()
-        $decisionContext.Scope = $scope.Clone()
-        $decisionContext.Scope.All = $false
-        $reviews += @(Get-SectionFiles $decisionsDirectory | ForEach-Object { @{ File = $_; Context = $decisionContext } })
+    $reviews = @($sections | Where-Object { -not $glossaryFile -or $_.FullName -ne $glossaryFile.FullName } | ForEach-Object { @{ File = $_; WholeOnGuide = $true } })
+    if ($scope.PullRequest) { $reviews += @(Get-SectionFiles $decisionsDirectory | ForEach-Object { @{ File = $_; WholeOnGuide = $false } }) }
+
+    if ($fix) {
+        $resumed = Resume-InterruptedJudgement $scope.Source
+        if ($resumed) { return $resumed }
     }
 
     $issues = @()
-    foreach ($review in $reviews) {
-        try { $issues += @(Invoke-SectionReview $review.File $review.Context) }
-        catch { return New-Issue $JudgeScope 'verifica non eseguita' "$($review.File.Name): $($_.Exception.Message)" }
+    $publisher = if ($fix) { New-Publisher $scope.Source } else { $null }
+    $completed = $true
+    $publishable = $fix
+    try {
+        foreach ($review in $reviews) {
+            $relativePath = ConvertTo-RepositoryPath $review.File.FullName
+            $requests = $script:Usage.Requests
+            $remaining = $context.Remaining.Count
+            try { Invoke-SectionReview $review.File (Get-FileScope $scope $relativePath $review.WholeOnGuide) $context }
+            catch {
+                Undo-Corrections
+                $issues += New-Issue $JudgeScope 'verifica non eseguita' "$($review.File.Name): $($_.Exception.Message)"
+                $completed = $false
+                break
+            }
+            if (-not $fix -or $script:Usage.Requests -eq $requests) { continue }
+            $pending = @($context.Remaining | Select-Object -Skip $remaining | ForEach-Object { $_.Pending })
+            $published = Publish-FileJudgement $publisher $relativePath $pending
+            if ($published.Issue) { $issues += $published.Issue }
+            if ($published.Stop) { $completed = $false; $publishable = $false; break }
+        }
+        Write-Host "Giudizio dello stile: $($script:Usage.Requests) richieste, $($script:Usage.Input) token in ingresso, $($script:Usage.Output) in uscita"
+        $findings = @($context.Remaining | ForEach-Object { $_.Issue } | Select-Object -Unique)
+        $tolerated = $maxFindings -lt 0 -or $findings.Count -le $maxFindings
+        if (-not $tolerated) { return @($issues) + $findings + @($(if ($publishable) { Complete-Publisher $publisher })) }
+        $script:Tolerated = $findings
+        # Le unita' rimaste in sospeso nei commit dei file valgono come giudicate quando tutte
+        # insieme restano entro la soglia: il giudizio superato le chiude.
+        $pendingRecorded = @($context.Remaining | Where-Object { $_.Pending }).Count -gt 0
+        if ($fix -and $completed -and $pendingRecorded) {
+            $issue = Publish-Judgement $publisher 'docs: record the style judgement within the tolerated findings' @($CleanTrailer)
+            if ($issue) { $issues += $issue; $publishable = $false }
+        }
+        if ($publishable) { $issues += @(Complete-Publisher $publisher) }
+        return $issues
     }
-    Write-Host "Giudizio dello stile: $($script:Usage.Requests) richieste, $($script:Usage.Input) token in ingresso, $($script:Usage.Output) in uscita"
-    $remaining = @($context.Remaining | ForEach-Object { $_.Issue } | Select-Object -Unique)
-    $tolerated = $maxFindings -lt 0 -or $remaining.Count -le $maxFindings
-    if ($tolerated) { $script:Tolerated = $remaining } else { $issues += $remaining }
-    if (-not $fix) { return $issues }
-
-    # Le correzioni si pubblicano anche se restano violazioni oltre la soglia: il lavoro gia' pagato
-    # non si perde, e il giudizio dopo rilegge solo le righe cambiate e le unita' rimaste in sospeso.
-    $corrected = Show-Corrections
-    if (-not $script:Usage.Requests) { return $issues }
-    if ($corrected) {
-        $objective = Test-ObjectiveChecks
-        if ($objective) { return @($issues) + $objective }
-    }
-    $pending = if ($tolerated) { @() } else { @($context.Remaining | ForEach-Object { $_.Pending } | Where-Object { $_ } | Select-Object -Unique) }
-    return @($issues) + @(Publish-Corrections $scope.Source $pending)
+    finally { Remove-Publisher $publisher }
 }
 
 # Le violazioni entro la soglia restano visibili come avvisi; la verifica passa con esito parziale.

@@ -364,9 +364,18 @@ Giudizio dello stile (`styleMode`, `CI/Scripts/Test-DocumentationStyle.ps1`):
   verifica passa con esito parziale (`SucceededWithIssues`); oltre la soglia la verifica fallisce e le nomina
   tutte. `0` (default) blocca ogni violazione, `-1` non pone limiti. In modalità `fix` contano le violazioni
   rimaste dopo `maxRounds` giri senza una correzione applicabile.
-- In modalità `fix` le correzioni fatte tornano sul ramo della PR anche quando la verifica fallisce. Il commit
-  porta `Style-Judge: clean` e, oltre la soglia, una riga `Style-Judge-Pending` per ogni unità rimasta: il
-  giudizio dopo rilegge quelle unità e le righe cambiate da quel commit, non il resto del documento.
+- In modalità `fix` ogni file giudicato ha il suo commit, con le correzioni che superano i controlli
+  oggettivi, il trailer `Style-Judge-Done: <file>` e, oltre la soglia, una riga `Style-Judge-Pending` per ogni
+  unità rimasta. Il giudizio dopo rilegge di ogni file solo le righe cambiate dal suo commit e le unità in
+  sospeso, non il resto del documento.
+- I commit vanno sul ramo di appoggio `style-judge/<commit della PR>`, con `[skip ci]`: un push sul ramo della
+  PR avvierebbe la build di validazione e annullerebbe quella in corso. A fine giudizio il ramo della PR li
+  riceve tutti insieme, anche quando la verifica fallisce, e il ramo di appoggio si cancella. Se il job si
+  interrompe, per timeout o annullamento, la build dopo trova il ramo di appoggio dello stesso commit, lo porta
+  sul ramo della PR senza chiamare il modello e fallisce con `giudizio ripreso`: la build avviata da quel push
+  giudica solo il resto.
+- L'identità della build deve poter contribuire al repository e creare rami; per cancellare il ramo di
+  appoggio serve anche il permesso di cancellare i rami, altrimenti resta e lo step lo segnala con un avviso.
 - Risposta in formato fissato (JSON schema): per ogni violazione il titolo della regola, la frase e il
   motivo. Il rilievo è `<sezione>: <regola> («frase»: motivo)`.
 - Accesso con token Entra ID della service connection (task `AzureCLI@2`), senza chiavi. Su 429 o 5xx

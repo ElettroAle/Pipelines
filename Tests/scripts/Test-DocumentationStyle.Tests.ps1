@@ -75,6 +75,10 @@ BeforeAll {
 
             $statusFile = Join-Path $State 'status'
             $status = if (Test-Path $statusFile) { [int](Get-Content -Raw $statusFile) } else { 200 }
+            $failOnFile = Join-Path $State 'fail-on'
+            if ((Test-Path $failOnFile) -and $body.Contains((Get-Content -Raw $failOnFile))) { $status = 503 }
+            $hangOnFile = Join-Path $State 'hang-on'
+            if ((Test-Path $hangOnFile) -and $body.Contains((Get-Content -Raw $hangOnFile))) { continue }
             $request = $body | ConvertFrom-Json
             $payload = '{}'
             if ((Test-Path (Join-Path $State 'reject-seed')) -and $null -ne $request.seed) {
@@ -265,6 +269,24 @@ Niente frasi che annunciano cosa dira' il testo.
         }
         finally { Pop-Location }
         return @{ Root = $root; Bare = $bare; Feature = $feature }
+    }
+
+    # Come un job che va in timeout: lo script si ferma a meta' giudizio e il processo si chiude da fuori.
+    function Invoke-InterruptedStyleCheck($Repository, [hashtable]$Environment, [string]$Side) {
+        $variables = @{ GATE_MODE = 'enforce'; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_JUDGE_SEED = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = '' }
+        foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
+        $previous = @{}
+        foreach ($name in $variables.Keys) {
+            $previous[$name] = [Environment]::GetEnvironmentVariable($name)
+            [Environment]::SetEnvironmentVariable($name, $variables[$name])
+        }
+        try { $process = Start-Process (Get-Process -Id $PID).Path -ArgumentList @('-NoProfile', '-NonInteractive', '-File', $ScriptPath) -WorkingDirectory $Repository.Root -PassThru -WindowStyle Hidden }
+        finally { foreach ($name in $previous.Keys) { [Environment]::SetEnvironmentVariable($name, $previous[$name]) } }
+        $deadline = (Get-Date).AddMinutes(2)
+        while ((Get-Date) -lt $deadline -and -not (git -C $Repository.Bare branch --list $Side)) { Start-Sleep -Milliseconds 200 }
+        Start-Sleep -Seconds 1
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        $process.WaitForExit()
     }
 
     function Update-BuildToFeature($Repository) {
@@ -468,8 +490,8 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
             $res.Output | Should -Match 'Documento in docs/architecture valido'
         }
 
-        It "E il ramo della PR riceve un commit con le correzioni e il segno del giudizio superato" {
-            Invoke-Git -C $repository.Bare log -1 --format=%B feature | Should -Contain 'Style-Judge: clean'
+        It "E il ramo della PR riceve un commit con le correzioni e il segno del file giudicato" {
+            Invoke-Git -C $repository.Bare log -1 --format=%B feature | Should -Contain 'Style-Judge-Done: docs/architecture/02-vincoli.md'
             Invoke-Git -C $repository.Bare rev-parse 'feature^' | Should -Be $repository.Feature
         }
 
@@ -529,7 +551,7 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
 
         It "E il ramo della PR riceve il segno del giudizio con l'unità in sospeso" {
             $message = Invoke-Git -C $repository.Bare log -1 --format=%B feature
-            $message | Should -Contain 'Style-Judge: clean'
+            $message | Should -Contain 'Style-Judge-Done: docs/architecture/02-vincoli.md'
             $message | Where-Object { $_ -like "Style-Judge-Pending: docs/architecture/02-vincoli.md`t*" } | Should -Not -BeNullOrEmpty -Because ($res.Output)
             Invoke-Git -C $repository.Bare rev-parse 'feature^' | Should -Be $repository.Feature
         }
@@ -582,7 +604,7 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
 
         It "E il ramo della PR riceve le correzioni dei giri fatti" {
             Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike '*gira su Azure davvero davvero davvero in Italia.*'
-            Invoke-Git -C $repository.Bare log -1 --format=%B feature | Should -Contain 'Style-Judge: clean'
+            Invoke-Git -C $repository.Bare log -1 --format=%B feature | Should -Contain 'Style-Judge-Done: docs/architecture/02-vincoli.md'
             Invoke-Git -C $repository.Bare rev-parse 'feature^' | Should -Be $repository.Feature
         }
 
@@ -612,7 +634,7 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
 
         It "E il ramo della PR riceve il segno del giudizio con l'unità in sospeso" {
             $message = Invoke-Git -C $repository.Bare log -1 --format=%B feature
-            $message | Should -Contain 'Style-Judge: clean'
+            $message | Should -Contain 'Style-Judge-Done: docs/architecture/02-vincoli.md'
             @($message | Where-Object { $_ -like "Style-Judge-Pending: docs/architecture/02-vincoli.md`t*gira su Azure in Italia*" }).Count | Should -Be 1
             Invoke-Git -C $repository.Bare rev-parse 'feature^' | Should -Be $repository.Feature
         }
@@ -638,7 +660,7 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
             It "E la verifica passa quando l'unità in sospeso non ha più violazioni" {
                 $again.ExitCode | Should -Be 0 -Because ($again.Output -join "`n")
                 $message = Invoke-Git -C $repository.Bare log -1 --format=%B feature
-                $message | Should -Contain 'Style-Judge: clean'
+                $message | Should -Contain 'Style-Judge-Done: docs/architecture/02-vincoli.md'
                 $message | Where-Object { $_ -like 'Style-Judge-Pending:*' } | Should -BeNullOrEmpty
             }
         }
@@ -825,6 +847,161 @@ Describe "Test-DocumentationStyle — cosa si manda al modello" {
     }
 }
 
+Describe "Funzionalità: il giudizio dello stile pubblica un file alla volta" {
+
+    Context "Scenario: il job si interrompe a metà documento" {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(
+                @{ match = 'È importante sottolineare che la piattaforma'; rule = $Filler; replacement = 'La piattaforma' }
+                @{ match = 'È importante sottolineare che i dati'; rule = $Filler; replacement = 'I dati' })
+            [IO.File]::WriteAllText((Join-Path $StubState 'hang-on'), 'SEZIONE DA GIUDICARE (02-vincoli.md)')
+            $repository = New-OriginRepository {
+                param($d)
+                Edit-Docs $d 'docs/architecture/01-introduzione-e-obiettivi.md' 'La piattaforma aiuta' 'È importante sottolineare che la piattaforma aiuta'
+                Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' "gira su Azure.`n`nÈ importante sottolineare che i dati restano in Italia."
+            }
+            $side = "style-judge/$($repository.Feature)"
+            Invoke-InterruptedStyleCheck $repository $FixEnvironment $side
+        }
+
+        AfterAll { Remove-Repository $repository }
+
+        It "Allora il ramo della PR non cambia, perché un push avvierebbe una nuova build" {
+            Get-FeatureTip $repository | Should -Be $repository.Feature
+        }
+
+        It "E il ramo di appoggio ha il commit della prima sezione con le sue correzioni" {
+            Invoke-Git -C $repository.Bare log -1 --format=%B $side | Should -Contain 'Style-Judge-Done: docs/architecture/01-introduzione-e-obiettivi.md'
+            Invoke-Git -C $repository.Bare rev-parse "$side^" | Should -Be $repository.Feature
+            (Invoke-Git -C $repository.Bare show "${side}:docs/architecture/01-introduzione-e-obiettivi.md") -join "`n" | Should -Not -BeLike '*sottolineare*'
+        }
+
+        Context "Scenario: la build dopo riprende il lavoro interrotto" {
+            BeforeAll {
+                Update-BuildToFeature $repository
+                Reset-Stub
+                $resumed = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+            }
+
+            It "Allora il modello non riceve richieste" {
+                @(Get-StubRequests).Count | Should -Be 0
+            }
+
+            It "E il ramo della PR riceve i commit del ramo di appoggio, che si cancella" {
+                Invoke-Git -C $repository.Bare log -1 --format=%B feature | Should -Contain 'Style-Judge-Done: docs/architecture/01-introduzione-e-obiettivi.md'
+                Invoke-Git -C $repository.Bare rev-parse 'feature^' | Should -Be $repository.Feature
+                git -C $repository.Bare branch --list $side | Should -BeNullOrEmpty
+            }
+
+            It "E la verifica fallisce dicendo che riparte dal commit ripreso" {
+                $resumed.ExitCode | Should -Be 1
+                Get-Issues $resumed.Output | Where-Object { $_ -like 'giudizio dello stile: giudizio ripreso*' } | Should -Not -BeNullOrEmpty -Because ($resumed.Output)
+            }
+
+            Context "Scenario: la build avviata dal commit ripreso giudica il resto" {
+                BeforeAll {
+                    Update-BuildToFeature $repository
+                    Reset-Stub
+                    Set-StubRules @(@{ match = 'È importante sottolineare che i dati'; rule = $Filler; replacement = 'I dati' })
+                    $rest = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+                }
+
+                It "Allora il modello giudica solo la seconda sezione" {
+                    Get-JudgedFiles | Select-Object -Unique | Should -Be @('02-vincoli.md')
+                }
+
+                It "E la verifica passa con le correzioni di entrambe le sezioni sul ramo della PR" {
+                    $rest.ExitCode | Should -Be 0 -Because ($rest.Output)
+                    Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike '*I dati restano in Italia.*'
+                    Invoke-Git -C $repository.Bare rev-parse 'feature~2' | Should -Be $repository.Feature
+                }
+            }
+        }
+    }
+
+    Context "Scenario: il giudizio si interrompe a metà documento" {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(
+                @{ match = 'È importante sottolineare che la piattaforma'; rule = $Filler; replacement = 'La piattaforma' }
+                @{ match = 'È importante sottolineare che i dati'; rule = $Filler; replacement = 'I dati' })
+            [IO.File]::WriteAllText((Join-Path $StubState 'fail-on'), 'SEZIONE DA GIUDICARE (02-vincoli.md)')
+            $repository = New-OriginRepository {
+                param($d)
+                Edit-Docs $d 'docs/architecture/01-introduzione-e-obiettivi.md' 'La piattaforma aiuta' 'È importante sottolineare che la piattaforma aiuta'
+                Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' "gira su Azure.`n`nÈ importante sottolineare che i dati restano in Italia."
+            }
+            $res = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+        }
+
+        AfterAll { Remove-Repository $repository }
+
+        It "Dato il modello che non risponde sulla seconda sezione" {
+            $res.ExitCode | Should -Be 1
+            Get-Issues $res.Output | Where-Object { $_ -match '^giudizio dello stile: verifica non eseguita \(02-vincoli\.md: ' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+
+        It "Allora il ramo della PR ha già le correzioni della prima sezione, nel suo commit" {
+            Get-FeatureFile $repository 'docs/architecture/01-introduzione-e-obiettivi.md' | Should -Not -BeLike '*sottolineare*' -Because ($res.Output)
+            Invoke-Git -C $repository.Bare log -1 --format=%B feature | Should -Contain 'Style-Judge-Done: docs/architecture/01-introduzione-e-obiettivi.md'
+            Invoke-Git -C $repository.Bare rev-parse 'feature^' | Should -Be $repository.Feature
+        }
+
+        It "E la seconda sezione resta come nella PR" {
+            Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike '*sottolineare che i dati*'
+        }
+
+        Context "Scenario: il giudizio dopo riparte dalle sezioni non pubblicate" {
+            BeforeAll {
+                Update-BuildToFeature $repository
+                Reset-Stub
+                Set-StubRules @(@{ match = 'È importante sottolineare che i dati'; rule = $Filler; replacement = 'I dati' })
+                $again = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+            }
+
+            It "Allora il modello giudica solo la seconda sezione" {
+                Get-JudgedFiles | Select-Object -Unique | Should -Be @('02-vincoli.md')
+            }
+
+            It "E il ramo della PR riceve un commit per la seconda sezione" {
+                Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike '*I dati restano in Italia.*' -Because ($again.Output)
+                Invoke-Git -C $repository.Bare log -1 --format=%B feature | Should -Contain 'Style-Judge-Done: docs/architecture/02-vincoli.md'
+                Invoke-Git -C $repository.Bare rev-parse 'feature~2' | Should -Be $repository.Feature
+            }
+
+            It "E la verifica passa" {
+                $again.ExitCode | Should -Be 0 -Because ($again.Output)
+            }
+        }
+    }
+
+    Context "Scenario: violazioni entro la soglia in più sezioni" {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(
+                @{ match = 'gira su Azure in Italia'; rule = $Filler; find = 'testo assente'; replacement = 'gira in Italia' }
+                @{ match = 'aiuta il utente'; rule = $Filler; find = 'testo assente'; replacement = "aiuta l'utente" })
+            $repository = New-OriginRepository {
+                param($d)
+                Edit-Docs $d 'docs/architecture/01-introduzione-e-obiettivi.md' 'La piattaforma aiuta' 'Oggi la piattaforma aiuta'
+                Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' 'gira su Azure in Italia.'
+            }
+            $res = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment (Get-FixEnvironment @{ STYLE_MAX_FINDINGS = '2' })
+        }
+
+        AfterAll { Remove-Repository $repository }
+
+        It "Allora ogni sezione ha il suo commit con l'unità in sospeso, e un commit finale chiude il giudizio" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+            Invoke-Git -C $repository.Bare log -1 --format=%B feature | Should -Contain 'Style-Judge: clean'
+            Invoke-Git -C $repository.Bare log -1 --format=%B 'feature~1' | Should -Contain 'Style-Judge-Done: docs/architecture/02-vincoli.md'
+            Invoke-Git -C $repository.Bare log -1 --format=%B 'feature~2' | Should -Contain 'Style-Judge-Done: docs/architecture/01-introduzione-e-obiettivi.md'
+            Invoke-Git -C $repository.Bare rev-parse 'feature~3' | Should -Be $repository.Feature
+        }
+    }
+}
+
 Describe "Test-DocumentationStyle — correzioni in una decisione nuova" {
 
     BeforeAll {
@@ -836,10 +1013,10 @@ Describe "Test-DocumentationStyle — correzioni in una decisione nuova" {
 
     AfterAll { Remove-Repository $repository }
 
-    It "Allora il ramo della PR riceve la decisione corretta con il segno del giudizio superato" {
+    It "Allora il ramo della PR riceve la decisione corretta con il segno del file giudicato" {
         Get-FeatureFile $repository 'docs/decisions/0002-nuova.md' | Should -BeLike '*Le copie restano in Italia.*' -Because ($res.Output)
         Get-FeatureFile $repository 'docs/decisions/0002-nuova.md' | Should -Not -BeLike '*È importante*'
-        Invoke-Git -C $repository.Bare log -1 --format=%B feature | Should -Contain 'Style-Judge: clean'
+        Invoke-Git -C $repository.Bare log -1 --format=%B feature | Should -Contain 'Style-Judge-Done: docs/decisions/0002-nuova.md'
     }
 
     It "E la verifica passa" {

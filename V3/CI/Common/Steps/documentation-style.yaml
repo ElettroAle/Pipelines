@@ -4,8 +4,9 @@
 # (V3/CI/Scripts/Test-DocumentationStyle.ps1): la guida di stile del repository e'
 # l'istruzione del modello. L'accesso al modello passa dalla service connection con un
 # token Entra ID, senza chiavi. In modalita' fix le correzioni del modello, validate e
-# rigiudicate, tornano sul ramo della PR con un commit dell'identita' della build, che
-# deve poter contribuire al repository.
+# rigiudicate, si salvano un file alla volta su un ramo di appoggio e tornano sul ramo della
+# PR a fine giudizio con i commit dell'identita' della build, che deve poter contribuire al
+# repository, creare rami e, per togliere il ramo di appoggio, cancellarli.
 #
 # Riusato da:
 #   CI/Agnostic/quality-docs.yaml
