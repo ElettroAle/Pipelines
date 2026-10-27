@@ -22,6 +22,7 @@ $maxRounds = if ($env:STYLE_MAX_ROUNDS) { [math]::Max(1, [int]$env:STYLE_MAX_ROU
 $maxFindings = if ("$env:STYLE_MAX_FINDINGS" -match '^-?\d+$') { [int]$env:STYLE_MAX_FINDINGS } else { 0 }
 $maximumWords = [int]$env:READABILITY_MAX_WORDS
 $abbreviations = @("$env:READABILITY_ABBREVIATIONS" -split ';' | ForEach-Object Trim | Where-Object { $_ })
+$decisionsExcludedRules = @("$env:STYLE_DECISIONS_EXCLUDED_RULES" -split ';' | ForEach-Object Trim | Where-Object { $_ })
 
 $SectionFilePattern = '^\d+[_-].+\.md$'
 $JudgeScope = 'giudizio dello stile'
@@ -99,6 +100,25 @@ function Get-GuideRules([string]$Guide) {
     $inRules = @($headings | Where-Object Part -EQ 'Regole')
     $selected = if ($inRules) { $inRules } else { $headings }
     return @($selected | ForEach-Object Title)
+}
+
+# Una regola che non vale per le decisioni esce dalla guida che il modello riceve, con i suoi
+# esempi, e dalla risposta che ci si aspetta: altrimenti il modello la applicherebbe lo stesso.
+function Remove-GuideRules([string]$Guide, [string[]]$Excluded) {
+    if (-not $Excluded) { return $Guide }
+    $kept = [Collections.Generic.List[string]]::new()
+    $skipping = $false
+    $fence = $null
+    foreach ($line in ($Guide -split "`n")) {
+        if ($fence) {
+            if ($line -match $fence) { $fence = $null }
+        }
+        elseif ($line -match $OpeningFencePattern) { $fence = '^\s*' + [regex]::Escape($Matches[1]) + '\s*$' }
+        elseif ($line -match '^###\s+(.+?)\s*$') { $skipping = $Matches[1] -in $Excluded }
+        elseif ($line -match '^##\s') { $skipping = $false }
+        if (-not $skipping) { $kept.Add($line) }
+    }
+    return $kept -join "`n"
 }
 
 function Get-SectionFiles([string]$Directory) {
@@ -746,8 +766,12 @@ function Get-StyleIssues {
         Remaining = [Collections.Generic.List[object]]::new()
     }
 
-    $reviews = @($sections | Where-Object { -not $glossaryFile -or $_.FullName -ne $glossaryFile.FullName } | ForEach-Object { @{ File = $_; WholeOnGuide = $true } })
-    if ($scope.PullRequest) { $reviews += @(Get-SectionFiles $decisionsDirectory | ForEach-Object { @{ File = $_; WholeOnGuide = $false } }) }
+    $decisionContext = $context.Clone()
+    $decisionContext.Rules = @($setup.Rules | Where-Object { $_ -notin $decisionsExcludedRules })
+    $decisionContext.System = $Instructions + (Remove-GuideRules $setup.Guide $decisionsExcludedRules)
+    $decisionContext.Schema = New-FindingsSchema $decisionContext.Rules
+    $reviews = @($sections | Where-Object { -not $glossaryFile -or $_.FullName -ne $glossaryFile.FullName } | ForEach-Object { @{ File = $_; WholeOnGuide = $true; Context = $context } })
+    if ($scope.PullRequest) { $reviews += @(Get-SectionFiles $decisionsDirectory | ForEach-Object { @{ File = $_; WholeOnGuide = $false; Context = $decisionContext } }) }
 
     if ($fix) {
         $resumed = Resume-InterruptedJudgement $scope.Source
@@ -763,7 +787,17 @@ function Get-StyleIssues {
             $relativePath = ConvertTo-RepositoryPath $review.File.FullName
             $requests = $script:Usage.Requests
             $remaining = $context.Remaining.Count
-            try { Invoke-SectionReview $review.File (Get-FileScope $scope $relativePath $review.WholeOnGuide) $context }
+            $fileScope = Get-FileScope $scope $relativePath $review.WholeOnGuide
+            $fileContext = $review.Context
+            # Le unita' in sospeso hanno gia' avuto i loro giri: si verificano soltanto, perche' un'altra
+            # correzione porterebbe un altro push, un'altra build e di nuovo lo stesso rilievo.
+            $pendingOnly = $fix -and -not $fileScope.All -and -not $fileScope.Lines -and $fileScope.Pending
+            if ($pendingOnly) {
+                $fileContext = $fileContext.Clone()
+                $fileContext.Fix = $false
+                $fileContext.Rounds = 1
+            }
+            try { Invoke-SectionReview $review.File $fileScope $fileContext }
             catch {
                 Undo-Corrections
                 $issues += New-Issue $JudgeScope 'verifica non eseguita' "$($review.File.Name): $($_.Exception.Message)"
@@ -771,6 +805,7 @@ function Get-StyleIssues {
                 break
             }
             if (-not $fix -or $script:Usage.Requests -eq $requests) { continue }
+            if ($pendingOnly -and $context.Remaining.Count -gt $remaining) { continue }
             $pending = @($context.Remaining | Select-Object -Skip $remaining | ForEach-Object { $_.Pending })
             $published = Publish-FileJudgement $publisher $relativePath $pending
             if ($published.Issue) { $issues += $published.Issue }

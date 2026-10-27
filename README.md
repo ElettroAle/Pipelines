@@ -359,7 +359,8 @@ Giudizio dello stile (`styleMode`, `CI/Scripts/Test-DocumentationStyle.ps1`):
   cambiate, tutte se cambia la guida. Delle decisioni (`decisionsDirectory`) si giudicano solo le righe
   che la PR aggiunge o cambia, anche quando cambia la guida: il corpus già integrato non si rigiudica, e
   fuori da una PR le decisioni non si giudicano. Le correzioni di una decisione passano anche dalla verifica
-  del corpus prima di tornare sul ramo.
+  del corpus prima di tornare sul ramo. Le regole elencate in `styleDecisionsExcludedRules`, per titolo, non
+  valgono per le decisioni: il modello non le riceve, né nella guida né nella risposta attesa.
 - `styleMaxFindings` è la soglia delle violazioni tollerate: fino alla soglia restano come avvisi e la
   verifica passa con esito parziale (`SucceededWithIssues`); oltre la soglia la verifica fallisce e le nomina
   tutte. `0` (default) blocca ogni violazione, `-1` non pone limiti. In modalità `fix` contano le violazioni
@@ -367,7 +368,9 @@ Giudizio dello stile (`styleMode`, `CI/Scripts/Test-DocumentationStyle.ps1`):
 - In modalità `fix` ogni file giudicato ha il suo commit, con le correzioni che superano i controlli
   oggettivi, il trailer `Style-Judge-Done: <file>` e, oltre la soglia, una riga `Style-Judge-Pending` per ogni
   unità rimasta. Il giudizio dopo rilegge di ogni file solo le righe cambiate dal suo commit e le unità in
-  sospeso, non il resto del documento.
+  sospeso, non il resto del documento. Un file con sole unità in sospeso si verifica con un giro, senza
+  correzioni: se le violazioni restano non si pubblica nulla, così il push non avvia un'altra build sullo
+  stesso rilievo; se non restano, un commit del file chiude le unità.
 - I commit vanno sul ramo di appoggio `style-judge/<commit della PR>`, con `[skip ci]`: un push sul ramo della
   PR avvierebbe la build di validazione e annullerebbe quella in corso. A fine giudizio il ramo della PR li
   riceve tutti insieme, anche quando la verifica fallisce, e il ramo di appoggio si cancella. Se il job si

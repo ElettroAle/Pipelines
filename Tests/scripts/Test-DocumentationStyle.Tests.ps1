@@ -179,7 +179,7 @@ Niente frasi che annunciano cosa dira' il testo.
             $Root = Join-Path ([IO.Path]::GetTempPath()) "pester-style-$(New-Guid)"
             Write-Docs $Docs $Root
         }
-        $variables = @{ GATE_MODE = $Mode; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; TARGET_BRANCH = ''; SOURCE_BRANCH = ''; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_FIX = ''; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_JUDGE_SEED = ''; READABILITY_MAX_WORDS = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = '' }
+        $variables = @{ GATE_MODE = $Mode; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; TARGET_BRANCH = ''; SOURCE_BRANCH = ''; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_FIX = ''; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_DECISIONS_EXCLUDED_RULES = ''; STYLE_JUDGE_SEED = ''; READABILITY_MAX_WORDS = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = '' }
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
 
         Push-Location $Root
@@ -273,7 +273,7 @@ Niente frasi che annunciano cosa dira' il testo.
 
     # Come un job che va in timeout: lo script si ferma a meta' giudizio e il processo si chiude da fuori.
     function Invoke-InterruptedStyleCheck($Repository, [hashtable]$Environment, [string]$Side) {
-        $variables = @{ GATE_MODE = 'enforce'; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_JUDGE_SEED = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = '' }
+        $variables = @{ GATE_MODE = 'enforce'; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_DECISIONS_EXCLUDED_RULES = ''; STYLE_JUDGE_SEED = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = '' }
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
         $previous = @{}
         foreach ($name in $variables.Keys) {
@@ -666,6 +666,39 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
         }
     }
 
+    Context "Scenario: l'unità in sospeso viola ancora la regola" {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(@{ match = 'gira su Azure in Italia'; rule = $Filler; find = 'testo assente'; replacement = 'gira in Italia' })
+            $repository = New-OriginRepository { param($d) Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' 'gira su Azure in Italia.' }
+            Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment | Out-Null
+            Update-BuildToFeature $repository
+            $judged = Get-FeatureTip $repository
+            Reset-Stub
+            Set-StubRules @(@{ match = 'gira su Azure in Italia'; rule = $Filler; replacement = 'gira in Italia' })
+            $again = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+        }
+
+        AfterAll { Remove-Repository $repository }
+
+        It "Allora il modello la verifica con un solo giro" {
+            @(Get-StubRequests).Count | Should -Be 1
+        }
+
+        It "E la correzione proposta non si applica" {
+            Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike '*gira su Azure in Italia.*'
+        }
+
+        It "E il ramo della PR non cambia, perché un push avvierebbe un'altra build sullo stesso rilievo" {
+            Get-FeatureTip $repository | Should -Be $judged
+        }
+
+        It "E la verifica fallisce nominando la violazione rimasta" {
+            $again.ExitCode | Should -Be 1
+            Get-Issues $again.Output | Where-Object { $_.StartsWith("Vincoli: $Filler («gira su Azure in Italia»") } | Should -Not -BeNullOrEmpty -Because ($again.Output)
+        }
+    }
+
     Context "Scenario: violazioni rimaste entro la soglia" {
         BeforeAll {
             Reset-Stub
@@ -829,6 +862,21 @@ Describe "Test-DocumentationStyle — cosa si manda al modello" {
             Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main' } | Out-Null
             Remove-Item -Recurse -Force $root
             Get-JudgedFiles | Should -Be @('01-introduzione-e-obiettivi.md', '02-vincoli.md')
+        }
+
+        It "Giudica le decisioni senza le regole escluse" {
+            $root = New-PullRequestRepository { param($d) $d['docs/decisions/0002-nuova.md'] = $NewDecision; Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' 'gira su Azure in Italia.' }
+            Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main'; STYLE_DECISIONS_EXCLUDED_RULES = $SelfReference } | Out-Null
+            Remove-Item -Recurse -Force $root
+            $requests = @(Get-StubRequests)
+            $decision = $requests | Where-Object { (Get-UserMessage $_) -like '*SEZIONE DA GIUDICARE (0002-nuova.md)*' }
+            $section = $requests | Where-Object { (Get-UserMessage $_) -like '*SEZIONE DA GIUDICARE (02-vincoli.md)*' }
+            @($decision.response_format.json_schema.schema.properties.PSObject.Properties).Count | Should -Be 1
+            $decision.response_format.json_schema.schema.properties.regola_1.description | Should -Be $Filler
+            ($decision.messages | Where-Object role -EQ 'system').content | Should -Not -BeLike "*$SelfReference*"
+            ($decision.messages | Where-Object role -EQ 'system').content | Should -BeLike '*Un titolo dentro un esempio*'
+            @($section.response_format.json_schema.schema.properties.PSObject.Properties).Count | Should -Be 2
+            ($section.messages | Where-Object role -EQ 'system').content | Should -BeLike "*$SelfReference*"
         }
 
         It "Legge le decisioni dalla cartella dichiarata" {

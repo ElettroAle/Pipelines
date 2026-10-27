@@ -27,7 +27,9 @@
 #   maxRounds          → giri massimi di giudizio in modalita' fix, l'ultimo solo di verifica (default: 4)
 #   maxFindings        → violazioni che restano come avvisi senza bloccare: 0 blocca ogni violazione, -1 nessun
 #                        limite (default: 0). Oltre la soglia, in modalita' fix le correzioni si pubblicano
-#                        comunque e il giudizio dopo rilegge solo le unita' rimaste in sospeso
+#                        comunque e il giudizio dopo verifica solo le unita' rimaste in sospeso, senza correggerle
+#   decisionsExcludedRules → titoli delle regole della guida che non valgono per le decisioni: il modello non le
+#                        riceve quando giudica una decisione (default: nessuna)
 #   seed               → seme del modello, per giudizi ripetibili (default: 1)
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #
@@ -87,6 +89,10 @@ parameters:
     type: number
     default: 0
 
+  - name: decisionsExcludedRules
+    type: object
+    default: []
+
   - name: seed
     type: number
     default: 1
@@ -114,6 +120,7 @@ steps:
         STYLE_FIX: ${{ eq(parameters.mode, 'fix') }}
         STYLE_MAX_ROUNDS: ${{ parameters.maxRounds }}
         STYLE_MAX_FINDINGS: ${{ parameters.maxFindings }}
+        STYLE_DECISIONS_EXCLUDED_RULES: ${{ join(';', parameters.decisionsExcludedRules) }}
         STYLE_JUDGE_SEED: ${{ parameters.seed }}
         DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
         STYLE_GUIDE: ${{ parameters.guide }}
