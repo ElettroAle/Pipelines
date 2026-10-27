@@ -150,8 +150,8 @@ Ogni test costruisce un repository con un bare repo come origin: il corpus di pa
 
 | Suite | Scenario testato |
 |---|---|
-| Verifica del corpus delle decisioni architetturali | Decisione ben formata; stato non ammesso, numero duplicato, sezione mancante, sostituzione non reciproca; ADR accepted riscritto e sostituito; modalità `warn` |
-| Regole del corpus | ADR accepted eliminato, ADR proposed riscrivibile, superseded-by verso una decisione inesistente, file senza frontmatter, file non numerati ignorati, run fuori da una PR, modalità `off`, una segnalazione per difetto |
+| Verifica del corpus delle decisioni architetturali | Decisione ben formata; stato non ammesso, numero duplicato, sezione mancante, sostituzione non reciproca; ADR accepted riscritto e sostituito; diagramma cambiato con una versione nuova, modifica non versionata, esito cambiato; modalità `warn` |
+| Regole del corpus | ADR accepted eliminato, ADR senza versione alla versione 1, versione senza la sua voce, versione non intera, versione più bassa, ADR proposed riscrivibile, superseded-by verso una decisione inesistente, file senza frontmatter, file non numerati ignorati, run fuori da una PR, modalità `off`, una segnalazione per difetto |
 
 I test degli script di verifica della documentazione partono dal documento valido di
 `Tests/fixtures/documentation/DocumentationFixture.ps1` (le dodici sezioni del template arc42 italiano,

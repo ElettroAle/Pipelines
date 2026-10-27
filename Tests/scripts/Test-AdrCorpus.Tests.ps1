@@ -20,14 +20,25 @@ BeforeAll {
             [string]$Supersedes,
             [string]$SupersededBy,
             [string[]]$Sections = @('Contesto e problema', 'Opzioni considerate', 'Esito della decisione'),
-            [string]$Body = 'Testo della decisione.'
+            [string]$Body = 'Testo della decisione.',
+            [string]$Version,
+            [string]$Outcome,
+            [string]$CodeStructure,
+            [string[]]$History
         )
 
         $frontmatter = @('---', "status: $Status", 'date: 2026-10-02')
+        if ($Version) { $frontmatter += "version: $Version" }
         if ($Supersedes) { $frontmatter += "supersedes: $Supersedes" }
         if ($SupersededBy) { $frontmatter += "superseded-by: $SupersededBy" }
         $frontmatter += '---'
-        $content = @($frontmatter) + @('', '# Titolo', '') + @($Sections | ForEach-Object { "## $_"; ''; $Body; '' })
+        $sectionBodies = @($Sections | ForEach-Object {
+                $text = if ($_ -eq 'Esito della decisione' -and $Outcome) { $Outcome } else { $Body }
+                "## $_"; ''; $text; ''
+            })
+        $content = @($frontmatter) + @('', '# Titolo', '') + $sectionBodies
+        if ($CodeStructure) { $content += @('## Struttura nel codice', '', $CodeStructure, '') }
+        if ($History) { $content += @('## Versioni', '') + $History + @('') }
         return ($content -join "`n")
     }
 
@@ -176,6 +187,51 @@ Describe "Funzionalità: Verifica del corpus delle decisioni architetturali" {
         }
     }
 
+    Context "Scenario: il diagramma di una decisione accettata cambia con una versione nuova" {
+        BeforeAll {
+            $main = New-Decision -Version 2 -CodeStructure 'classDiagram A' -History @('- 1: prima stesura', '- 2: diagramma del codice')
+            $pullRequest = New-Decision -Version 3 -CodeStructure 'classDiagram A B' -History @('- 1: prima stesura', '- 2: diagramma del codice', '- 3: classe B nel diagramma')
+            $res = Invoke-AdrCheck -Main @{ '0024-esempio' = $main } -PullRequest @{ '0024-esempio' = $pullRequest }
+        }
+
+        It "Allora la verifica del corpus passa" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            Get-Issues $res.Output 'error' | Should -BeNullOrEmpty
+        }
+    }
+
+    Context "Scenario: una modifica non versionata fa fallire la verifica" {
+        BeforeAll {
+            $main = New-Decision -Version 2 -CodeStructure 'classDiagram A' -History @('- 1: prima stesura', '- 2: diagramma del codice')
+            $pullRequest = New-Decision -Version 2 -CodeStructure 'classDiagram A B' -History @('- 1: prima stesura', '- 2: diagramma del codice')
+            $res = Invoke-AdrCheck -Main @{ '0024-esempio' = $main } -PullRequest @{ '0024-esempio' = $pullRequest }
+        }
+
+        It "Allora la verifica del corpus fallisce" {
+            $res.ExitCode | Should -Be 1
+        }
+
+        It "E il messaggio nomina '0024-esempio' e 'senza una versione nuova'" {
+            Get-Issues $res.Output 'error' | Where-Object { $_ -match '0024-esempio' -and $_ -match 'senza una versione nuova' } | Should -Not -BeNullOrEmpty -Because $res.Output
+        }
+    }
+
+    Context "Scenario: l'esito di una decisione accettata non cambia con una versione" {
+        BeforeAll {
+            $main = New-Decision -Version 2 -History @('- 1: prima stesura', '- 2: diagramma del codice')
+            $pullRequest = New-Decision -Version 3 -Outcome 'Esito diverso.' -History @('- 1: prima stesura', '- 2: diagramma del codice', '- 3: esito cambiato')
+            $res = Invoke-AdrCheck -Main @{ '0024-esempio' = $main } -PullRequest @{ '0024-esempio' = $pullRequest }
+        }
+
+        It "Allora la verifica del corpus fallisce" {
+            $res.ExitCode | Should -Be 1
+        }
+
+        It "E il messaggio nomina '0024-esempio' e chiede di sostituirla con una decisione nuova" {
+            Get-Issues $res.Output 'error' | Where-Object { $_ -match '0024-esempio' -and $_ -match 'si sostituisce con una nuova decisione' } | Should -Not -BeNullOrEmpty -Because $res.Output
+        }
+    }
+
     Context "Scenario: consumer che sceglie l'avviso" {
         BeforeAll {
             $res = Invoke-AdrCheck -Mode warn -PullRequest @{ '0008-esempio' = (New-Decision -Status approvata) }
@@ -200,6 +256,32 @@ Describe "Test-AdrCorpus — regole del corpus" {
 
         $res.ExitCode | Should -Be 1
         Get-Issues $res.Output 'error' | Where-Object { $_ -match '0001-esempio' -and $_ -match 'decisione accettata non modificabile' } | Should -Not -BeNullOrEmpty
+    }
+
+    It "Una decisione accettata senza versione e' alla versione 1 e passa alla 2 con la sua voce" {
+        $res = Invoke-AdrCheck -Main @{ '0001-esempio' = (New-Decision) } -PullRequest @{ '0001-esempio' = (New-Decision -Version 2 -CodeStructure 'classDiagram A' -History @('- 2: diagramma del codice')) }
+
+        $res.ExitCode | Should -Be 0 -Because $res.Output
+    }
+
+    It "Una versione nuova senza la sua voce nelle versioni si segnala" {
+        $res = Invoke-AdrCheck -Main @{ '0001-esempio' = (New-Decision) } -PullRequest @{ '0001-esempio' = (New-Decision -Version 2 -CodeStructure 'classDiagram A') }
+
+        $res.ExitCode | Should -Be 1
+        Get-Issues $res.Output 'error' | Where-Object { $_ -match '0001-esempio' -and $_ -match "versione 2 senza la sua voce in 'Versioni'" } | Should -Not -BeNullOrEmpty -Because $res.Output
+    }
+
+    It "Una versione che non e' un numero intero si segnala" {
+        $res = Invoke-AdrCheck -PullRequest @{ '0008-esempio' = (New-Decision -Status proposed -Version 'due') }
+
+        Get-Issues $res.Output 'error' | Where-Object { $_ -match '0008-esempio' -and $_ -match "versione non valida 'due'" } | Should -Not -BeNullOrEmpty -Because $res.Output
+    }
+
+    It "Una versione piu' bassa di quella del ramo di destinazione non e' una versione nuova" {
+        $main = New-Decision -Version 3 -History @('- 3: terza')
+        $res = Invoke-AdrCheck -Main @{ '0001-esempio' = $main } -PullRequest @{ '0001-esempio' = (New-Decision -Version 2 -CodeStructure 'classDiagram A' -History @('- 2: seconda')) }
+
+        Get-Issues $res.Output 'error' | Where-Object { $_ -match '0001-esempio' -and $_ -match 'senza una versione nuova' } | Should -Not -BeNullOrEmpty -Because $res.Output
     }
 
     It "Una decisione proposta si puo' riscrivere" {
