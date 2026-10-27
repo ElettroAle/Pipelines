@@ -1,6 +1,7 @@
 # ── CI Step: Mermaid ──────────────────────────────────────────────────────────
 #
-# Diagrammi Mermaid delle sezioni di un documento (V3/CI/Scripts/Test-MermaidDiagrams.ps1):
+# Diagrammi Mermaid delle sezioni di un documento e delle sue decisioni
+# (V3/CI/Scripts/Test-MermaidDiagrams.ps1):
 # ogni diagramma passa dal parser di Mermaid fissato da V3/CI/Scripts/mermaid/package-lock.json,
 # e uno non valido si segnala con file e riga. Il parser richiede Node.js.
 #
@@ -11,7 +12,10 @@
 # Parametri
 # ─────────
 #   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
-#   docsDirectory      → cartella delle sezioni del documento (default: docs/architecture)
+#   docsDirectory      → cartella delle sezioni del documento (default: quella dichiarata da
+#                        document-directories.yaml, altrimenti docs/architecture)
+#   decisionsDirectory → cartella degli ADR (default: quella dichiarata da document-directories.yaml,
+#                        altrimenti docs/decisions)
 #   nodeVersion        → versione di Node.js per il parser (default: 22.x)
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #
@@ -25,7 +29,11 @@ parameters:
 
   - name: docsDirectory
     type: string
-    default: 'docs/architecture'
+    default: ''
+
+  - name: decisionsDirectory
+    type: string
+    default: ''
 
   - name: nodeVersion
     type: string
@@ -45,11 +53,14 @@ steps:
         version: ${{ parameters.nodeVersion }}
 
   - task: PowerShell@2
-    displayName: 'Mermaid diagrams ${{ parameters.docsDirectory }} (${{ parameters.mode }})'
+    displayName: 'Mermaid diagrams (${{ parameters.mode }})'
     inputs:
       filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Test-MermaidDiagrams.ps1'
       workingDirectory: '$(Build.SourcesDirectory)'
       pwsh: true
     env:
       GATE_MODE: ${{ parameters.mode }}
-      DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
+      ${{ if ne(parameters.docsDirectory, '') }}:
+        DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
+      ${{ if ne(parameters.decisionsDirectory, '') }}:
+        DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}

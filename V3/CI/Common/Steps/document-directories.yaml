@@ -1,0 +1,33 @@
+# ── CI Step: Document directories ─────────────────────────────────────────────
+#
+# Dichiara le cartelle del documento e delle sue decisioni per gli step che seguono nel job:
+# DOCS_DIRECTORY e DECISIONS_DIRECTORY. Gli step che il consumer inietta, come c4-verify.yaml e
+# mermaid-verify.yaml, le leggono da qui e il consumer non le ripete.
+#
+# Riusato da:
+#   CI/Agnostic/quality-arc42.yaml
+#   CI/Agnostic/quality-docs.yaml
+#
+# Parametri
+# ─────────
+#   docsDirectory      → cartella delle sezioni del documento (default: docs/architecture)
+#   decisionsDirectory → cartella degli ADR (default: docs/decisions)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: docsDirectory
+    type: string
+    default: 'docs/architecture'
+
+  - name: decisionsDirectory
+    type: string
+    default: 'docs/decisions'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - pwsh: |
+      Write-Host "##vso[task.setvariable variable=DOCS_DIRECTORY]${{ parameters.docsDirectory }}"
+      Write-Host "##vso[task.setvariable variable=DECISIONS_DIRECTORY]${{ parameters.decisionsDirectory }}"
+    displayName: 'Document directories ${{ parameters.docsDirectory }}, ${{ parameters.decisionsDirectory }}'
