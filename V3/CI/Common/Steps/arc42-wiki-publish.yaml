@@ -1,0 +1,77 @@
+# ── CI Step: arc42 wiki publish ──────────────────────────────────────────────
+#
+# Pubblica un documento arc42 in una wiki git di Azure DevOps
+# (V3/CI/Scripts/Publish-Arc42Wiki.ps1): una pagina per sezione sotto wikiRoot, le decisioni
+# sotto la sezione 9, le viste C4 come immagini C4-PlantUML. Un commit solo nel repository
+# della wiki, che tocca soltanto wikiRoot, le sue immagini e la sua voce nell'ordine della radice.
+# PlantUML richiede Java e i font di sistema.
+#
+# Riusato da:
+#   CI/Agnostic/publish-arc42-wiki.yaml
+#
+# Parametri
+# ─────────
+#   language           → lingua del documento, es. 'IT' o 'EN' (V3/CI/Scripts/Languages) [REQUIRED]
+#   wikiDirectory      → checkout del repository della wiki [REQUIRED]
+#   wikiBranch         → ramo della wiki (default: wikiMaster, il ramo della wiki di progetto)
+#   wikiRoot           → pagina sotto cui nasce il documento (default: il nome dell'architettura
+#                        nella lingua del documento)
+#   docsDirectory      → cartella delle sezioni (default: docs/architecture)
+#   decisionsDirectory → cartella degli ADR (default: docs/decisions)
+#   sourcesDirectory   → checkout del repository del documento (default: $(Build.SourcesDirectory))
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: language
+    type: string
+
+  - name: wikiDirectory
+    type: string
+
+  - name: wikiBranch
+    type: string
+    default: 'wikiMaster'
+
+  - name: wikiRoot
+    type: string
+    default: ''
+
+  - name: docsDirectory
+    type: string
+    default: 'docs/architecture'
+
+  - name: decisionsDirectory
+    type: string
+    default: 'docs/decisions'
+
+  - name: sourcesDirectory
+    type: string
+    default: '$(Build.SourcesDirectory)'
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - template: ensure-java.yaml
+
+  - template: ensure-fonts.yaml
+
+  - task: PowerShell@2
+    displayName: 'Publish ${{ parameters.docsDirectory }} to the wiki'
+    inputs:
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Publish-Arc42Wiki.ps1'
+      workingDirectory: '${{ parameters.sourcesDirectory }}'
+      pwsh: true
+    env:
+      DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
+      DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}
+      DOCUMENT_LANGUAGE: ${{ parameters.language }}
+      WIKI_DIRECTORY: ${{ parameters.wikiDirectory }}
+      WIKI_ROOT: ${{ parameters.wikiRoot }}
+      WIKI_BRANCH: ${{ parameters.wikiBranch }}
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)

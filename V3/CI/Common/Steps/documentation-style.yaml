@@ -91,6 +91,8 @@ parameters:
 
 steps:
   - ${{ if ne(parameters.mode, 'off') }}:
+    - template: ensure-azure-cli.yaml
+
     - task: AzureCLI@2
       displayName: 'Documentation style ${{ parameters.docsDirectory }} (${{ parameters.mode }})'
       inputs:

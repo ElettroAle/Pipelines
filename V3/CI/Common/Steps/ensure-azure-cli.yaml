@@ -1,0 +1,31 @@
+# ── CI Step: Ensure Azure CLI ─────────────────────────────────────────────────
+#
+# Garantisce la Azure CLI che AzureCLI@2 richiede sull'agent. Un agent che la
+# ha gia' non installa nulla; un agent Linux che non la ha la installa con sudo
+# dal repository apt di Microsoft, una volta per macchina.
+#
+# Riusato da:
+#   CI/Common/Steps/documentation-style.yaml
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: Bash@3
+    displayName: 'Ensure Azure CLI (Linux)'
+    condition: ne(variables['Agent.OS'], 'Windows_NT')
+    inputs:
+      targetType: 'inline'
+      script: |
+        set -euo pipefail
+
+        if command -v az >/dev/null; then
+          echo "Azure CLI gia' presente: $(az version --query '"azure-cli"' -o tsv)"
+          exit 0
+        fi
+
+        if ! sudo -n true 2>/dev/null; then
+          echo "##vso[task.logissue type=error]L'agent non ha la Azure CLI e il suo utente non ha sudo: serve azure-cli."
+          exit 1
+        fi
+
+        curl -fsSL https://aka.ms/InstallAzureCLIDeb | sudo -n bash

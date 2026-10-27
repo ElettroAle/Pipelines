@@ -123,7 +123,7 @@ Ogni test crea un repository git reale con un **bare repo locale come fake remot
 #### `GitCliff.Tests.ps1`
 
 Il binario scaricato risponde con la versione fissata e non dipende da runtime assenti sugli agent: su Windows nessun
-`VCRUNTIME*.dll`/`MSVCP*.dll` importato (i runner GitHub hanno il Visual C++ Redistributable, gli agent no), su Linux
+`VCRUNTIME*.dll`/`MSVCP*.dll` importato (i runner GitHub hanno il Visual C++ Redistributable, un agent qualunque puo' non averlo), su Linux
 nessun loader dinamico `ld-linux`. La cache è separata per archivio.
 
 #### `New-ReleaseNotes.Tests.ps1`

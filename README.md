@@ -353,7 +353,9 @@ Giudizio dello stile (`styleMode`, `CI/Scripts/Test-DocumentationStyle.ps1`):
 ### Pubblicazione nella wiki (publish-arc42-wiki)
 
 Dopo il merge su `main` il documento arc42 si pubblica nella wiki di progetto di Azure DevOps
-(`CI/Agnostic/publish-arc42-wiki.yaml`, `CI/Scripts/Publish-Arc42Wiki.ps1`):
+(`CI/Agnostic/publish-arc42-wiki.yaml`, lo step `CI/Common/Steps/arc42-wiki-publish.yaml` e lo script
+`CI/Scripts/Publish-Arc42Wiki.ps1`). Lo step prepara Java e i font di sistema con `ensure-java.yaml` ed
+`ensure-fonts.yaml`:
 
 - Ogni sezione diventa una pagina sotto `wikiRoot` (default il nome della lingua, `Architettura` o
   `Architecture`), nell'ordine dei numeri; le decisioni diventano sottopagine della sezione 9, quella
@@ -366,7 +368,7 @@ Dopo il merge su `main` il documento arc42 si pubblica nella wiki di progetto di
 - I blocchi ` ```mermaid ` diventano la sintassi della wiki `::: mermaid`. I link alle sezioni e alle
   decisioni portano alle pagine; gli altri link relativi al file nel repository.
 - Un commit solo nel repository git della wiki tocca soltanto `wikiRoot`, le sue immagini e la sua voce in
-  testa all'ordine della radice: le release note e le altre pagine restano come sono. Se la wiki cambia nel
+  testa all'ordine della radice: le altre pagine della wiki restano come sono. Se la wiki cambia nel
   frattempo, il push si riprova sopra il commit nuovo; se non cambia nulla, nessun commit.
 
 ```yaml

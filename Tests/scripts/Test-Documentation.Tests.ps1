@@ -79,7 +79,7 @@ Describe "Funzionalità: Controlli comuni sulla documentazione" {
         }
         @{
             sezione = 'Runtime View'; motivo = 'frase troppo lunga'
-            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/06_runtime_view.md' 'con il codice della sessione.' 'con il codice della sessione, che il BFF conserva per tutta la durata della conversazione e che rimanda all''API del Motore ogni volta che il cittadino scrive un messaggio nuovo o chiude la finestra.' }
+            Mutate  = { param($d) Edit-Docs $d 'docs/architecture/06_runtime_view.md' 'con il codice della sessione.' 'con il codice della sessione, che il BFF conserva per tutta la durata della conversazione e che rimanda all''API del Motore ogni volta che il utente scrive un messaggio nuovo o chiude la finestra.' }
         }
     ) {
         BeforeAll {

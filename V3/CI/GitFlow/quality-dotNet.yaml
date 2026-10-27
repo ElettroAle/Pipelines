@@ -110,8 +110,8 @@ stages:
       titleGateBranches: ${{ parameters.titleGateBranches }}
       checkoutPipelineTemplates: ${{ ne(parameters.scenarioCoverage, 'off') }}
       buildAndTestSteps:
-        # SonarCloud Prepare invoca dotnet direttamente: su agent senza SDK di sistema
-        # (self-hosted) va installato prima, non nello step dotnet-build successivo.
+        # SonarCloud Prepare invoca dotnet direttamente: su un agent senza SDK di sistema
+        # va installato prima, non nello step dotnet-build successivo.
         - task: UseDotNet@2
           displayName: 'Install .NET SDK'
           inputs:

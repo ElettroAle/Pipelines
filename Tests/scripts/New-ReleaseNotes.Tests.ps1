@@ -216,7 +216,7 @@ Describe "Funzionalità: Note di rilascio del repository AI" {
 
         function Invoke-ProdPublish([string]$RepoDir) {
             $env:SYSTEM_COLLECTIONURI = "http://localhost:$port/"
-            $env:SYSTEM_TEAMPROJECT = 'Aidea.Dxp'
+            $env:SYSTEM_TEAMPROJECT = 'Progetto'
             $env:SYSTEM_ACCESSTOKEN = 'token-di-test'
             try {
                 return Invoke-ReleaseNotes -RepoDir $RepoDir -Tag "1.4.0" -WikiPagePath "/Release notes/AI" -SourceBranch "refs/heads/main"

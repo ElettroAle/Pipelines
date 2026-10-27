@@ -5,9 +5,9 @@
     Test Pester per V3/CI/Scripts/GitCliff.ps1
 
 .DESCRIPTION
-    I runner GitHub hanno runtime che gli agent self-hosted non hanno (Visual C++
+    I runner GitHub hanno runtime che un agent qualunque puo' non avere (Visual C++
     Redistributable su Windows): eseguire il binario non basta a dimostrare che parta
-    anche sugli agent, quindi si verificano le sue dipendenze nel file stesso.
+    ovunque, quindi si verificano le sue dipendenze nel file stesso.
 #>
 
 BeforeDiscovery {
