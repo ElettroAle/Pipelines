@@ -14,7 +14,7 @@
 # Parametri
 # ─────────
 #   mode               → 'off' (default) | 'warn' (segnala senza bloccare) | 'enforce' |
-#                        'fix' (corregge in una PR, poi blocca come enforce se resta un rilievo)
+#                        'fix' (corregge in una PR, poi blocca come enforce se restano violazioni oltre maxFindings)
 #   docsDirectory      → cartella delle sezioni del documento (default: docs/architecture)
 #   guide              → guida di stile del repository, istruzione del modello (default: docs/STYLE.md)
 #   glossary           → file del glossario in docsDirectory, contesto del giudizio e non giudicato (default: nessuno)
@@ -24,6 +24,9 @@
 #   gulpease, maxWords, abbreviations, decisionsDirectory → soglie dei controlli oggettivi, rieseguiti sul
 #                        testo corretto prima di pubblicarlo (come in documentation-verify.yaml)
 #   maxRounds          → giri massimi di giudizio in modalita' fix, l'ultimo solo di verifica (default: 4)
+#   maxFindings        → violazioni che restano come avvisi senza bloccare: 0 blocca ogni violazione, -1 nessun
+#                        limite (default: 0). Oltre la soglia, in modalita' fix le correzioni si pubblicano
+#                        comunque e il giudizio dopo rilegge solo le unita' rimaste in sospeso
 #   seed               → seme del modello, per giudizi ripetibili (default: 1)
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #
@@ -79,6 +82,10 @@ parameters:
     type: number
     default: 4
 
+  - name: maxFindings
+    type: number
+    default: 0
+
   - name: seed
     type: number
     default: 1
@@ -105,6 +112,7 @@ steps:
         GATE_MODE: ${{ replace(parameters.mode, 'fix', 'enforce') }}
         STYLE_FIX: ${{ eq(parameters.mode, 'fix') }}
         STYLE_MAX_ROUNDS: ${{ parameters.maxRounds }}
+        STYLE_MAX_FINDINGS: ${{ parameters.maxFindings }}
         STYLE_JUDGE_SEED: ${{ parameters.seed }}
         DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
         STYLE_GUIDE: ${{ parameters.guide }}

@@ -356,7 +356,17 @@ Giudizio dello stile (`styleMode`, `CI/Scripts/Test-DocumentationStyle.ps1`):
 
 - Il modello riceve come istruzioni la guida `styleGuide` e giudica una sezione per richiesta, con il
   glossario `docsGlossary` come contesto; il glossario non si giudica. In una PR si giudicano le sezioni
-  cambiate, tutte se cambia la guida.
+  cambiate, tutte se cambia la guida. Delle decisioni (`decisionsDirectory`) si giudicano solo le righe
+  che la PR aggiunge o cambia, anche quando cambia la guida: il corpus già integrato non si rigiudica, e
+  fuori da una PR le decisioni non si giudicano. Le correzioni di una decisione passano anche dalla verifica
+  del corpus prima di tornare sul ramo.
+- `styleMaxFindings` è la soglia delle violazioni tollerate: fino alla soglia restano come avvisi e la
+  verifica passa con esito parziale (`SucceededWithIssues`); oltre la soglia la verifica fallisce e le nomina
+  tutte. `0` (default) blocca ogni violazione, `-1` non pone limiti. In modalità `fix` contano le violazioni
+  rimaste dopo `maxRounds` giri senza una correzione applicabile.
+- In modalità `fix` le correzioni fatte tornano sul ramo della PR anche quando la verifica fallisce. Il commit
+  porta `Style-Judge: clean` e, oltre la soglia, una riga `Style-Judge-Pending` per ogni unità rimasta: il
+  giudizio dopo rilegge quelle unità e le righe cambiate da quel commit, non il resto del documento.
 - Risposta in formato fissato (JSON schema): per ogni violazione il titolo della regola, la frase e il
   motivo. Il rilievo è `<sezione>: <regola> («frase»: motivo)`.
 - Accesso con token Entra ID della service connection (task `AzureCLI@2`), senza chiavi. Su 429 o 5xx

@@ -30,6 +30,8 @@
 #   styleServiceConnection → service connection Azure per il modello [REQUIRED se styleMode non e' off]
 #   styleEndpoint      → endpoint Azure OpenAI [REQUIRED se styleMode non e' off]
 #   styleModel         → nome del deployment del modello [REQUIRED se styleMode non e' off]
+#   styleMaxFindings   → violazioni dello stile tollerate come avvisi senza bloccare: 0 blocca ogni violazione,
+#                        -1 nessun limite (default: 0)
 #   pool               → pool del job (default: hosted ubuntu-latest, richiesto da Gitleaks via docker)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -100,6 +102,10 @@ parameters:
     type: string
     default: ''
 
+  - name: styleMaxFindings
+    type: number
+    default: 0
+
   - name: pool
     type: object
     default:
@@ -147,6 +153,7 @@ stages:
             serviceConnection: ${{ parameters.styleServiceConnection }}
             endpoint: ${{ parameters.styleEndpoint }}
             model: ${{ parameters.styleModel }}
+            maxFindings: ${{ parameters.styleMaxFindings }}
             gulpease: ${{ parameters.docsGulpease }}
             maxWords: ${{ parameters.docsMaxWords }}
             abbreviations: ${{ parameters.docsAbbreviations }}
