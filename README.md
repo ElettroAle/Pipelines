@@ -222,8 +222,12 @@ extends:
   file della cartella (README, template) non si verificano.
 - **Sostituzione.** La nuova decisione dichiara `supersedes: <id>`; la sostituita passa a
   `status: superseded` con `superseded-by: <id>`. Ognuna deve nominare l'altra.
-- **Immutabilità.** Sulle PR un ADR `accepted` sul ramo di destinazione non si modifica né si
-  elimina: cambiano solo `status` e `superseded-by`.
+- **Immutabilità e versioni.** Sulle PR un ADR `accepted` sul ramo di destinazione non si elimina e il
+  suo esito (`## Esito della decisione` in italiano, `## Decision Outcome` in inglese) non cambia: una
+  scelta diversa è una decisione nuova che lo sostituisce. Il resto cambia solo con una versione nuova:
+  `version` nel frontmatter (un intero, 1 se manca) cresce e la sezione `## Versioni` (`## Versions` in
+  inglese) ha la voce della versione, un elemento di lista che comincia con il suo numero
+  (`- 2: diagramma del codice`). `status` e `superseded-by` cambiano senza versione.
 - **Requisiti.** Il repo dichiara il repository resource con alias `infrastructure`; pool Linux
   (Gitleaks gira in docker).
 
@@ -446,7 +450,7 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | `CI/Scripts/Set-Versioning.ps1` | Calcola la versione con `git cliff --bumped-version`: tag Git su staging/main, prerelease `x.y.z-dev.<BuildId>` senza tag altrove; setta `currentTag`, `assemblyVersion`, `gitHash`, `computedArtifactName`; usa la versione come build number del run e marca con il tag `release` le publish di rilascio |
 | `CI/Scripts/New-ReleaseNotes.ps1` | Release notes dal tag del rilascio precedente sullo stesso ramo, ogni voce con link al commit, alla PR che lo ha integrato e ai work item della PR: summary della run e, su main, pagina wiki |
 | `CI/Scripts/Test-PublishedArtifact.ps1` | Prima dell'upload dell'artifact negli orchestratori GitFlow e TrunkFlow: se la run lo ha già pubblicato (rerun dello stage) setta `artifactAlreadyPublished` e l'upload si salta; se la verifica non riesce l'upload procede |
-| `CI/Scripts/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, sostituzioni reciproche, ADR `accepted` non modificati rispetto al ramo di destinazione della PR |
+| `CI/Scripts/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, versione intera, sostituzioni reciproche, ADR `accepted` con l'esito invariato e cambiati solo con una versione nuova rispetto al ramo di destinazione della PR |
 | `CI/Scripts/Test-Arc42Document.ps1` | Struttura di un documento arc42 (`arc42-verify.yaml`): un file per sezione con nome e titolo del template ufficiale; release, URL e SHA-256 per lingua fissati nello script |
 | `CI/Scripts/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, marcatori di vista nelle sezioni |
 | `CI/Scripts/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |
