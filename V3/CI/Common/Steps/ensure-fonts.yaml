@@ -1,9 +1,9 @@
 # ── CI Step: Ensure fonts ─────────────────────────────────────────────────────
 #
-# Garantisce i font di sistema con cui Java misura e disegna il testo: senza
-# fontconfig PlantUML si ferma con "InternalError ... FontManagerFactory". Gli
-# agent hosted li hanno gia'; un agent Linux self-hosted da immagine server no,
-# e li installa con sudo la prima run di ogni macchina.
+# Garantisce i font di sistema con cui Java misura e disegna il testo, per
+# PlantUML: senza fontconfig si ferma con "InternalError ... FontManagerFactory".
+# Un agent che li ha gia' non installa nulla; uno che non li ha li installa con
+# sudo, una volta per macchina.
 #
 # Riusato da:
 #   CI/Agnostic/publish-arc42-wiki.yaml
@@ -25,7 +25,7 @@ steps:
         fi
 
         if ! sudo -n true 2>/dev/null; then
-          echo "##vso[task.logissue type=error]L'agent non ha font di sistema e il suo utente non ha sudo: installare fontconfig e fonts-dejavu-core sull'immagine dell'agent."
+          echo "##vso[task.logissue type=error]L'agent non ha font di sistema e il suo utente non ha sudo: servono fontconfig e fonts-dejavu-core."
           exit 1
         fi
 
