@@ -23,6 +23,7 @@ Tests/
 │   ├── Test-Arc42Document.Tests.ps1
 │   ├── Test-C4Model.Tests.ps1
 │   ├── Test-MermaidDiagrams.Tests.ps1
+│   ├── Test-DiagramFlows.Tests.ps1
 │   ├── Test-Documentation.Tests.ps1
 │   ├── Test-DocumentationStyle.Tests.ps1
 │   ├── MarkdownText.Tests.ps1
@@ -187,6 +188,15 @@ Richiede Node.js; il parser Mermaid si installa alla prima esecuzione.
 |---|---|
 | Verifica dei diagrammi Mermaid | Diagrammi validi; diagramma non valido con sezione, file e riga; diagramma non valido in una decisione; cartella delle decisioni dichiarata; documento senza decisioni |
 | Strumenti e modalità | Senza Node.js la verifica fallisce nominando il controllo non eseguito; `off` |
+
+#### `Test-DiagramFlows.Tests.ps1`
+
+Richiede Java 17 o successivo e Node.js, come `Test-C4Model.Tests.ps1` e `Test-MermaidDiagrams.Tests.ps1`.
+
+| Suite | Scenario testato |
+|---|---|
+| Flussi coerenti con la struttura | Flussi coerenti; partecipante fuori dal modello C4, container applicativo al posto dei suoi componenti, chiamata senza relazione; risposte e chiamate a sé non controllate; decisione senza flusso, flusso senza diagramma di sequenza, partecipante fuori dal diagramma delle classi; diagramma degli stati in più; decisione senza struttura |
+| Partecipanti, decisioni e strumenti | Persone e container senza componenti ammessi; due istanze dello stesso componente; nome ambiguo; modello mancante; decisione chiusa e modello delle decisioni ignorati; parti nella lingua del documento; diagramma non valido lasciato a `mermaid-verify`; senza Node.js; `off` |
 
 #### `Test-Documentation.Tests.ps1`
 

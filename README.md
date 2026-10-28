@@ -244,6 +244,7 @@ parametri di formato e senza condizioni sul formato.
 | `arc42-verify.yaml` | `Test-Arc42Document.ps1` | un file per sezione con nome e titolo del template ufficiale | arc42 |
 | `c4-verify.yaml` | `Test-C4Model.ps1` | modello Structurizr valido e completo, viste mostrate nelle sezioni | C4 |
 | `mermaid-verify.yaml` | `Test-MermaidDiagrams.ps1` | diagrammi Mermaid validi, nel documento e nelle decisioni | Mermaid |
+| `flows-verify.yaml` | `Test-DiagramFlows.ps1` | flussi fatti degli elementi del modello C4 e delle classi delle decisioni | C4, Mermaid |
 | `documentation-verify.yaml` | `Test-Documentation.ps1` | rimandi esistenti, soglie numeriche di leggibilità | nessun formato |
 | `documentation-style.yaml` | `Test-DocumentationStyle.ps1` | giudizio dello stile con la guida del repository | nessun formato |
 
@@ -263,12 +264,13 @@ nuova è un file nuovo in `Languages/`, senza toccare gli script.
 **Cartelle del documento.** `docsDirectory` e `decisionsDirectory` si dichiarano una volta sola, nel
 template d'ingresso: lo step `document-directories.yaml` le mette in `DOCS_DIRECTORY` e
 `DECISIONS_DIRECTORY` per tutto il job, e gli step che il consumer inietta (`c4-verify.yaml`,
-`mermaid-verify.yaml`) le usano senza ripeterle. Un parametro passato allo step vince sulla dichiarazione.
+`mermaid-verify.yaml`, `flows-verify.yaml`) le usano senza ripeterle. Un parametro passato allo step vince sulla dichiarazione.
 
 | Convenzione | `IT` | `EN` |
 |---|---|---|
 | Marcatore di vista | `<!-- vista: <chiave> -->` | `<!-- view: <chiave> -->` |
 | Tag dei container con vista dei componenti | `Applicazione` | `Application` |
+| Parti della decisione con struttura e flusso nel codice | `Struttura nel codice`, `Flusso nel codice` | `Code structure`, `Code flow` |
 | Pagina della wiki (default di `wikiRoot`) | `Architettura` | `Architecture` |
 | Colonna dello stato nella wiki | `Stato` | `Status` |
 
@@ -299,6 +301,7 @@ extends:
     diagramSteps:
       - template: V3/CI/Common/Steps/c4-verify.yaml@infrastructure
       - template: V3/CI/Common/Steps/mermaid-verify.yaml@infrastructure
+      - template: V3/CI/Common/Steps/flows-verify.yaml@infrastructure
     styleMode: 'enforce'                # 'off' (default) | 'warn' | 'enforce'
     styleGuide: 'docs/STYLE.md'         # default
     styleServiceConnection: '<service connection con Cognitive Services OpenAI User>'
@@ -339,6 +342,25 @@ Diagrammi Mermaid (`mermaid-verify.yaml`, `CI/Scripts/Test-MermaidDiagrams.ps1`)
   titolo della decisione), file e riga. Una cartella che non esiste non ha diagrammi da verificare.
 - **Requisiti.** Node.js (dipendenze fissate da `CI/Scripts/mermaid/package-lock.json`); lo step lo
   prepara con `UseNode@1`. Senza Node.js la verifica fallisce nominando il controllo non eseguito.
+
+Flussi (`flows-verify.yaml`, `CI/Scripts/Test-DiagramFlows.ps1`):
+
+- **Sezioni.** Ogni partecipante di un diagramma di sequenza ha come nome mostrato
+  (`participant T as Esecuzione del turno`) il nome di un elemento del modello C4: un componente, un
+  container, una persona o un sistema. Un container con il tag delle applicazioni che ha componenti
+  compare con i suoi componenti, mai intero. Ogni chiamata fra due partecipanti diversi è una relazione
+  del modello nella stessa direzione, comprese quelle che Structurizr ricava dai livelli inferiori. Le
+  risposte (frecce tratteggiate) e le chiamate di un partecipante a sé non si controllano. L'errore
+  nomina la sezione, il file e la riga del diagramma, e il partecipante o la chiamata; un nome che il
+  modello dà a due elementi è ambiguo.
+- **Decisioni.** Una decisione `NNNN-titolo.md` aperta (non `superseded`, `deprecated` o `rejected`)
+  con la parte `Struttura nel codice` ha la parte `Flusso nel codice`, con almeno un diagramma di
+  sequenza; i suoi partecipanti sono classi del diagramma delle classi della parte della struttura.
+  Altri diagrammi del flusso, come quello degli stati, non si controllano.
+- Un diagramma non valido lo segnala `mermaid-verify.yaml`, il modello non valido `c4-verify.yaml`: qui
+  si salta il primo e si nomina il secondo.
+- **Requisiti.** Java 17 o successivo e Node.js, preparati dallo step come in `c4-verify.yaml` e
+  `mermaid-verify.yaml`.
 
 Controlli comuni (`documentation-verify.yaml`, `CI/Scripts/Test-Documentation.ps1`), su ogni file
 Markdown della cartella del documento:
@@ -497,6 +519,7 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | `CI/Scripts/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, nessun elemento tecnico nelle viste di contesto, marcatori di vista nelle sezioni |
 | `CI/Scripts/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |
 | `CI/Scripts/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni e delle decisioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
+| `CI/Scripts/Test-DiagramFlows.ps1` | Flussi coerenti con la struttura (`flows-verify.yaml`): partecipanti e chiamate dei diagrammi di sequenza contro il modello C4, flusso delle decisioni contro le classi della loro struttura |
 | `CI/Scripts/Test-Documentation.ps1` | Controlli comuni a ogni documento (`documentation-verify.yaml`): rimandi esistenti, soglie numeriche di leggibilità |
 | `CI/Scripts/Test-DocumentationStyle.ps1` | Giudizio dello stile di un documento (`documentation-style.yaml`) con un modello Azure OpenAI che riceve la guida di stile del repository come istruzioni |
 | `CI/Scripts/VerificationGate.ps1` | Parte comune degli script di verifica della documentazione: modalità `off`/`warn`/`enforce`, rilievi `##vso[task.logissue]`, codice di uscita |
@@ -504,7 +527,7 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | `CI/Scripts/Structurizr.ps1` | Scarica la Structurizr CLI (versione fissata, SHA-256 verificato), sceglie un Java 17 o successivo ed esporta il modello C4 in JSON e le viste in C4-PlantUML |
 | `CI/Scripts/PlantUml.ps1` | Scarica PlantUML (versione fissata, SHA-256 verificato) e disegna i diagrammi in PNG con una sola JVM, layout smetana |
 | `CI/Scripts/DocumentLanguage.ps1` | Carica da `CI/Scripts/Languages/<lingua>.psd1` le convenzioni della lingua del documento (`DOCUMENT_LANGUAGE`, default `IT`); una lingua senza file fa fallire lo script nominandola |
-| `CI/Scripts/Mermaid.ps1`, `CI/Scripts/mermaid/` | Installa con `npm ci` il parser Mermaid fissato dal lockfile e ricava, per ogni diagramma, il tipo o l'errore con la riga |
+| `CI/Scripts/Mermaid.ps1`, `CI/Scripts/mermaid/` | Installa con `npm ci` il parser Mermaid fissato dal lockfile e ricava, per ogni diagramma, il tipo (con partecipanti e chiamate di un diagramma di sequenza, classi di un diagramma delle classi) o l'errore con la riga |
 | `CI/Scripts/ScenarioCoverage.cs` | File-based app .NET 10: verifica che ogni scenario dei `.feature` sia stato eseguito e superato, leggendo i Cucumber Messages del runner BDD |
 
 ---

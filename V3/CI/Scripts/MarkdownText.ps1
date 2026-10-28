@@ -56,7 +56,8 @@ function New-Block([string]$Kind, [int]$Line, [string]$Raw) {
 }
 
 # Una sezione: titolo (H1), parti (H2), blocchi di testo con la riga iniziale, marcatori
-# di vista, diagrammi Mermaid con la riga del recinto di apertura, ancore dei titoli.
+# di vista, diagrammi Mermaid con la riga del recinto di apertura e la parte che li contiene,
+# ancore dei titoli.
 function ConvertFrom-MarkdownSection([string]$Content) {
     $section = [pscustomobject]@{ Title = $null; Parts = @(); Blocks = @(); Views = @(); Diagrams = @(); Anchors = @() }
     $current = $null
@@ -72,7 +73,7 @@ function ConvertFrom-MarkdownSection([string]$Content) {
         $lineNumber++
         if ($fence) {
             if ($line -match '^\s*```\s*$') {
-                if ($fence.Language -eq 'mermaid') { $section.Diagrams += [pscustomobject]@{ Line = $fence.Line; Text = ($fence.Lines -join "`n") } }
+                if ($fence.Language -eq 'mermaid') { $section.Diagrams += [pscustomobject]@{ Line = $fence.Line; Text = ($fence.Lines -join "`n"); Part = $fence.Part } }
                 $fence = $null
             }
             else { $fence.Lines += $line }
@@ -81,7 +82,7 @@ function ConvertFrom-MarkdownSection([string]$Content) {
 
         if ($line -match $FencePattern) {
             . $flush
-            $fence = @{ Language = $Matches[1].ToLowerInvariant(); Line = $lineNumber; Lines = @() }
+            $fence = @{ Language = $Matches[1].ToLowerInvariant(); Line = $lineNumber; Lines = @(); Part = @($section.Parts)[-1] }
         }
         elseif ($line -match $ViewMarkerPattern) {
             . $flush
