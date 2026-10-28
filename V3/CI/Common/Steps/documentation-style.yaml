@@ -27,7 +27,7 @@
 #   maxRounds          → giri massimi di giudizio in modalita' fix, l'ultimo solo di verifica (default: 4)
 #   maxFindings        → violazioni che restano come avvisi senza bloccare: 0 blocca ogni violazione, -1 nessun
 #                        limite (default: 0). Oltre la soglia, in modalita' fix le correzioni si pubblicano
-#                        comunque e il giudizio dopo rilegge solo le unita' rimaste in sospeso
+#                        comunque e il giudizio dopo verifica le unita' rimaste in sospeso, senza correggerle
 #   seed               → seme del modello, per giudizi ripetibili (default: 1)
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #

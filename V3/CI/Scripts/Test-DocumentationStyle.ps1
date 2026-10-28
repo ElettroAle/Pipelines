@@ -1,9 +1,8 @@
-# Giudica lo stile delle sezioni di un documento con un modello linguistico: la guida di stile del
-# repository e' l'istruzione del modello, e la pipeline non conosce nessuna regola. Un solo giudizio
-# copre tutte le regole: la sezione arriva in unita' numerate e la risposta ha una voce per regola.
-# In una PR si giudicano le righe cambiate dall'ultimo giudizio di ogni file, anche nelle decisioni; con
-# STYLE_FIX le correzioni del modello, validate e rigiudicate in giri limitati, tornano sul ramo della PR
-# un file alla volta.
+# Giudica lo stile delle sezioni e delle decisioni di un documento con un modello linguistico: la guida
+# di stile del repository e' l'istruzione del modello, e la pipeline non conosce nessuna regola. Ogni
+# tipo di documento ha il suo profilo: le regole che valgono per lui e i titoli che il suo modello impone.
+# In una PR si giudicano le righe cambiate dall'ultimo giudizio di ogni file; con STYLE_FIX le correzioni
+# del modello, validate e rigiudicate in giri limitati, tornano sul ramo della PR un file alla volta.
 
 . "$PSScriptRoot/VerificationGate.ps1"
 . "$PSScriptRoot/MarkdownText.ps1"
@@ -35,7 +34,11 @@ $PendingTextLength = 80
 $MaxAttempts = 3
 $RequestTimeoutSeconds = 600
 $WrapWidth = 110
-$LockedKinds = @('heading', 'code', 'marker', 'separator')
+$LockedKinds = @('code', 'marker', 'separator', 'frontmatter')
+# Una decisione sostituita, deprecata o respinta e' storia: non si giudica.
+$ClosedStatuses = @('superseded', 'deprecated', 'rejected')
+$ReferencePattern = '(?<!!)(\[[^\]]*\]\()([^)\s]+)(\))'
+$ExternalReferencePattern = '^[a-z][a-z0-9+.-]*:'
 $OpeningFencePattern = '^\s*(```|~~~)'
 $BlockStartPattern = '^\s*(```|~~~|<!--|#{1,6}\s|>|\||(?:[-*+]|\d+\.)\s)'
 # Una parola che, a inizio riga, trasformerebbe la riga in un titolo, un elenco, una citazione o una tabella.
@@ -49,7 +52,7 @@ $Instructions = @'
 Sei il revisore della documentazione di una piattaforma software. Applichi soltanto le regole della
 guida di stile che segue: nessun'altra regola, nessuna preferenza personale.
 
-La sezione arriva divisa in unità numerate. Giudichi solo le unità segnate con l'asterisco, per
+Il documento arriva diviso in unità numerate. Giudichi solo le unità segnate con l'asterisco, per
 esempio [4*]; le altre unità e il glossario sono contesto. Il compito è uno spoglio completo, in
 questa sola risposta: per ogni regola, nell'ordine della guida, esamini ogni unità segnata e riporti
 ogni violazione nella voce di quella regola. Una voce vuota dice che nessuna unità segnata viola la
@@ -63,10 +66,12 @@ lettera, il motivo in una frase e la correzione:
   vuoto. Una voce nuova del glossario si aggiunge dopo la voce del glossario che la precede in ordine
   alfabetico, nella stessa forma delle altre voci.
 - none: la violazione non si corregge cambiando il testo; find e text restano vuoti.
-Una correzione non tocca titoli, diagrammi, blocchi di codice e commenti, non va a capo, rispetta
-tutte le regole della guida. Una violazione in un titolo o in un diagramma si corregge nel testo che
-li spiega, oppure è none. Se il messaggio riporta correzioni scartate nel giro precedente, la nuova
-correzione di quell'unità evita il motivo dello scarto.
+Una correzione non tocca diagrammi, blocchi di codice e commenti, non va a capo, rispetta tutte le
+regole della guida. Una violazione in un titolo si corregge con replace sul titolo stesso: i rimandi a
+quel titolo si aggiornano da soli. {TITOLI} Una violazione in un diagramma si corregge nel
+testo che lo spiega, oppure è none. Una correzione deve togliere la violazione dall'unità che la
+contiene: un paragrafo aggiunto altrove non la toglie. Se il messaggio riporta correzioni scartate nel
+giro precedente, la nuova correzione di quell'unità evita il motivo dello scarto.
 
 GUIDA DI STILE
 
@@ -81,24 +86,89 @@ function Read-JudgeSetup {
     return @{ Guide = $guide; Rules = $rules }
 }
 
-# Le regole sono i titoli di terzo livello della parte «Regole» della guida, o di tutta la guida
-# se quella parte non c'e'; i titoli dentro gli esempi non contano.
+# Le regole sono i titoli di terzo livello delle parti delle regole della guida: comuni, delle sezioni,
+# delle decisioni. Una guida senza quelle parti ha solo regole comuni, tutti i suoi titoli di terzo
+# livello; i titoli dentro gli esempi non contano. Il testo di una regola arriva fino al titolo dopo.
 function Get-GuideRules([string]$Guide) {
     $headings = [Collections.Generic.List[object]]::new()
     $part = $null
+    $current = $null
     $fence = $null
     foreach ($line in ($Guide -split "`r?`n")) {
         if ($fence) {
             if ($line -match $fence) { $fence = $null }
+        }
+        elseif ($line -match $OpeningFencePattern) { $fence = '^\s*' + [regex]::Escape($Matches[1]) + '\s*$' }
+        elseif ($line -match '^##\s+(.+?)\s*$') { $part = $Matches[1]; $current = $null; continue }
+        elseif ($line -match '^###\s+(.+?)\s*$') {
+            $current = [pscustomobject]@{ Part = $part; Title = $Matches[1]; Lines = [Collections.Generic.List[string]]::new() }
+            $headings.Add($current)
             continue
         }
-        if ($line -match $OpeningFencePattern) { $fence = '^\s*' + [regex]::Escape($Matches[1]) + '\s*$' }
-        elseif ($line -match '^##\s+(.+?)\s*$') { $part = $Matches[1] }
-        elseif ($line -match '^###\s+(.+?)\s*$') { $headings.Add([pscustomobject]@{ Part = $part; Title = $Matches[1] }) }
+        if ($current) { $current.Lines.Add($line) }
     }
-    $inRules = @($headings | Where-Object Part -EQ 'Regole')
-    $selected = if ($inRules) { $inRules } else { $headings }
-    return @($selected | ForEach-Object Title)
+    $parts = $DocumentLanguage.StyleRuleParts
+    $inRules = @($headings | Where-Object { $_.Part -in $parts.Values })
+    $selected = if ($inRules) { $inRules } else { @($headings | ForEach-Object { $_.Part = $parts.Common; $_ }) }
+    return @($selected | ForEach-Object { [pscustomobject]@{ Part = $_.Part; Title = $_.Title; Text = ($_.Lines -join "`n").Trim() } })
+}
+
+function Select-ProfileRules($Rules, [string]$Kind) {
+    $parts = $DocumentLanguage.StyleRuleParts
+    $own = if ($Kind -eq 'decision') { $parts.Decisions } else { $parts.Sections }
+    return @($Rules | Where-Object { $_.Part -in @($parts.Common, $own) })
+}
+
+# Le regole di un tipo di documento, indipendenti dalla parte in cui stanno e dal loro ordine: spostare
+# una regola nella guida non la cambia.
+function Get-RulesKey($Rules) {
+    return (@($Rules | Sort-Object Title | ForEach-Object { "$($_.Title)`n$($_.Text)" }) -join "`n`n")
+}
+
+# Il modello non riceve le regole dell'altro tipo di documento, nemmeno con i loro esempi: altrimenti le
+# applicherebbe lo stesso.
+function Remove-GuidePart([string]$Guide, [string]$Part) {
+    $kept = [Collections.Generic.List[string]]::new()
+    $skipping = $false
+    $fence = $null
+    foreach ($line in ($Guide -split "`n")) {
+        if ($fence) {
+            if ($line -match $fence) { $fence = $null }
+        }
+        elseif ($line -match $OpeningFencePattern) { $fence = '^\s*' + [regex]::Escape($Matches[1]) + '\s*$' }
+        elseif ($line -match '^##\s+(.+?)\s*$') { $skipping = $Matches[1] -eq $Part }
+        if (-not $skipping) { $kept.Add($line) }
+    }
+    return $kept -join "`n"
+}
+
+# Il titolo di primo livello di una sezione e' quello del template arc42, e i titoli di secondo livello
+# di una decisione sono le parti del modello MADR: li verificano i controlli oggettivi, non si correggono.
+function New-DocumentProfile([string]$Kind, $Setup) {
+    $parts = $DocumentLanguage.StyleRuleParts
+    $decision = $Kind -eq 'decision'
+    $other = if ($decision) { $parts.Sections } else { $parts.Decisions }
+    $applicable = Select-ProfileRules $Setup.Rules $Kind
+    $rules = @($applicable | ForEach-Object Title)
+    $titles = if ($decision) { 'I titoli di secondo livello sono le parti del modello della decisione: non si correggono.' } else { 'Il titolo di primo livello è quello del modello del documento: non si corregge.' }
+    return @{
+        Kind               = $Kind
+        RulesKey           = Get-RulesKey $applicable
+        Label              = if ($decision) { 'DECISIONE DA GIUDICARE' } else { 'SEZIONE DA GIUDICARE' }
+        LockedHeadingLevel = if ($decision) { 2 } else { 1 }
+        WholeOnGuide       = -not $decision
+        NamedByFile        = $decision
+        Rules              = $rules
+        System             = $Instructions.Replace('{TITOLI}', $titles) + (Remove-GuidePart $Setup.Guide $other)
+        Schema             = New-FindingsSchema $rules
+    }
+}
+
+function Get-DecisionStatus([string]$Path) {
+    $raw = [IO.File]::ReadAllText($Path)
+    if ($raw -notmatch '^---\r?\n([\s\S]*?)\r?\n---') { return $null }
+    if ($Matches[1] -match '(?m)^status:\s*([\w-]+)') { return $Matches[1] }
+    return $null
 }
 
 function Get-SectionFiles([string]$Directory) {
@@ -162,6 +232,8 @@ function Get-ReviewScope {
         PullRequest = $true
         Source      = $source
         Base        = Get-ChangedLines @("origin/$targetBranch...HEAD")
+        MergeBase   = "$(git merge-base "origin/$targetBranch" HEAD)".Trim()
+        RulesAt     = @{}
         Judgements  = @(Get-Judgements "origin/$targetBranch..$source")
         Since       = @{}
         Guide       = ConvertTo-RepositoryPath (Resolve-Path $guidePath).Path
@@ -187,8 +259,9 @@ function Get-Judgements([string]$Range) {
     }
 }
 
-# Le decisioni non si rigiudicano tutte quando cambia la guida: per loro WholeOnGuide e' falso.
-function Get-FileScope($Scope, [string]$RelativePath, [bool]$WholeOnGuide) {
+# Un documento si rigiudica tutto solo se cambiano le regole del suo tipo dal suo ultimo giudizio, o
+# dall'inizio della PR. Le decisioni non si rigiudicano mai tutte: il loro profilo ha WholeOnGuide falso.
+function Get-FileScope($Scope, [string]$RelativePath, $Profile) {
     if (-not $Scope.PullRequest) { return @{ All = $true; Lines = $null; Pending = @() } }
     $judgement = $Scope.Judgements | Where-Object { $_.Clean -or $_.Done.Contains($RelativePath) } | Select-Object -First 1
     $lines = $Scope.Base
@@ -201,7 +274,19 @@ function Get-FileScope($Scope, [string]$RelativePath, [bool]$WholeOnGuide) {
         $lines = $Scope.Since[$judgement.Commit]
         if ($judgement.Pending.ContainsKey($RelativePath)) { $pending = @($judgement.Pending[$RelativePath]) }
     }
-    return @{ All = $WholeOnGuide -and $lines.ContainsKey($Scope.Guide); Lines = $lines[$RelativePath]; Pending = $pending }
+    $since = if ($judgement) { $judgement.Commit } else { $Scope.MergeBase }
+    $all = $Profile.WholeOnGuide -and $lines.ContainsKey($Scope.Guide) -and (Get-RulesKeyAt $Scope $since $Profile.Kind) -cne $Profile.RulesKey
+    return @{ All = $all; Lines = $lines[$RelativePath]; Pending = $pending }
+}
+
+function Get-RulesKeyAt($Scope, [string]$Commit, [string]$Kind) {
+    $key = "$Commit $Kind"
+    if (-not $Scope.RulesAt.ContainsKey($key)) {
+        $guide = (git show "${Commit}:./$($Scope.Guide)" 2>$null) -join "`n"
+        if ($LASTEXITCODE -ne 0) { $guide = ''; $global:LASTEXITCODE = 0 }
+        $Scope.RulesAt[$key] = Get-RulesKey (Select-ProfileRules (Get-GuideRules $guide) $Kind)
+    }
+    return $Scope.RulesAt[$key]
 }
 
 #endregion
@@ -209,7 +294,7 @@ function Get-FileScope($Scope, [string]$RelativePath, [bool]$WholeOnGuide) {
 #region Documento in unita'
 
 function New-Segment([string]$Kind, [string[]]$Lines) {
-    return [pscustomobject]@{ Kind = $Kind; Lines = $Lines; Locked = $Kind -in $LockedKinds; IsUnit = $Kind -ne 'blank'; Start = 0; Number = 0; Marked = $false }
+    return [pscustomobject]@{ Kind = $Kind; Lines = $Lines; Locked = $Kind -in $LockedKinds; IsUnit = $Kind -notin 'blank', 'frontmatter'; Start = 0; Number = 0; Marked = $false }
 }
 
 function Test-BlockStart([string]$Line) {
@@ -225,7 +310,12 @@ function ConvertTo-Segments([string[]]$Lines) {
         $line = $Lines[$i]
         $start = $i
         $i++
-        if ($line -match $OpeningFencePattern) {
+        if ($start -eq 0 -and $line -eq '---') {
+            while ($i -lt $Lines.Count -and $Lines[$i] -ne '---') { $i++ }
+            $i = [math]::Min($i + 1, $Lines.Count)
+            $kind = 'frontmatter'
+        }
+        elseif ($line -match $OpeningFencePattern) {
             $close = '^\s*' + [regex]::Escape($Matches[1]) + '\s*$'
             while ($i -lt $Lines.Count -and $Lines[$i] -notmatch $close) { $i++ }
             $i = [math]::Min($i + 1, $Lines.Count)
@@ -254,13 +344,15 @@ function ConvertTo-Segments([string[]]$Lines) {
     return , $segments
 }
 
-function Read-Document([string]$Path) {
+function Read-Document([string]$Path, [int]$LockedHeadingLevel = 0) {
     $raw = [IO.File]::ReadAllText($Path)
     $newline = if ($raw.Contains("`r`n")) { "`r`n" } else { "`n" }
     $trailing = $raw.EndsWith($newline)
     $body = if ($trailing) { $raw.Substring(0, $raw.Length - $newline.Length) } else { $raw }
     $lines = if ($body.Length) { $body -split [regex]::Escape($newline) } else { @() }
-    return [pscustomobject]@{ Path = $Path; Newline = $newline; Trailing = $trailing; Segments = (ConvertTo-Segments $lines); Changed = $false }
+    $segments = ConvertTo-Segments $lines
+    foreach ($heading in ($segments | Where-Object Kind -EQ 'heading')) { $heading.Locked = ($heading.Lines[0] -replace '^(#+).*', '$1').Length -eq $LockedHeadingLevel }
+    return [pscustomobject]@{ Path = $Path; Newline = $newline; Trailing = $trailing; Segments = $segments; Changed = $false }
 }
 
 function Save-Document($Document) {
@@ -287,7 +379,7 @@ function Get-Units($Document) {
 }
 
 function Get-UnitPrefix([string]$Kind, [string]$Text) {
-    $pattern = @{ list = '^\s*(?:[-*+]|\d+\.)\s+'; quote = '^\s*>\s?' }[$Kind]
+    $pattern = @{ list = '^\s*(?:[-*+]|\d+\.)\s+'; quote = '^\s*>\s?'; heading = '^#{1,6}\s+' }[$Kind]
     if (-not $pattern) { return '' }
     return [regex]::Match($Text, $pattern).Value
 }
@@ -318,7 +410,7 @@ function Format-Wrapped([string]$Body, [string]$FirstPrefix, [string]$Continuati
 }
 
 function Set-UnitText($Segment, [string]$Text) {
-    if ($Segment.Kind -eq 'row') {
+    if ($Segment.Kind -in 'row', 'heading') {
         $Segment.Lines = @($Text)
         return
     }
@@ -426,7 +518,7 @@ function Get-JudgeMessage($Document, $Context, [string]$FileName, [hashtable]$Re
         $parts.Add("GLOSSARIO DEL DOCUMENTO ($glossaryFileName)")
         $parts.Add((@(Get-Units $Context.Glossary | ForEach-Object { "[$($_.Number)] $(Get-UnitText $_)" }) -join "`n"))
     }
-    $parts.Add("SEZIONE DA GIUDICARE ($FileName)")
+    $parts.Add("$($Context.Label) ($FileName)")
     $parts.Add((@(Get-Units $Document | ForEach-Object { $mark = if ($_.Marked) { '*' } else { '' }; "[$($_.Number)$mark] $(Get-UnitText $_)" }) -join "`n"))
     if ($Rejections.Count) {
         $parts.Add('CORREZIONI SCARTATE NEL GIRO PRECEDENTE')
@@ -452,7 +544,8 @@ function Test-Correction([string]$Kind, [string]$Before, [string]$After) {
     if ($Kind -eq 'row' -and ($After -notmatch '^\s*\|' -or $After.Split('|').Count -ne $Before.Split('|').Count)) { return 'la correzione cambia le colonne della tabella' }
     if ($Kind -eq 'paragraph' -and (Test-BlockStart $After)) { return 'la correzione trasforma il paragrafo in un altro elemento' }
     if ($Kind -in 'list', 'quote' -and (Get-UnitPrefix $Kind $After) -ne (Get-UnitPrefix $Kind $Before)) { return 'la correzione cambia il segno dell''elenco o della citazione' }
-    if (-not $After.Trim()) { return 'la correzione svuota l''unità' }
+    if ($Kind -eq 'heading' -and (Get-UnitPrefix $Kind $After) -ne (Get-UnitPrefix $Kind $Before)) { return 'la correzione cambia il livello del titolo' }
+    if (-not $After.Substring((Get-UnitPrefix $Kind $After).Length).Trim()) { return 'la correzione svuota l''unità' }
     $longest = Get-LongestSentence $Kind $After
     if ($maximumWords -and $longest -gt $maximumWords) { return "la correzione porta una frase a $longest parole, massimo $maximumWords" }
     return $null
@@ -475,15 +568,99 @@ function Add-Paragraph($Document, $After, [string]$Text, [bool]$Marked) {
     $index = Get-InsertionIndex $Document $After
     $paragraph = New-Segment 'paragraph' (Format-Wrapped $Text '' '')
     $paragraph.Marked = $Marked
-    $Document.Segments.Insert($index + 1, (New-Segment 'blank' @('')))
+    $blank = New-Segment 'blank' @('')
+    $Document.Segments.Insert($index + 1, $blank)
     $Document.Segments.Insert($index + 2, $paragraph)
     $Document.Changed = $true
+    return @($blank, $paragraph)
 }
 
-function Invoke-Replacement($Target, $Finding, [hashtable]$Original) {
+# Un titolo corretto cambia la sua ancora: i rimandi a quel titolo, e le righe che lo riportano accanto a
+# un rimando al suo file (come l'indice delle decisioni), cambiano con lui. Restituisce come annullarlo.
+function Update-TitleReferences($Document, $Glossary, [string]$Before, [string]$After) {
+    $oldText = $Before -replace '^#{1,6}\s+', ''
+    $newText = $After -replace '^#{1,6}\s+', ''
+    $change = @{ File = [IO.Path]::GetFullPath($Document.Path); OldText = $oldText; NewText = $newText; OldAnchor = ConvertTo-HeadingAnchor $oldText; NewAnchor = ConvertTo-HeadingAnchor $newText }
+    $undo = [Collections.Generic.List[object]]::new()
+    $inMemory = @($Document, $Glossary | Where-Object { $_ })
+    foreach ($memory in $inMemory) {
+        foreach ($segment in ($memory.Segments | Where-Object { -not $_.Locked -and $_.Kind -ne 'heading' })) {
+            $lines = @($segment.Lines | ForEach-Object { Update-ReferenceLine $_ $memory.Path $change })
+            if (($lines -join "`n") -eq ($segment.Lines -join "`n")) { continue }
+            $undo.Add(@{ Segment = $segment; Lines = $segment.Lines; Document = $memory })
+            $segment.Lines = $lines
+            $memory.Changed = $true
+            if ($memory -ne $Document) { [void]$script:Propagated.Add((ConvertTo-RepositoryPath $memory.Path)) }
+        }
+    }
+    $memoryPaths = @($inMemory | ForEach-Object { [IO.Path]::GetFullPath($_.Path) })
+    foreach ($file in (Get-ChildItem -Path $docsDirectory, $decisionsDirectory -Filter '*.md' -File -Recurse -ErrorAction SilentlyContinue)) {
+        if ($file.FullName -in $memoryPaths) { continue }
+        $raw = [IO.File]::ReadAllText($file.FullName)
+        $updated = Update-ReferenceText $raw $file.FullName $change
+        if ($updated -ceq $raw) { continue }
+        $undo.Add(@{ Path = $file.FullName; Content = $raw })
+        [IO.File]::WriteAllText($file.FullName, $updated)
+        [void]$script:Propagated.Add((ConvertTo-RepositoryPath $file.FullName))
+    }
+    return , $undo
+}
+
+function Update-ReferenceText([string]$Raw, [string]$Path, $Change) {
+    $fence = $null
+    $lines = foreach ($line in ($Raw -split "`n")) {
+        if ($fence) { if ($line -match $fence) { $fence = $null }; $line; continue }
+        if ($line -match $OpeningFencePattern) { $fence = '^\s*' + [regex]::Escape($Matches[1]) + '\s*$'; $line; continue }
+        Update-ReferenceLine $line $Path $Change
+    }
+    return @($lines) -join "`n"
+}
+
+function Update-ReferenceLine([string]$Line, [string]$Path, $Change) {
+    $text = [Text.StringBuilder]::new()
+    $last = 0
+    $quotesTitle = $false
+    foreach ($link in [regex]::Matches($Line, $ReferencePattern)) {
+        $target, $anchor = $link.Groups[2].Value -split '#', 2
+        $replacement = $link.Value
+        if ($link.Groups[2].Value -notmatch $ExternalReferencePattern -and (Resolve-ReferenceTarget $Path $target) -eq $Change.File) {
+            if ($anchor -and [uri]::UnescapeDataString($anchor).ToLowerInvariant() -eq $Change.OldAnchor) {
+                $replacement = $link.Groups[1].Value + "$target#$($Change.NewAnchor)" + $link.Groups[3].Value
+                $quotesTitle = $true
+            }
+            elseif (-not $anchor -and $target) { $quotesTitle = $true }
+        }
+        [void]$text.Append($Line.Substring($last, $link.Index - $last)).Append($replacement)
+        $last = $link.Index + $link.Length
+    }
+    [void]$text.Append($Line.Substring($last))
+    $updated = $text.ToString()
+    if ($quotesTitle) { $updated = $updated.Replace($Change.OldText, $Change.NewText) }
+    return $updated
+}
+
+function Resolve-ReferenceTarget([string]$From, [string]$Target) {
+    if (-not $Target) { return [IO.Path]::GetFullPath($From) }
+    return [IO.Path]::GetFullPath((Join-Path (Split-Path $From) ([uri]::UnescapeDataString($Target))))
+}
+
+function Undo-Correction($Correction) {
+    foreach ($segment in @($Correction.Inserted)) { if ($segment) { [void]$Correction.Document.Segments.Remove($segment) } }
+    if ($Correction.Lines) { $Correction.Unit.Lines = $Correction.Lines }
+    $Correction.Document.Changed = $true
+    $references = @($Correction.References)
+    [array]::Reverse($references)
+    foreach ($reference in $references) {
+        if ($reference.Path) { [IO.File]::WriteAllText($reference.Path, $reference.Content); continue }
+        $reference.Segment.Lines = $reference.Lines
+        $reference.Document.Changed = $true
+    }
+}
+
+function Invoke-Replacement($Target, $Finding, [hashtable]$Original, $Glossary, $Applied) {
     $segment = $Target.Segment
     if ($Target.Glossary) { return 'la correzione cambia una voce del glossario' }
-    if ($segment.Locked) { return 'la correzione tocca un titolo, un diagramma, un blocco di codice o un commento' }
+    if ($segment.Locked) { return 'la correzione tocca un titolo imposto dal modello del documento, un diagramma, un blocco di codice o un commento' }
     $find = "$($Finding.Fix.find)"
     $before = Get-UnitText $segment
     if (-not $Original.ContainsKey($segment)) { $Original[$segment] = $before }
@@ -496,7 +673,10 @@ function Invoke-Replacement($Target, $Finding, [hashtable]$Original) {
     $after = $before.Replace($find, "$($Finding.Fix.text)")
     $reason = Test-Correction $segment.Kind $before $after
     if ($reason) { return $reason }
+    $correction = @{ Rule = $Finding.Rule; Unit = $segment; Document = $Target.Document; Lines = $segment.Lines; References = @() }
     Set-UnitText $segment $after
+    if ($segment.Kind -eq 'heading') { $correction.References = Update-TitleReferences $Target.Document $Glossary $before $after }
+    $Applied.Add($correction)
     $segment.Marked = $true
     $Target.Document.Changed = $true
     return $null
@@ -509,25 +689,33 @@ function Invoke-Corrections($Document, $Glossary, $Findings) {
     $glossaryTerms = [Collections.Generic.HashSet[string]]::new([string[]]@(if ($Glossary) { Get-Units $Glossary | ForEach-Object { Get-GlossaryTerm (Get-UnitText $_) } | Where-Object { $_ } }))
     $original = @{}
     $insertions = [Collections.Generic.List[object]]::new()
+    $applied = [Collections.Generic.List[object]]::new()
+    $rejected = [Collections.Generic.List[object]]::new()
 
     foreach ($finding in $Findings) {
         $target = if ("$($finding.Fix.kind)" -eq 'insert') { $targets[[int]$finding.Fix.unit] } else { $targets[$finding.Unit] }
         $kind = if ($target) { "$($finding.Fix.kind)" } else { 'missing' }
         $reason = switch ($kind) {
-            'replace' { Invoke-Replacement $target $finding $original }
+            'replace' { Invoke-Replacement $target $finding $original $Glossary $applied }
             'insert' {
                 $text = "$($finding.Fix.text)".Trim()
                 $term = Get-GlossaryTerm $text
                 if ($target.Glossary -and $term -and -not $glossaryTerms.Add($term)) { $null }
-                elseif (-not ($rejected = Test-Correction 'paragraph' '' $text)) { $insertions.Add(@{ Target = $target; Text = $text }); $null }
-                else { $rejected }
+                elseif (-not ($invalid = Test-Correction 'paragraph' '' $text)) { $insertions.Add(@{ Target = $target; Text = $text; Finding = $finding; Unit = $targets[$finding.Unit].Segment }); $null }
+                else { $invalid }
             }
-            'missing' { 'la correzione indica un''unità che la sezione non ha' }
+            'missing' { 'la correzione indica un''unità che il documento non ha' }
             default { 'il modello non propone una correzione' }
         }
-        if ($reason) { [pscustomobject]@{ Finding = $finding; Reason = $reason } }
+        if ($reason) { $rejected.Add([pscustomobject]@{ Finding = $finding; Reason = $reason }) }
     }
-    foreach ($insertion in $insertions) { Add-Paragraph $insertion.Target.Document $insertion.Target.Segment $insertion.Text (-not $insertion.Target.Glossary) }
+    foreach ($insertion in $insertions) {
+        $inserted = Add-Paragraph $insertion.Target.Document $insertion.Target.Segment $insertion.Text (-not $insertion.Target.Glossary)
+        if (-not $insertion.Unit) { continue }
+        $insertion.Unit.Marked = $true
+        $applied.Add(@{ Rule = $insertion.Finding.Rule; Unit = $insertion.Unit; Document = $insertion.Target.Document; Inserted = $inserted; References = @() })
+    }
+    return @{ Applied = $applied; Rejected = $rejected }
 }
 
 #endregion
@@ -545,15 +733,16 @@ function Get-PendingText($Segment) {
 
 # Ogni giro giudica le unita' segnate e, con la correzione attiva, applica le correzioni e segna
 # per il giro dopo le unita' corrette e quelle con una correzione scartata, che torna al modello
-# con il motivo. All'ultimo giro le correzioni valide si applicano senza un nuovo giudizio e restano
-# le violazioni senza una correzione applicabile.
+# con il motivo. Una correzione che il giro dopo trova ancora in violazione della stessa regola si
+# annulla. L'ultimo giro verifica soltanto: restano le violazioni che i giri non hanno tolto.
 function Invoke-SectionReview($File, $FileScope, $Context) {
-    $document = Read-Document $File.FullName
-    $title = (ConvertFrom-MarkdownSection ([IO.File]::ReadAllText($File.FullName))).Title
+    $document = Read-Document $File.FullName $Context.LockedHeadingLevel
+    $title = if ($Context.NamedByFile) { $File.BaseName } else { (ConvertFrom-MarkdownSection ([IO.File]::ReadAllText($File.FullName))).Title }
     if (-not $title) { $title = $File.Name }
     $relativePath = ConvertTo-RepositoryPath $File.FullName
     Set-InitialMarks $document $FileScope
     $rejections = @{}
+    $applied = @()
 
     for ($round = 1; $round -le $Context.Rounds; $round++) {
         $next = Update-Numbering $document 1
@@ -566,31 +755,42 @@ function Invoke-SectionReview($File, $FileScope, $Context) {
         $findings = @(Invoke-Judge $Context (Get-JudgeMessage $document $Context $File.Name $rejections) | Where-Object { $marked.Contains($_.Unit) })
         Write-Host "$($File.Name), giro ${round}: $($marked.Count) unità giudicate, $($findings.Count) rilievi"
         foreach ($unit in (Get-Units $document)) { $unit.Marked = $false }
-        if (-not $findings) { return }
-
-        if (-not $Context.Fix) {
-            $findings | ForEach-Object { $Context.Remaining.Add(@{ Issue = (New-FindingIssue $title $_ ''); Pending = $null }) }
-            return
-        }
         $previous = $rejections
         $rejections = @{}
-        $rejected = @(Invoke-Corrections $document $Context.Glossary $findings)
+        Undo-IneffectiveCorrections $applied $findings $rejections
         Save-Document $document
         if ($Context.Glossary) { Save-Document $Context.Glossary }
-        if ($round -eq $Context.Rounds) {
-            foreach ($rejection in $rejected) {
-                $unit = $units[$rejection.Finding.Unit]
-                $reasons = @(@($previous[$unit]) + $rejection.Reason | Where-Object { $_ }) -join '; '
-                $pending = if ($unit) { "$relativePath`t$(Get-PendingText $unit)" } else { $null }
-                $Context.Remaining.Add(@{ Issue = (New-FindingIssue $title $rejection.Finding $reasons); Pending = $pending })
+        if (-not $findings) { return }
+
+        if (-not $Context.Fix -or $round -eq $Context.Rounds) {
+            foreach ($finding in $findings) {
+                $unit = $units[$finding.Unit]
+                $reasons = @(@($previous[$unit]) + @($rejections[$unit]) | Where-Object { $_ }) -join '; '
+                $pending = if ($Context.Fix -and $unit) { "$relativePath`t$(Get-PendingText $unit)" } else { $null }
+                $Context.Remaining.Add(@{ Issue = (New-FindingIssue $title $finding $reasons); Pending = $pending })
             }
             return
         }
-        foreach ($rejection in $rejected) {
+        $corrections = Invoke-Corrections $document $Context.Glossary $findings
+        $applied = @($corrections.Applied)
+        Save-Document $document
+        if ($Context.Glossary) { Save-Document $Context.Glossary }
+        foreach ($rejection in $corrections.Rejected) {
             $unit = $units[$rejection.Finding.Unit]
+            if (-not $unit) { continue }
             $unit.Marked = $true
-            $rejections[$unit] = @($rejections[$unit]) + "$($rejection.Finding.Rule): $($rejection.Reason)" | Where-Object { $_ }
+            $rejections[$unit] = @(@($rejections[$unit]) + "$($rejection.Finding.Rule): $($rejection.Reason)" | Where-Object { $_ })
         }
+    }
+}
+
+# Una correzione resta solo se il giro dopo non trova piu' la stessa regola violata nella stessa unita'.
+function Undo-IneffectiveCorrections($Applied, $Findings, [hashtable]$Rejections) {
+    $ineffective = @($Applied | Where-Object { $correction = $_; @($Findings | Where-Object { $_.Rule -eq $correction.Rule -and $_.Unit -eq $correction.Unit.Number }).Count })
+    [array]::Reverse($ineffective)
+    foreach ($correction in $ineffective) {
+        Undo-Correction $correction
+        $Rejections[$correction.Unit] = @(@($Rejections[$correction.Unit]) + "$($correction.Rule): la correzione non toglie la violazione" | Where-Object { $_ })
     }
 }
 
@@ -712,18 +912,22 @@ function Publish-Judgement($Publisher, [string]$Subject, [string[]]$Trailers) {
 
 # Un file giudicato si pubblica subito, con le sue correzioni se superano i controlli oggettivi.
 # Se non li superano, le sue correzioni si scartano e il file resta da giudicare.
-function Publish-FileJudgement($Publisher, [string]$RelativePath, [string[]]$Pending) {
+# I file cambiati solo perche' riportano un titolo corretto contano come giudicati con il file del
+# titolo, tranne quelli ancora da giudicare in questa verifica.
+function Publish-FileJudgement($Publisher, [string]$RelativePath, [string[]]$Pending, [string[]]$Propagated) {
     $corrected = Show-Corrections
     if ($corrected) {
         $objective = Test-ObjectiveChecks $RelativePath
         if ($objective) {
             Undo-Corrections
+            $script:Propagated.Clear()
             return @{ Issue = $objective; Stop = $false }
         }
     }
     $pendingLines = @($Pending | Where-Object { $_ } | ForEach-Object { "${PendingTrailer}: $_" })
+    $doneLines = @(@($RelativePath) + @($Propagated) | Where-Object { $_ } | Select-Object -Unique | ForEach-Object { "${DoneTrailer}: $_" })
     $subject = if ($corrected) { "docs: apply the style judge corrections to $RelativePath" } else { "docs: record the style judgement of $RelativePath" }
-    $issue = Publish-Judgement $Publisher $subject (@("${DoneTrailer}: $RelativePath") + $pendingLines)
+    $issue = Publish-Judgement $Publisher $subject ($doneLines + $pendingLines)
     return @{ Issue = $issue; Stop = [bool]$issue }
 }
 
@@ -739,15 +943,18 @@ function Get-StyleIssues {
     $context = @{
         Fix       = $fix
         Rounds    = if ($fix) { $maxRounds } else { 1 }
-        Rules     = $setup.Rules
-        System    = $Instructions + $setup.Guide
-        Schema    = New-FindingsSchema $setup.Rules
         Glossary  = if ($glossaryFile) { Read-Document $glossaryFile.FullName } else { $null }
         Remaining = [Collections.Generic.List[object]]::new()
     }
+    $sectionProfile = New-DocumentProfile 'section' $setup
+    $decisionProfile = New-DocumentProfile 'decision' $setup
 
-    $reviews = @($sections | Where-Object { -not $glossaryFile -or $_.FullName -ne $glossaryFile.FullName } | ForEach-Object { @{ File = $_; WholeOnGuide = $true } })
-    if ($scope.PullRequest) { $reviews += @(Get-SectionFiles $decisionsDirectory | ForEach-Object { @{ File = $_; WholeOnGuide = $false } }) }
+    $reviews = @($sections | Where-Object { -not $glossaryFile -or $_.FullName -ne $glossaryFile.FullName } | ForEach-Object { @{ File = $_; Profile = $sectionProfile } })
+    if ($scope.PullRequest) {
+        $openDecisions = Get-SectionFiles $decisionsDirectory | Where-Object { (Get-DecisionStatus $_.FullName) -notin $ClosedStatuses }
+        $reviews += @($openDecisions | ForEach-Object { @{ File = $_; Profile = $decisionProfile } })
+    }
+    $queued = [Collections.Generic.HashSet[string]]::new([string[]]@($reviews | ForEach-Object { ConvertTo-RepositoryPath $_.File.FullName }))
 
     if ($fix) {
         $resumed = Resume-InterruptedJudgement $scope.Source
@@ -761,18 +968,34 @@ function Get-StyleIssues {
     try {
         foreach ($review in $reviews) {
             $relativePath = ConvertTo-RepositoryPath $review.File.FullName
+            [void]$queued.Remove($relativePath)
+            $touched = $script:Propagated.Remove($relativePath)
+            if (-not $review.Profile.Rules) { continue }
             $requests = $script:Usage.Requests
             $remaining = $context.Remaining.Count
-            try { Invoke-SectionReview $review.File (Get-FileScope $scope $relativePath $review.WholeOnGuide) $context }
+            $fileScope = Get-FileScope $scope $relativePath $review.Profile
+            $fileContext = $context.Clone()
+            foreach ($name in $review.Profile.Keys) { $fileContext[$name] = $review.Profile[$name] }
+            # Le unita' in sospeso hanno gia' avuto i loro giri: si verificano soltanto, perche' un'altra
+            # correzione porterebbe un altro push, un'altra build e di nuovo lo stesso rilievo.
+            $pendingOnly = $fix -and -not $fileScope.All -and -not $fileScope.Lines -and $fileScope.Pending
+            if ($pendingOnly) {
+                $fileContext.Fix = $false
+                $fileContext.Rounds = 1
+            }
+            try { Invoke-SectionReview $review.File $fileScope $fileContext }
             catch {
                 Undo-Corrections
                 $issues += New-Issue $JudgeScope 'verifica non eseguita' "$($review.File.Name): $($_.Exception.Message)"
                 $completed = $false
                 break
             }
-            if (-not $fix -or $script:Usage.Requests -eq $requests) { continue }
+            if (-not $fix -or ($script:Usage.Requests -eq $requests -and -not $touched)) { continue }
+            if ($pendingOnly -and $context.Remaining.Count -gt $remaining) { continue }
             $pending = @($context.Remaining | Select-Object -Skip $remaining | ForEach-Object { $_.Pending })
-            $published = Publish-FileJudgement $publisher $relativePath $pending
+            $propagated = @($script:Propagated | Where-Object { $_ -ne $relativePath -and -not $queued.Contains($_) })
+            $published = Publish-FileJudgement $publisher $relativePath $pending $propagated
+            $propagated | ForEach-Object { [void]$script:Propagated.Remove($_) }
             if ($published.Issue) { $issues += $published.Issue }
             if ($published.Stop) { $completed = $false; $publishable = $false; break }
         }
@@ -801,6 +1024,7 @@ function Write-ToleratedFindings([string[]]$Findings) {
 }
 
 $script:Tolerated = @()
+$script:Propagated = [Collections.Generic.HashSet[string]]::new()
 Invoke-Verification {
     $issues = @(Get-StyleIssues)
     if (-not $issues -and $script:Tolerated) { Write-ToleratedFindings $script:Tolerated }
