@@ -618,6 +618,25 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
         }
     }
 
+    Context "Scenario: il tratto da correggere è un nome contenuto in un nome più lungo" {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(@{ match = 'IGestore'; rule = $Filler; find = 'Gestore'; replacement = '`Gestore` (il gestore)'; until = '`Gestore` (il gestore)' })
+            $repository = New-OriginRepository { param($d) Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' 'usa Gestore e IGestore.' }
+            $res = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+        }
+
+        AfterAll { Remove-Repository $repository }
+
+        It "Allora la correzione cambia il nome come parola intera, non quello più lungo" {
+            Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike '*usa ?Gestore? (il gestore) e IGestore.*'
+        }
+
+        It "E la verifica passa" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output -join "`n")
+        }
+    }
+
     Context "Scenario: la correzione non gira all'infinito" {
         BeforeAll {
             Reset-Stub
