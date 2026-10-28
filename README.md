@@ -402,10 +402,13 @@ Giudizio dello stile (`styleMode`, `CI/Scripts/Test-DocumentationStyle.ps1`):
   che l'ultimo giro trova ancora.
 - In modalità `fix` ogni file giudicato ha il suo commit, con le correzioni che superano i controlli
   oggettivi, il trailer `Style-Judge-Done: <file>` e, oltre la soglia, una riga `Style-Judge-Pending` per ogni
-  unità rimasta. Il giudizio dopo rilegge di ogni file solo le righe cambiate dal suo commit e le unità in
-  sospeso, non il resto del documento. Un file con sole unità in sospeso si verifica con un giro, senza
-  correzioni: se le violazioni restano non si pubblica nulla, così il push non avvia un'altra build sullo
-  stesso rilievo; se non restano, un commit del file chiude le unità.
+  unità rimasta, con il suo rilievo (regola, testo, spiegazione) e le correzioni già scartate. Il giudizio
+  dopo rilegge di ogni file solo le righe cambiate dal suo commit e le unità in sospeso, non il resto del
+  documento. Un file con sole unità in sospeso riprende le correzioni con tutti i giri e riceve al primo giro
+  i rilievi salvati: rilanciare la build continua il lavoro dove si era fermato, senza ricominciare. Se una
+  correzione resta, il commit del file la pubblica con le unità ancora in sospeso; se nessuna resta e le
+  violazioni restano, non si pubblica nulla, così il push non avvia un'altra build sullo stesso rilievo; se le
+  violazioni spariscono, un commit del file chiude le unità.
 - I commit vanno sul ramo di appoggio `style-judge/<commit della PR>`, con `[skip ci]`: un push sul ramo della
   PR avvierebbe la build di validazione e annullerebbe quella in corso. A fine giudizio il ramo della PR li
   riceve tutti insieme, anche quando la verifica fallisce, e il ramo di appoggio si cancella. Se il job si

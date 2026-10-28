@@ -253,9 +253,9 @@ function Get-Judgements([string]$Range) {
         $judgement = @{ Commit = $lines[0]; Clean = $lines -contains $CleanTrailer; Done = [Collections.Generic.HashSet[string]]::new(); Pending = @{} }
         foreach ($line in $lines) {
             if ($line -match "^${DoneTrailer}: (.+)$") { [void]$judgement.Done.Add($Matches[1]) }
-            if ($line -notmatch "^${PendingTrailer}: ([^\t]+)\t(.+)$") { continue }
-            if (-not $judgement.Pending.ContainsKey($Matches[1])) { $judgement.Pending[$Matches[1]] = [Collections.Generic.List[string]]::new() }
-            $judgement.Pending[$Matches[1]].Add($Matches[2])
+            if ($line -notmatch "^${PendingTrailer}: ([^\t]+)\t([^\t]+)(?:\t(.+))?$") { continue }
+            if (-not $judgement.Pending.ContainsKey($Matches[1])) { $judgement.Pending[$Matches[1]] = [Collections.Generic.List[object]]::new() }
+            $judgement.Pending[$Matches[1]].Add(@{ Text = $Matches[2]; Finding = $Matches[3] })
         }
         if ($judgement.Clean -or $judgement.Done.Count) { $judgement }
     }
@@ -264,21 +264,25 @@ function Get-Judgements([string]$Range) {
 # Un documento si rigiudica tutto solo se cambiano le regole del suo tipo dal suo ultimo giudizio, o
 # dall'inizio della PR. Le decisioni non si rigiudicano mai tutte: il loro profilo ha WholeOnGuide falso.
 function Get-FileScope($Scope, [string]$RelativePath, $Profile) {
-    if (-not $Scope.PullRequest) { return @{ All = $true; Lines = $null; Pending = @() } }
+    if (-not $Scope.PullRequest) { return @{ All = $true; Lines = $null; Pending = @(); Findings = @{} } }
     $judgement = $Scope.Judgements | Where-Object { $_.Clean -or $_.Done.Contains($RelativePath) } | Select-Object -First 1
     $lines = $Scope.Base
     $pending = @()
+    $findings = @{}
     if ($judgement) {
         if (-not $Scope.Since.ContainsKey($judgement.Commit)) {
             Write-Host "Ultimo giudizio di ${RelativePath}: $($judgement.Commit)"
             $Scope.Since[$judgement.Commit] = Select-CommonLines $Scope.Base (Get-ChangedLines @($judgement.Commit, 'HEAD'))
         }
         $lines = $Scope.Since[$judgement.Commit]
-        if ($judgement.Pending.ContainsKey($RelativePath)) { $pending = @($judgement.Pending[$RelativePath]) }
+        if ($judgement.Pending.ContainsKey($RelativePath)) {
+            $pending = @($judgement.Pending[$RelativePath] | ForEach-Object { $_.Text })
+            $judgement.Pending[$RelativePath] | Where-Object { $_.Finding } | ForEach-Object { $findings[$_.Text] = $_.Finding }
+        }
     }
     $since = if ($judgement) { $judgement.Commit } else { $Scope.MergeBase }
     $all = $Profile.WholeOnGuide -and $lines.ContainsKey($Scope.Guide) -and (Get-RulesKeyAt $Scope $since $Profile.Kind) -cne $Profile.RulesKey
-    return @{ All = $all; Lines = $lines[$RelativePath]; Pending = $pending }
+    return @{ All = $all; Lines = $lines[$RelativePath]; Pending = $pending; Findings = $findings }
 }
 
 function Get-RulesKeyAt($Scope, [string]$Commit, [string]$Kind) {
@@ -523,7 +527,7 @@ function Get-JudgeMessage($Document, $Context, [string]$FileName, [hashtable]$Re
     $parts.Add("$($Context.Label) ($FileName)")
     $parts.Add((@(Get-Units $Document | ForEach-Object { $mark = if ($_.Marked) { '*' } else { '' }; "[$($_.Number)$mark] $(Get-UnitText $_)" }) -join "`n"))
     if ($Rejections.Count) {
-        $parts.Add('CORREZIONI SCARTATE NEL GIRO PRECEDENTE')
+        $parts.Add('RILIEVI E CORREZIONI SCARTATE NEI GIRI PRECEDENTI')
         $parts.Add((@($Rejections.Keys | Sort-Object Number | ForEach-Object { "[$($_.Number)] $($Rejections[$_] -join '; ')" }) -join "`n"))
     }
     return $parts -join "`n`n"
@@ -728,6 +732,25 @@ function New-FindingIssue([string]$Title, $Finding, [string]$Rejection) {
     return New-Issue $Title $Finding.Rule $detail
 }
 
+# Il rilievo rimasto viaggia nel commit del file con l'unita' in sospeso: il giudizio dopo lo
+# ritrova e il modello riparte da li', con le correzioni gia' scartate, invece di ricominciare.
+function Format-RememberedFinding($Finding, [string]$Reasons) {
+    $text = "$($Finding.Rule) («$($Finding.Excerpt)»): $($Finding.Explanation)"
+    if ($Reasons) { $text += "; correzioni scartate: $Reasons" }
+    return ($text -replace '\s+', ' ').Trim()
+}
+
+function Get-RememberedFindings($Document, $FileScope) {
+    $remembered = @{}
+    if (-not $FileScope.Findings -or -not $FileScope.Findings.Count) { return $remembered }
+    foreach ($unit in (Get-Units $Document)) {
+        $text = Get-PendingText $unit
+        $finding = $FileScope.Findings.Keys | Where-Object { $text.StartsWith($_) } | Select-Object -First 1
+        if ($finding) { $remembered[$unit] = @("rilievo rimasto: $($FileScope.Findings[$finding])") }
+    }
+    return $remembered
+}
+
 function Get-PendingText($Segment) {
     $text = (Get-UnitText $Segment) -replace '\s+', ' '
     return $text.Substring(0, [math]::Min($PendingTextLength, $text.Length)).Trim()
@@ -743,7 +766,7 @@ function Invoke-SectionReview($File, $FileScope, $Context) {
     if (-not $title) { $title = $File.Name }
     $relativePath = ConvertTo-RepositoryPath $File.FullName
     Set-InitialMarks $document $FileScope
-    $rejections = @{}
+    $rejections = Get-RememberedFindings $document $FileScope
     $applied = @()
 
     for ($round = 1; $round -le $Context.Rounds; $round++) {
@@ -768,7 +791,7 @@ function Invoke-SectionReview($File, $FileScope, $Context) {
             foreach ($finding in $findings) {
                 $unit = $units[$finding.Unit]
                 $reasons = @(@($previous[$unit]) + @($rejections[$unit]) | Where-Object { $_ }) -join '; '
-                $pending = if ($Context.Fix -and $unit) { "$relativePath`t$(Get-PendingText $unit)" } else { $null }
+                $pending = if ($Context.Fix -and $unit) { "$relativePath`t$(Get-PendingText $unit)`t$(Format-RememberedFinding $finding $reasons)" } else { $null }
                 $Context.Remaining.Add(@{ Issue = (New-FindingIssue $title $finding $reasons); Pending = $pending })
             }
             return
@@ -815,6 +838,13 @@ function Show-Corrections {
     git -c core.quotePath=false --no-pager diff -- $docsDirectory $decisionsDirectory | ForEach-Object { Write-Host $_ }
     Write-Host '##[endgroup]'
     return $true
+}
+
+function Test-Corrected {
+    git diff --quiet -- $docsDirectory $decisionsDirectory
+    $corrected = $LASTEXITCODE -ne 0
+    $global:LASTEXITCODE = 0
+    return $corrected
 }
 
 function Undo-Corrections {
@@ -978,13 +1008,10 @@ function Get-StyleIssues {
             $fileScope = Get-FileScope $scope $relativePath $review.Profile
             $fileContext = $context.Clone()
             foreach ($name in $review.Profile.Keys) { $fileContext[$name] = $review.Profile[$name] }
-            # Le unita' in sospeso hanno gia' avuto i loro giri: si verificano soltanto, perche' un'altra
-            # correzione porterebbe un altro push, un'altra build e di nuovo lo stesso rilievo.
+            # Le unita' in sospeso riprendono le correzioni con tutti i giri: rilanciare la build continua
+            # il lavoro. Se nessuna correzione resta e le violazioni restano, non si pubblica nulla: il push
+            # avvierebbe un'altra build sullo stesso rilievo.
             $pendingOnly = $fix -and -not $fileScope.All -and -not $fileScope.Lines -and $fileScope.Pending
-            if ($pendingOnly) {
-                $fileContext.Fix = $false
-                $fileContext.Rounds = 1
-            }
             try { Invoke-SectionReview $review.File $fileScope $fileContext }
             catch {
                 Undo-Corrections
@@ -993,7 +1020,7 @@ function Get-StyleIssues {
                 break
             }
             if (-not $fix -or ($script:Usage.Requests -eq $requests -and -not $touched)) { continue }
-            if ($pendingOnly -and $context.Remaining.Count -gt $remaining) { continue }
+            if ($pendingOnly -and $context.Remaining.Count -gt $remaining -and -not (Test-Corrected)) { continue }
             $pending = @($context.Remaining | Select-Object -Skip $remaining | ForEach-Object { $_.Pending })
             $propagated = @($script:Propagated | Where-Object { $_ -ne $relativePath -and -not $queued.Contains($_) })
             $published = Publish-FileJudgement $publisher $relativePath $pending $propagated

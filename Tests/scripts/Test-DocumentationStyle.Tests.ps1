@@ -609,7 +609,7 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
         It "Quando il modello giudica di nuovo l'unità, riceve il motivo dello scarto" {
             $user = Get-UserMessage $requests[1]
             $user | Should -BeLike '*`[3`*`] È importante sottolineare*'
-            $user | Should -BeLike "*CORREZIONI SCARTATE NEL GIRO PRECEDENTE*``[3``] ${Filler}: la correzione porta una frase a * parole, massimo 25*"
+            $user | Should -BeLike "*RILIEVI E CORREZIONI SCARTATE NEI GIRI PRECEDENTI*``[3``] ${Filler}: la correzione porta una frase a * parole, massimo 25*"
         }
 
         It "Allora la seconda correzione si applica e la verifica passa" {
@@ -698,7 +698,51 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
         }
     }
 
-    Context "Scenario: l'unità in sospeso viola ancora la regola" {
+    Context "Scenario: rilanciato, il giudizio riprende a correggere l'unità in sospeso" {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(@{ match = 'gira su Azure in Italia'; rule = $Filler; find = 'testo assente'; replacement = 'gira in Italia' })
+            $repository = New-OriginRepository { param($d) Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' 'gira su Azure in Italia.' }
+            Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment | Out-Null
+            Update-BuildToFeature $repository
+            Reset-Stub
+            Set-StubRules @(@{ match = 'gira su Azure in Italia'; rule = $Filler; replacement = 'gira in Italia' })
+            $again = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+            $requests = @(Get-StubRequests)
+        }
+
+        AfterAll { Remove-Repository $repository }
+
+        It "Dato il ramo della PR con il rilievo rimasto nel commit del file" {
+            $message = Invoke-Git -C $repository.Bare log -1 --format=%B 'feature^'
+            $message | Where-Object { $_ -like "Style-Judge-Pending: docs/architecture/02-vincoli.md`t*gira su Azure in Italia*`t$Filler (*correzioni scartate:*" } | Should -Not -BeNullOrEmpty
+        }
+
+        It "Allora il modello giudica solo la sezione con l'unità in sospeso" {
+            Get-JudgedFiles | Select-Object -Unique | Should -Be @('02-vincoli.md')
+        }
+
+        It "E al primo giro riceve il rilievo salvato, con le correzioni già scartate" {
+            Get-UserMessage $requests[0] | Should -BeLike "*RILIEVI E CORREZIONI SCARTATE NEI GIRI PRECEDENTI*rilievo rimasto: $Filler (*correzioni scartate:*"
+        }
+
+        It "E la correzione si applica e il giro dopo la conferma" {
+            @(Get-StubRequests).Count | Should -Be 2
+            Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike '*La piattaforma gira in Italia.*'
+        }
+
+        It "E il ramo della PR riceve il commit del file senza unità in sospeso" {
+            $message = Invoke-Git -C $repository.Bare log -1 --format=%B feature
+            $message | Should -Contain 'Style-Judge-Done: docs/architecture/02-vincoli.md'
+            $message | Where-Object { $_ -like 'Style-Judge-Pending:*' } | Should -BeNullOrEmpty
+        }
+
+        It "E la verifica passa" {
+            $again.ExitCode | Should -Be 0 -Because ($again.Output -join "`n")
+        }
+    }
+
+    Context "Scenario: rilanciato, nessuna correzione toglie la violazione in sospeso" {
         BeforeAll {
             Reset-Stub
             Set-StubRules @(@{ match = 'gira su Azure in Italia'; rule = $Filler; find = 'testo assente'; replacement = 'gira in Italia' })
@@ -707,18 +751,14 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
             Update-BuildToFeature $repository
             $judged = Get-FeatureTip $repository
             Reset-Stub
-            Set-StubRules @(@{ match = 'gira su Azure in Italia'; rule = $Filler; replacement = 'gira in Italia' })
+            Set-StubRules @(@{ match = 'gira su Azure in Italia'; rule = $Filler; find = 'testo assente'; replacement = 'gira in Italia' })
             $again = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
         }
 
         AfterAll { Remove-Repository $repository }
 
-        It "Allora il modello la verifica con un solo giro" {
-            @(Get-StubRequests).Count | Should -Be 1
-        }
-
-        It "E la correzione proposta non si applica" {
-            Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike '*gira su Azure in Italia.*'
+        It "Allora il modello prova a correggerla con tutti i giri" {
+            @(Get-StubRequests).Count | Should -Be 4
         }
 
         It "E il ramo della PR non cambia, perché un push avvierebbe un'altra build sullo stesso rilievo" {
