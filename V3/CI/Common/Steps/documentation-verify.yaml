@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Step: Documentation ────────────────────────────────────────────────────
 #
 # Controlli oggettivi che valgono per ogni documento (V3/CI/Scripts/Test-Documentation.ps1):

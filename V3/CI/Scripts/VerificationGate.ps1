@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Esito comune delle verifiche della documentazione: la modalita' off/warn/enforce letta da
 # GATE_MODE, un rilievo ##vso[task.logissue] per ogni problema e il codice di uscita.
 

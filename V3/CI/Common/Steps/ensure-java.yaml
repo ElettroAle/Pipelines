@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Step: Ensure Java ───────────────────────────────────────────────────────
 #
 # Garantisce un JDK e JAVA_HOME sull'agent per lo scanner Sonar in CLI mode

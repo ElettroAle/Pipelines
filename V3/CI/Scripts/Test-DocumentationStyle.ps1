@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Giudica lo stile delle sezioni e delle decisioni di un documento con un modello linguistico: la guida
 # di stile del repository e' l'istruzione del modello, e la pipeline non conosce nessuna regola. Ogni
 # tipo di documento ha il suo profilo: le regole che valgono per lui e i titoli che il suo modello impone.

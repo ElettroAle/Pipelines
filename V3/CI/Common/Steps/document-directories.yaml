@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Step: Document directories ─────────────────────────────────────────────
 #
 # Dichiara le cartelle del documento e delle sue decisioni per gli step che seguono nel job:

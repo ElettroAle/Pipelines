@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Un pipeline artifact non si sovrascrive: al rerun di uno stage che lo ha gia'
 # caricato, l'upload fallirebbe. Se la verifica non riesce si lascia tentare
 # l'upload, perche' saltarlo a torto lascerebbe la run senza artifact.

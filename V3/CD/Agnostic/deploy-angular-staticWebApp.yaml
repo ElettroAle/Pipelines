@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CD: Deploy Agnostic — Angular → Azure Static Web Apps ─────────────────────
 #
 # Entry point di CD Deploy per progetti Angular su Azure Static Web Apps.

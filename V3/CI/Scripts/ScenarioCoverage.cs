@@ -1,4 +1,5 @@
 #:package Gherkin@42.0.1
+// SPDX-License-Identifier: Apache-2.0
 
 // Verifies that every scenario declared in the .feature files on disk was executed and passed,
 // reading the Cucumber Messages (NDJSON) written by the BDD runner during the test run.

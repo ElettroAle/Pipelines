@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Step: Ensure fonts ─────────────────────────────────────────────────────
 #
 # Garantisce i font di sistema con cui Java misura e disegna il testo, per

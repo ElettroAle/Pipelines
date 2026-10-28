@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Pubblica un documento arc42 nella wiki di progetto di Azure DevOps. Le sezioni diventano pagine
 # sotto WIKI_ROOT, nell'ordine dei loro numeri, e le decisioni diventano sottopagine della sezione 9.
 # Il nome di default di WIKI_ROOT e la colonna dello stato seguono la lingua del documento.

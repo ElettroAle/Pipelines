@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Step: Gitleaks (Secret Scanning) ───────────────────────────────────────
 #
 # Esegue una scansione dei segreti nel codice sorgente tramite Gitleaks.

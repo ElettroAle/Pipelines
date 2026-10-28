@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Unica sorgente delle regole Conventional Commits: da qui derivano il bump della
 # versione (Set-Versioning.ps1), il gate sul titolo (Verify-SemVer.ps1) e le release
 # notes (New-ReleaseNotes.ps1). Il gate respinge i commit che cadono nel gruppo

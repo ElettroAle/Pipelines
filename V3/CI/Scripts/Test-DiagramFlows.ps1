@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Flussi coerenti con la struttura che lo stesso documento dichiara. Nelle sezioni ogni partecipante
 # di un diagramma di sequenza e' un elemento del modello C4, un container applicativo compare con i
 # suoi componenti e ogni chiamata fra due partecipanti diversi e' una relazione del modello. Una

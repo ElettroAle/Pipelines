@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Step: SonarCloud Prepare — .NET (MSBuild) ────────────────────────────
 #
 # Inizializza l'analisi SonarCloud in modalità MSBuild per progetti .NET.

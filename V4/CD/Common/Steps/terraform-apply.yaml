@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CD Step: Terraform Apply ──────────────────────────────────────────────────
 #
 # Applica il piano salvato da terraform-plan.yaml, così com'è: niente piano

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── Terraform Plan Pipeline ────────────────────────────────────────────────────
 #
 # Purpose: run terraform init + plan and publish the output as an artifact.

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Modello C4 di un documento, scritto in Structurizr DSL in model/workspace.dsl della cartella
 # del documento: modello valido, viste di contesto, dei container e di deployment, una vista dei
 # componenti per ogni container con il tag delle applicazioni, ogni vista mostrata in una sezione

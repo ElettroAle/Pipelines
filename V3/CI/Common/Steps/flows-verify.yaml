@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Step: Flussi ───────────────────────────────────────────────────────────
 #
 # Flussi coerenti con la struttura del documento (V3/CI/Scripts/Test-DiagramFlows.ps1):

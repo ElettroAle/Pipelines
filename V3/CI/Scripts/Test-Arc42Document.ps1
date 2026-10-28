@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Struttura di un documento arc42: un file per sezione, con il nome e il titolo di primo livello
 # del template ufficiale nella lingua del documento. Le sottosezioni e il testo li giudica il
 # modello con la guida di stile del repository (Test-DocumentationStyle.ps1).

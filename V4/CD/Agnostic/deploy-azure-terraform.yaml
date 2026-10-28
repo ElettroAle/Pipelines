@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CD: Deploy Agnostic — Terraform → Azure ───────────────────────────────────
 #
 # Entry point per una configurazione Terraform su Azure: il piano si mostra su

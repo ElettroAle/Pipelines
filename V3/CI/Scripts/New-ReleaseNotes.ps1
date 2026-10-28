@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Release notes della versione appena calcolata da Set-Versioning.ps1: sezione nel
 # summary della run e, se richiesto, pagina wiki. Un errore qui non ferma il publish:
 # la release e' gia' taggata.

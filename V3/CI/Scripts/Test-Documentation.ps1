@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Controlli oggettivi che valgono per ogni documento, qualunque sia il suo formato: rimandi a
 # file, ancore e decisioni esistenti e soglie numeriche di leggibilita'. La struttura la
 # verifica il modulo del formato, lo stile lo giudica Test-DocumentationStyle.ps1.

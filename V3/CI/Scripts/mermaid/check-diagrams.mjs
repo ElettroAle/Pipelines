@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Legge i diagrammi da un file JSON [{ id, text }] e scrive, per ognuno, l'esito
 // del parse: il tipo del diagramma con partecipanti e chiamate di un diagramma di sequenza
 // o le classi di un diagramma delle classi, oppure l'errore con la riga.

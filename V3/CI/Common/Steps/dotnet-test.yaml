@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Step: DotNet Test + Coverage ───────────────────────────────────────────
 #
 # Step template condiviso per l'esecuzione dei test e la pubblicazione

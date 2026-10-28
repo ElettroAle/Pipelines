@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI GitFlow: Quality DotNet ─────────────────────────────────────────────────
 #
 # Template di Quality gate per progetti .NET con governance GitFlow.

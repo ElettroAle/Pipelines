@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Common: Quality (agnostico) ────────────────────────────────────────────
 #
 # Orchestratore riusabile per la Quality gate, agnostico rispetto al workflow Git.

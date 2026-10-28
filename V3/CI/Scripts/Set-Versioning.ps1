@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ====================================================================
 # Script: Set-Versioning.ps1
 # Descrizione: Gestisce il versionamento semantico e i tag Git
