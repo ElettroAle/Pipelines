@@ -309,7 +309,8 @@ Il titolo di una decisione nomina la scelta, senza sigle.
             $previous[$name] = [Environment]::GetEnvironmentVariable($name)
             [Environment]::SetEnvironmentVariable($name, $variables[$name])
         }
-        try { $process = Start-Process (Get-Process -Id $PID).Path -ArgumentList @('-NoProfile', '-NonInteractive', '-File', $ScriptPath) -WorkingDirectory $Repository.Root -PassThru -WindowStyle Hidden }
+        $window = if ($IsWindows) { @{ WindowStyle = 'Hidden' } } else { @{} }
+        try { $process = Start-Process (Get-Process -Id $PID).Path -ArgumentList @('-NoProfile', '-NonInteractive', '-File', $ScriptPath) -WorkingDirectory $Repository.Root -PassThru @window }
         finally { foreach ($name in $previous.Keys) { [Environment]::SetEnvironmentVariable($name, $previous[$name]) } }
         $deadline = (Get-Date).AddMinutes(2)
         while ((Get-Date) -lt $deadline -and -not (git -C $Repository.Bare branch --list $Side)) { Start-Sleep -Milliseconds 200 }
