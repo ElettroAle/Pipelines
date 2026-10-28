@@ -208,7 +208,7 @@ Il titolo di una decisione nomina la scelta, senza sigle.
             $Root = Join-Path ([IO.Path]::GetTempPath()) "pester-style-$(New-Guid)"
             Write-Docs $Docs $Root
         }
-        $variables = @{ GATE_MODE = $Mode; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; TARGET_BRANCH = ''; SOURCE_BRANCH = ''; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_FIX = ''; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_DECISIONS_EXCLUDED_RULES = ''; STYLE_JUDGE_SEED = ''; READABILITY_MAX_WORDS = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = '' }
+        $variables = @{ GATE_MODE = $Mode; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; TARGET_BRANCH = ''; SOURCE_BRANCH = ''; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_FIX = ''; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_JUDGE_SEED = ''; READABILITY_MAX_WORDS = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = '' }
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
 
         Push-Location $Root
@@ -302,7 +302,7 @@ Il titolo di una decisione nomina la scelta, senza sigle.
 
     # Come un job che va in timeout: lo script si ferma a meta' giudizio e il processo si chiude da fuori.
     function Invoke-InterruptedStyleCheck($Repository, [hashtable]$Environment, [string]$Side) {
-        $variables = @{ GATE_MODE = 'enforce'; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_DECISIONS_EXCLUDED_RULES = ''; STYLE_JUDGE_SEED = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = '' }
+        $variables = @{ GATE_MODE = 'enforce'; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_JUDGE_SEED = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = '' }
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
         $previous = @{}
         foreach ($name in $variables.Keys) {
