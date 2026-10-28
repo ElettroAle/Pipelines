@@ -74,7 +74,10 @@ BeforeAll {
 
     # Lo stato della wiki come lo vede chi la apre: l'ultimo commit di wikiMaster nell'origin.
     function Get-WikiPage($Wiki, [string]$Path) {
-        $content = git -C $Wiki.Origin show "wikiMaster:$Path" 2>$null
+        $previousEncoding = [Console]::OutputEncoding
+        [Console]::OutputEncoding = [Text.UTF8Encoding]::new()
+        try { $content = git -C $Wiki.Origin show "wikiMaster:$Path" 2>$null }
+        finally { [Console]::OutputEncoding = $previousEncoding }
         if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0; return $null }
         return ($content -join "`n")
     }
