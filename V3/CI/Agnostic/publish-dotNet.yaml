@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Agnostic: Publish DotNet ────────────────────────────────────────────────
 #
 # Template di Build e Publish per progetti .NET, agnostico rispetto al workflow Git.

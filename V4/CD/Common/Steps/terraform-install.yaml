@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CD Step: Installazione di Terraform ───────────────────────────────────────
 #
 # Scarica la CLI di Terraform dalla release ufficiale HashiCorp e la mette nel

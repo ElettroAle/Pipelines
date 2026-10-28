@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Agnostic: Publish Angular ───────────────────────────────────────────────
 #
 # Template di Build e Publish per progetti Angular, agnostico rispetto al workflow Git.

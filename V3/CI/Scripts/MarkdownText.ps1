@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Lettura delle sezioni Markdown di un documento e misure di leggibilita' del loro testo,
 # per gli script di verifica della documentazione.
 

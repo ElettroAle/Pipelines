@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Common: Publish (agnostico) ────────────────────────────────────────────
 #
 # Orchestratore riusabile per Build e Publish, agnostico rispetto al workflow Git.

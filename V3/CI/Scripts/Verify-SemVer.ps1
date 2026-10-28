@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 . "$PSScriptRoot/GitCliff.ps1"
 
 $targetBranch = $env:TARGET_BRANCH -replace 'refs/heads/', ''

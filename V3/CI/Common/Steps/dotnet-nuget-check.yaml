@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Step: DotNet NuGet Vulnerability Check ─────────────────────────────────
 #
 # Step template condiviso per la verifica delle vulnerabilità NuGet in progetti .NET.

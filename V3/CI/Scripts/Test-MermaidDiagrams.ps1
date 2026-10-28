@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Diagrammi Mermaid delle sezioni di un documento e delle sue decisioni: ogni diagramma passa dal
 # parser di Mermaid e uno non valido si segnala con la sezione, il file e la riga dell'errore.
 

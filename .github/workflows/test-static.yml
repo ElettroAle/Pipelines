@@ -42,3 +42,6 @@ jobs:
 
       - name: Check parameter contracts
         run: python Tests/static/check-parameters.py
+
+      - name: Check SPDX license headers
+        run: python Tests/static/check-spdx.py

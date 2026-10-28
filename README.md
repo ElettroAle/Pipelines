@@ -518,3 +518,15 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | `staging` | publish-* (branch `staging`) | `targetEnvironment` |
 | `production` | publish-* (branch `main`) | `targetEnvironment` |
 | `terraform-common` | IAC/terraform-* | `azureServiceConnection` |
+
+---
+
+## Licenza
+
+Distribuito con licenza [Apache License 2.0](LICENSE). Copyright © 2021-2026 Alessandro Fiani.
+
+L'uso, anche commerciale, è consentito alle condizioni della licenza: ogni redistribuzione o
+opera derivata deve mantenere la nota di copyright e il file [NOTICE](NOTICE). La licenza non
+concede l'uso del nome dell'autore o di marchi (Section 6).
+
+Le pull request con codice esterno non vengono accettate: vedi [CONTRIBUTING.md](CONTRIBUTING.md).

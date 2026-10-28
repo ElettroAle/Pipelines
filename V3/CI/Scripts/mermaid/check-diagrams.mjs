@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Legge i diagrammi da un file JSON [{ id, text }] e scrive, per ognuno, l'esito
 // del parse: il tipo del diagramma, oppure l'errore con la riga.
 import { readFileSync, writeFileSync } from 'node:fs';

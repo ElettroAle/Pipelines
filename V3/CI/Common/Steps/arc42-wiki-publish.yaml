@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Step: arc42 wiki publish ──────────────────────────────────────────────
 #
 # Pubblica un documento arc42 in una wiki git di Azure DevOps

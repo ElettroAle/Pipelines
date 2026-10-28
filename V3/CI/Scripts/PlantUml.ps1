@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Disegna diagrammi PlantUML in PNG per Publish-Arc42Wiki.ps1. Le librerie C4 sono quelle interne di
 # PlantUML, e il layout smetana e' compreso nel jar: non servono Graphviz ne' la rete.
 

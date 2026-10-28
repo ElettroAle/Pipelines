@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Step: DotNet Publish ────────────────────────────────────────────────────
 #
 # Step template condiviso per la fase di publish di progetti .NET.
