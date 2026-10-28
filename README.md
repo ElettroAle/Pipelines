@@ -393,7 +393,9 @@ Giudizio dello stile (`styleMode`, `CI/Scripts/Test-DocumentationStyle.ps1`):
   cambiano i rimandi alla sua ancora e le righe che lo riportano accanto a un rimando al suo file, come
   l'indice delle decisioni; quei file contano come giudicati nel commit del titolo.
 - Una correzione resta solo se il giro dopo non trova più la stessa regola violata nella stessa unità:
-  altrimenti si annulla e il modello riceve il motivo. L'ultimo dei `maxRounds` giri verifica soltanto.
+  altrimenti si annulla e il modello riceve il motivo. L'ultimo dei `maxRounds` giri verifica soltanto:
+  `quality-arc42` e `quality-docs` lo espongono come `styleMaxRounds` (default `4`). Un file si ferma al
+  primo giro senza rilievi, quindi i giri in più si pagano solo dove servono.
 - `styleMaxFindings` è la soglia delle violazioni tollerate: fino alla soglia restano come avvisi e la
   verifica passa con esito parziale (`SucceededWithIssues`); oltre la soglia la verifica fallisce e le nomina
   tutte. `0` (default) blocca ogni violazione, `-1` non pone limiti. In modalità `fix` contano le violazioni
