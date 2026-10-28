@@ -32,7 +32,6 @@
 #   styleModel         → nome del deployment del modello [REQUIRED se styleMode non e' off]
 #   styleMaxFindings   → violazioni dello stile tollerate come avvisi senza bloccare: 0 blocca ogni violazione,
 #                        -1 nessun limite (default: 0)
-#   styleDecisionsExcludedRules → titoli delle regole della guida che non valgono per le decisioni (default: nessuna)
 #   pool               → pool del job (default: hosted ubuntu-latest, richiesto da Gitleaks via docker)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -107,10 +106,6 @@ parameters:
     type: number
     default: 0
 
-  - name: styleDecisionsExcludedRules
-    type: object
-    default: []
-
   - name: pool
     type: object
     default:
@@ -159,7 +154,6 @@ stages:
             endpoint: ${{ parameters.styleEndpoint }}
             model: ${{ parameters.styleModel }}
             maxFindings: ${{ parameters.styleMaxFindings }}
-            decisionsExcludedRules: ${{ parameters.styleDecisionsExcludedRules }}
             gulpease: ${{ parameters.docsGulpease }}
             maxWords: ${{ parameters.docsMaxWords }}
             abbreviations: ${{ parameters.docsAbbreviations }}

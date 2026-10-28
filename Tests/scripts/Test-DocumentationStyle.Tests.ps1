@@ -36,7 +36,7 @@ BeforeAll {
 
         function New-Verdict($Request, [object[]]$Rules) {
             $user = ($Request.messages | Where-Object role -EQ 'user').content
-            $glossaryPart, $sectionPart = $user -split 'SEZIONE DA GIUDICARE \([^)]*\)', 2
+            $glossaryPart, $sectionPart = $user -split '(?:SEZIONE|DECISIONE) DA GIUDICARE \([^)]*\)', 2
             $section = Read-Units $sectionPart
             $glossary = Read-Units $glossaryPart
             $verdict = [ordered]@{}
@@ -44,6 +44,7 @@ BeforeAll {
             foreach ($rule in $Rules) {
                 $property = $Request.response_format.json_schema.schema.properties.PSObject.Properties | Where-Object { $_.Value.description -eq $rule.rule } | Select-Object -First 1
                 if (-not $property) { continue }
+                if ($rule.until -and $user.Contains($rule.until)) { continue }
                 foreach ($unit in ($section | Where-Object { ($_.Marked -or $rule.everywhere) -and $_.Text.Contains($rule.match) })) {
                     $find = if ($rule.find) { $rule.find } else { $rule.match }
                     $target = $unit.Number
@@ -122,6 +123,34 @@ Un'espressione che non aggiunge informazione si toglie.
 Niente frasi che annunciano cosa dira' il testo.
 '@
 
+    $PartedGuide = @'
+# Guida di stile
+
+## Regole
+
+### Niente riempitivi
+
+Un'espressione che non aggiunge informazione si toglie.
+
+## Regole delle sezioni
+
+### Ogni sezione dice a chi serve
+
+La sezione si apre con una citazione che nomina i lettori.
+
+~~~markdown
+### Un titolo dentro un esempio delle sezioni
+~~~
+
+## Regole delle decisioni
+
+### Il titolo dice la decisione presa
+
+Il titolo di una decisione nomina la scelta, senza sigle.
+'@
+
+    $SectionRule = 'Ogni sezione dice a chi serve'
+    $DecisionRule = 'Il titolo dice la decisione presa'
     $Filler = 'Niente riempitivi'
     $SelfReference = 'Il testo parla della piattaforma, non di se stesso'
     $FixEnvironment = @{ TARGET_BRANCH = 'refs/heads/main'; SOURCE_BRANCH = 'refs/heads/feature'; STYLE_FIX = 'true'; READABILITY_MAX_WORDS = '25' }
@@ -207,7 +236,7 @@ Niente frasi che annunciano cosa dira' il testo.
     }
 
     function Get-JudgedFiles {
-        return @(Get-StubRequests | ForEach-Object { [regex]::Match((Get-UserMessage $_), 'SEZIONE DA GIUDICARE \(([^)]+)\)').Groups[1].Value })
+        return @(Get-StubRequests | ForEach-Object { [regex]::Match((Get-UserMessage $_), '(?:SEZIONE|DECISIONE) DA GIUDICARE \(([^)]+)\)').Groups[1].Value })
     }
 
     function Invoke-Git {
@@ -527,7 +556,7 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
     Context "Schema dello scenario: una correzione non accettabile si scarta — <difetto>" -ForEach @(
         @{ difetto = 'rende una frase più lunga del massimo della configurazione'; sezione = 'Vincoli'; vecchio = 'gira su Azure.'; nuovo = 'gira su Azure in Italia.'; regola = @{ match = 'gira su Azure in Italia'; replacement = 'gira su Azure in Italia, con una rete per ogni ambiente e una regola per ogni passaggio fra due parti che si parlano solo quando serve davvero e mai altrimenti' } }
         @{ difetto = 'modifica un diagramma'; sezione = 'Vincoli'; vecchio = 'gira su Azure.'; nuovo = "gira su Azure.`n`n``````mermaid`nflowchart LR`n  A --> B`n```````n"; regola = @{ match = 'A --> B'; replacement = 'A --> C' } }
-        @{ difetto = 'modifica un titolo'; sezione = 'Vincoli della piattaforma'; vecchio = '# Vincoli'; nuovo = '# Vincoli della piattaforma'; regola = @{ match = 'Vincoli della piattaforma'; replacement = 'Vincoli' } }
+        @{ difetto = 'modifica un titolo imposto dal modello del documento'; sezione = 'Vincoli della piattaforma'; vecchio = '# Vincoli'; nuovo = '# Vincoli della piattaforma'; regola = @{ match = 'Vincoli della piattaforma'; replacement = 'Vincoli' } }
         @{ difetto = 'cerca un testo che la sezione non contiene'; sezione = 'Vincoli'; vecchio = 'gira su Azure.'; nuovo = 'gira su Azure in Italia.'; regola = @{ match = 'gira su Azure in Italia'; find = 'testo assente'; replacement = 'gira in Italia' } }
     ) {
         BeforeAll {
@@ -602,14 +631,16 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
             @(Get-StubRequests).Count | Should -Be 3
         }
 
-        It "E il ramo della PR riceve le correzioni dei giri fatti" {
-            Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike '*gira su Azure davvero davvero davvero in Italia.*'
-            Invoke-Git -C $repository.Bare log -1 --format=%B feature | Should -Contain 'Style-Judge-Done: docs/architecture/02-vincoli.md'
-            Invoke-Git -C $repository.Bare rev-parse 'feature^' | Should -Be $repository.Feature
+        It "E la verifica fallisce nominando le violazioni rimaste" {
+            $res.ExitCode | Should -Be 1
+            Get-Issues $res.Output | Where-Object { $_.StartsWith("Vincoli: $Filler («gira su Azure»") -and $_ -like '*la correzione non toglie la violazione*' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
         }
 
-        It "E la verifica passa, perché l'ultima correzione si è applicata" {
-            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        It "E il ramo della PR riceve le correzioni valide con le unità rimaste in sospeso" {
+            Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike '*La piattaforma gira su Azure in Italia.*'
+            $message = Invoke-Git -C $repository.Bare log -1 --format=%B feature
+            $message | Should -Contain 'Style-Judge-Done: docs/architecture/02-vincoli.md'
+            $message | Where-Object { $_ -like "Style-Judge-Pending: docs/architecture/02-vincoli.md`t*gira su Azure in Italia*" } | Should -Not -BeNullOrEmpty
         }
     }
 
@@ -864,19 +895,44 @@ Describe "Test-DocumentationStyle — cosa si manda al modello" {
             Get-JudgedFiles | Should -Be @('01-introduzione-e-obiettivi.md', '02-vincoli.md')
         }
 
-        It "Giudica le decisioni senza le regole escluse" {
-            $root = New-PullRequestRepository { param($d) $d['docs/decisions/0002-nuova.md'] = $NewDecision; Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' 'gira su Azure in Italia.' }
-            Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main'; STYLE_DECISIONS_EXCLUDED_RULES = $SelfReference } | Out-Null
+        It "Manda a una decisione le regole comuni e quelle delle decisioni, a una sezione le comuni e quelle delle sezioni" {
+            $root = New-PullRequestRepository -Base { param($d) $d['docs/STYLE.md'] = $PartedGuide } -Change { param($d) $d['docs/decisions/0002-nuova.md'] = $NewDecision; Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' 'gira su Azure in Italia.' }
+            Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main' } | Out-Null
             Remove-Item -Recurse -Force $root
             $requests = @(Get-StubRequests)
-            $decision = $requests | Where-Object { (Get-UserMessage $_) -like '*SEZIONE DA GIUDICARE (0002-nuova.md)*' }
+            $decision = $requests | Where-Object { (Get-UserMessage $_) -like '*DECISIONE DA GIUDICARE (0002-nuova.md)*' }
             $section = $requests | Where-Object { (Get-UserMessage $_) -like '*SEZIONE DA GIUDICARE (02-vincoli.md)*' }
-            @($decision.response_format.json_schema.schema.properties.PSObject.Properties).Count | Should -Be 1
-            $decision.response_format.json_schema.schema.properties.regola_1.description | Should -Be $Filler
-            ($decision.messages | Where-Object role -EQ 'system').content | Should -Not -BeLike "*$SelfReference*"
-            ($decision.messages | Where-Object role -EQ 'system').content | Should -BeLike '*Un titolo dentro un esempio*'
-            @($section.response_format.json_schema.schema.properties.PSObject.Properties).Count | Should -Be 2
-            ($section.messages | Where-Object role -EQ 'system').content | Should -BeLike "*$SelfReference*"
+            @($decision.response_format.json_schema.schema.properties.PSObject.Properties | ForEach-Object { $_.Value.description }) | Should -Be @($Filler, $DecisionRule)
+            @($section.response_format.json_schema.schema.properties.PSObject.Properties | ForEach-Object { $_.Value.description }) | Should -Be @($Filler, $SectionRule)
+            $decisionGuide = ($decision.messages | Where-Object role -EQ 'system').content
+            $sectionGuide = ($section.messages | Where-Object role -EQ 'system').content
+            $decisionGuide | Should -Not -BeLike "*$SectionRule*"
+            $decisionGuide | Should -Not -BeLike '*Un titolo dentro un esempio delle sezioni*'
+            $sectionGuide | Should -Not -BeLike "*$DecisionRule*"
+        }
+
+        It "Non rigiudica le sezioni se la guida cambia solo nelle regole delle decisioni o nell'ordine delle regole" {
+            $root = New-PullRequestRepository -Base { param($d) $d['docs/STYLE.md'] = $PartedGuide } -Change {
+                param($d)
+                $d['docs/STYLE.md'] = $PartedGuide.Replace('senza sigle.', 'senza sigle né abbreviazioni.').Replace("## Regole delle sezioni`n", "## Regole delle sezioni`n`nLe regole che valgono solo per le sezioni.`n")
+            }
+            Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main' } | Out-Null
+            Remove-Item -Recurse -Force $root
+            @(Get-StubRequests).Count | Should -Be 0
+        }
+
+        It "Rigiudica tutte le sezioni se cambia una regola delle sezioni" {
+            $root = New-PullRequestRepository -Base { param($d) $d['docs/STYLE.md'] = $PartedGuide } -Change { param($d) $d['docs/STYLE.md'] = $PartedGuide.Replace('nomina i lettori.', 'nomina i lettori e la domanda.') }
+            Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main' } | Out-Null
+            Remove-Item -Recurse -Force $root
+            Get-JudgedFiles | Should -Be @('01-introduzione-e-obiettivi.md', '02-vincoli.md')
+        }
+
+        It "Non manda al modello l'intestazione di una decisione" {
+            $root = New-PullRequestRepository { param($d) $d['docs/decisions/0002-nuova.md'] = $NewDecision }
+            Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main' } | Out-Null
+            Remove-Item -Recurse -Force $root
+            Get-UserMessage (Get-StubRequests)[0] | Should -Not -BeLike '*status: accepted*'
         }
 
         It "Legge le decisioni dalla cartella dichiarata" {
@@ -1079,8 +1135,8 @@ Describe "Test-DocumentationStyle — correzioni" {
     It "Aggiunge al glossario la voce proposta, una volta sola" {
         $entry = '**Italia**: il paese in cui restano i dati.'
         Set-StubRules @(
-            @{ match = 'restano in Italia'; rule = $Filler; glossaryInsert = $entry }
-            @{ match = 'I dati'; rule = $SelfReference; glossaryInsert = $entry })
+            @{ match = 'restano in Italia'; rule = $Filler; glossaryInsert = $entry; until = '**Italia**' }
+            @{ match = 'I dati'; rule = $SelfReference; glossaryInsert = $entry; until = '**Italia**' })
         $repository = New-OriginRepository { param($d) Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' "gira su Azure.`n`nI dati restano in Italia." }
         $res = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
         $glossary = Get-FeatureFile $repository 'docs/architecture/03-glossario.md'
@@ -1170,5 +1226,148 @@ Describe "Test-DocumentationStyle — configurazione e modalità" {
         $res = Invoke-StyleCheck (New-Docs) 'off'
         $res.ExitCode | Should -Be 0
         @(Get-StubRequests).Count | Should -Be 0
+    }
+}
+
+Describe "Funzionalità: Giudizio delle decisioni architetturali" {
+
+    BeforeEach { Reset-Stub }
+
+    It "Scenario: decisione nuova che viola una regola delle decisioni: la verifica nomina la decisione e la regola" {
+        Set-StubRules @(@{ match = 'Copie cifrate'; rule = $DecisionRule })
+        $root = New-PullRequestRepository -Base { param($d) $d['docs/STYLE.md'] = $PartedGuide } -Change { param($d) $d['docs/decisions/0002-nuova.md'] = $NewDecision }
+        $res = Invoke-StyleCheck -Root $root -Mode 'enforce' -Environment @{ TARGET_BRANCH = 'refs/heads/main' }
+        Remove-Item -Recurse -Force $root
+        $res.ExitCode | Should -Be 1
+        Get-Issues $res.Output | Where-Object { $_.StartsWith("0002-nuova: $DecisionRule («Copie cifrate»") } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+    }
+
+    It "Scenario: una regola delle sezioni non vale per le decisioni" {
+        Set-StubRules @(@{ match = 'Servono copie'; rule = $SectionRule; everywhere = $true })
+        $root = New-PullRequestRepository -Base { param($d) $d['docs/STYLE.md'] = $PartedGuide } -Change { param($d) $d['docs/decisions/0002-nuova.md'] = $NewDecision }
+        $res = Invoke-StyleCheck -Root $root -Mode 'enforce' -Environment @{ TARGET_BRANCH = 'refs/heads/main' }
+        Remove-Item -Recurse -Force $root
+        $res.ExitCode | Should -Be 0 -Because ($res.Output)
+    }
+
+    It "Scenario: le decisioni chiuse non si giudicano" {
+        $root = New-PullRequestRepository { param($d) $d['docs/decisions/0002-nuova.md'] = $NewDecision.Replace('status: accepted', 'status: rejected') }
+        Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main' } | Out-Null
+        Remove-Item -Recurse -Force $root
+        @(Get-StubRequests).Count | Should -Be 0
+    }
+
+    Context "Scenario: la correzione non crea versioni" {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(@{ match = 'È importante sottolineare che servono'; rule = $Filler; replacement = 'Servono' })
+            $versioned = $ExistingDecision.Replace('status: accepted', "status: accepted`nversion: 2").Replace('Le copie restano in Italia.', "Le copie restano in Italia.`n`n## Versioni`n`n- 2: il contesto comprende i backup.")
+            $versioned = $versioned.Replace('Servono copie dei dati.', 'È importante sottolineare che servono copie dei dati e dei backup.')
+            $repository = New-OriginRepository -Base { param($d) $d['docs/decisions/0001-esistente.md'] = $ExistingDecision } -Change { param($d) $d['docs/decisions/0001-esistente.md'] = $versioned }
+            $res = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+            $decision = Get-FeatureFile $repository 'docs/decisions/0001-esistente.md'
+            $judged = Get-JudgedFiles | Select-Object -Unique
+        }
+
+        AfterAll { Remove-Repository $repository }
+
+        It "Dato la decisione accettata portata dalla PR alla versione 2 con un riempitivo nel paragrafo cambiato" {
+            $judged | Should -Be @('0001-esistente.md')
+        }
+
+        It "Allora il paragrafo si corregge" {
+            $decision | Should -BeLike '*Servono copie dei dati e dei backup.*' -Because ($res.Output)
+            $decision | Should -Not -BeLike '*È importante*'
+        }
+
+        It "E la decisione resta alla versione 2" {
+            $decision | Should -BeLike "*version: 2`n*"
+        }
+
+        It "E la verifica del corpus passa" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+    }
+
+    Context "Scenario: il titolo di una decisione nuova si corregge con il suo indice" {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(@{ match = 'Copie cifrate C4'; rule = $DecisionRule; replacement = 'Copie cifrate in Italia' })
+            $repository = New-OriginRepository -Base { param($d) $d['docs/STYLE.md'] = $PartedGuide } -Change {
+                param($d)
+                $d['docs/decisions/0002-nuova.md'] = $NewDecision.Replace('# Copie cifrate', '# Copie cifrate C4')
+                Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' "gira su Azure.`n`n| Decisione | Titolo |`n|---|---|`n| [0002](../decisions/0002-nuova.md) | Copie cifrate C4 |"
+            }
+            $res = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+        }
+
+        AfterAll { Remove-Repository $repository }
+
+        It "Allora il titolo si corregge" {
+            Get-FeatureFile $repository 'docs/decisions/0002-nuova.md' | Should -BeLike "*# Copie cifrate in Italia`n*" -Because ($res.Output)
+        }
+
+        It "E la riga dell'indice riporta il titolo corretto" {
+            Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike '*| `[0002`](../decisions/0002-nuova.md) | Copie cifrate in Italia |*'
+        }
+
+        It "E i controlli oggettivi passano" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E il commit della decisione conta come giudicato anche l'indice" {
+            $message = Invoke-Git -C $repository.Bare log -1 --format=%B feature
+            $message | Should -Contain 'Style-Judge-Done: docs/decisions/0002-nuova.md'
+            $message | Should -Contain 'Style-Judge-Done: docs/architecture/02-vincoli.md'
+        }
+    }
+}
+
+Describe "Funzionalità: Verifica della documentazione architetturale — titoli e correzioni verificate" {
+
+    BeforeEach { Reset-Stub }
+
+    Context "Scenario: un titolo libero si corregge con i suoi rimandi" {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(@{ match = 'Regione C4'; rule = $Filler; replacement = 'Regione' })
+            $repository = New-OriginRepository {
+                param($d)
+                Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' "gira su Azure.`n`n## Regione C4`n`nI dati restano in Italia."
+                Edit-Docs $d 'docs/architecture/01-introduzione-e-obiettivi.md' 'La piattaforma aiuta' 'La piattaforma, ospitata nella [regione scelta](02-vincoli.md#regione-c4), aiuta'
+            }
+            $res = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+        }
+
+        AfterAll { Remove-Repository $repository }
+
+        It "Allora il titolo e il rimando si correggono insieme" {
+            Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike "*## Regione`n*" -Because ($res.Output)
+            Get-FeatureFile $repository 'docs/architecture/01-introduzione-e-obiettivi.md' | Should -BeLike '*(02-vincoli.md#regione)*'
+        }
+
+        It "E i controlli oggettivi passano" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+    }
+
+    Context "Scenario: una correzione che non toglie la violazione si annulla" {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(@{ match = 'Regione C4'; rule = $Filler; insert = 'La regione è quella di Milano.' })
+            $repository = New-OriginRepository { param($d) Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' "gira su Azure.`n`n## Regione C4`n`nI dati restano in Italia." }
+            $res = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+        }
+
+        AfterAll { Remove-Repository $repository }
+
+        It "Allora il paragrafo aggiunto si toglie" {
+            Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -Not -BeLike '*Milano*'
+        }
+
+        It "E la correzione è scartata con il motivo «non toglie la violazione»" {
+            $res.ExitCode | Should -Be 1
+            Get-Issues $res.Output | Where-Object { $_.StartsWith("Vincoli: $Filler («Regione C4»") -and $_ -like '*la correzione non toglie la violazione*' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
     }
 }

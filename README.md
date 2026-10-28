@@ -354,17 +354,28 @@ Gli script condividono `CI/Scripts/VerificationGate.ps1` (modalità, rilievi, co
 
 Giudizio dello stile (`styleMode`, `CI/Scripts/Test-DocumentationStyle.ps1`):
 
-- Il modello riceve come istruzioni la guida `styleGuide` e giudica una sezione per richiesta, con il
+- Il modello riceve come istruzioni la guida `styleGuide` e giudica un documento per richiesta, con il
   glossario `docsGlossary` come contesto; il glossario non si giudica. In una PR si giudicano le sezioni
-  cambiate, tutte se cambia la guida. Delle decisioni (`decisionsDirectory`) si giudicano solo le righe
+  cambiate, tutte se cambiano le regole che valgono per le sezioni: spostare una regola nella guida, o
+  cambiare solo le regole delle decisioni o il testo fuori dalle regole, non le rigiudica. Delle decisioni (`decisionsDirectory`) si giudicano solo le righe
   che la PR aggiunge o cambia, anche quando cambia la guida: il corpus già integrato non si rigiudica, e
-  fuori da una PR le decisioni non si giudicano. Le correzioni di una decisione passano anche dalla verifica
-  del corpus prima di tornare sul ramo. Le regole elencate in `styleDecisionsExcludedRules`, per titolo, non
-  valgono per le decisioni: il modello non le riceve, né nella guida né nella risposta attesa.
+  fuori da una PR le decisioni non si giudicano. Le decisioni sostituite, deprecate o respinte non si
+  giudicano. Le correzioni di una decisione passano anche dalla verifica del corpus prima di tornare sul
+  ramo, e non toccano la sua intestazione: la versione nuova di una decisione accettata la porta la PR.
+- Ogni tipo di documento ha le sue regole. Nella guida, le regole sotto `## Regole` valgono per tutti, quelle
+  sotto `## Regole delle sezioni` solo per le sezioni e quelle sotto `## Regole delle decisioni` solo per le
+  decisioni (i nomi delle parti seguono la lingua del documento). Il modello non riceve le regole dell'altro
+  tipo, né nella guida né nella risposta attesa. Una guida senza queste parti ha solo regole comuni.
+- Un titolo si corregge come il resto del testo, tranne quelli che il modello del documento impone: il titolo
+  di primo livello di una sezione arc42 e i titoli di secondo livello di una decisione MADR. Con il titolo
+  cambiano i rimandi alla sua ancora e le righe che lo riportano accanto a un rimando al suo file, come
+  l'indice delle decisioni; quei file contano come giudicati nel commit del titolo.
+- Una correzione resta solo se il giro dopo non trova più la stessa regola violata nella stessa unità:
+  altrimenti si annulla e il modello riceve il motivo. L'ultimo dei `maxRounds` giri verifica soltanto.
 - `styleMaxFindings` è la soglia delle violazioni tollerate: fino alla soglia restano come avvisi e la
   verifica passa con esito parziale (`SucceededWithIssues`); oltre la soglia la verifica fallisce e le nomina
   tutte. `0` (default) blocca ogni violazione, `-1` non pone limiti. In modalità `fix` contano le violazioni
-  rimaste dopo `maxRounds` giri senza una correzione applicabile.
+  che l'ultimo giro trova ancora.
 - In modalità `fix` ogni file giudicato ha il suo commit, con le correzioni che superano i controlli
   oggettivi, il trailer `Style-Judge-Done: <file>` e, oltre la soglia, una riga `Style-Judge-Pending` per ogni
   unità rimasta. Il giudizio dopo rilegge di ogni file solo le righe cambiate dal suo commit e le unità in
