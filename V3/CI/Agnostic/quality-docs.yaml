@@ -33,6 +33,7 @@
 #   styleModel         → nome del deployment del modello [REQUIRED se styleMode non e' off]
 #   styleMaxFindings   → violazioni dello stile tollerate come avvisi senza bloccare: 0 blocca ogni violazione,
 #                        -1 nessun limite (default: 0)
+#   styleMaxRounds     → giri del giudizio per file in modalita' fix; l'ultimo verifica soltanto (default: 4)
 #   pool               → pool del job (default: hosted ubuntu-latest, richiesto da Gitleaks via docker)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -108,6 +109,10 @@ parameters:
     type: number
     default: 0
 
+  - name: styleMaxRounds
+    type: number
+    default: 4
+
   - name: pool
     type: object
     default:
@@ -151,3 +156,4 @@ stages:
             endpoint: ${{ parameters.styleEndpoint }}
             model: ${{ parameters.styleModel }}
             maxFindings: ${{ parameters.styleMaxFindings }}
+            maxRounds: ${{ parameters.styleMaxRounds }}
