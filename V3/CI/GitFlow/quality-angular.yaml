@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI GitFlow: Quality Angular ────────────────────────────────────────────────
 #
 # Template di Quality gate per progetti Angular con governance GitFlow.

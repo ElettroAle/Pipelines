@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Le convenzioni di un documento che dipendono dalla sua lingua (marcatore di vista, tag dei
 # container, sezioni degli ADR, etichette della wiki) stanno in Languages/<lingua>.psd1. Senza
 # DOCUMENT_LANGUAGE vale l'italiano, la lingua dei consumer nati prima del parametro.

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Step: Architecture Decision Records ────────────────────────────────────
 #
 # Verifica il corpus degli ADR del repository (V3/CI/Scripts/Test-AdrCorpus.ps1):

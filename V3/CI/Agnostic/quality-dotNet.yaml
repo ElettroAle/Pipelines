@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Agnostic: Quality DotNet ────────────────────────────────────────────────
 #
 # Template di Quality gate per progetti .NET, agnostico rispetto al workflow Git.

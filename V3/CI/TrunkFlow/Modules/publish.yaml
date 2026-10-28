@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Module: Publish (TrunkFlow) ────────────────────────────────────────────
 #
 # Template riusabile per Build e Publish con governance TrunkFlow.

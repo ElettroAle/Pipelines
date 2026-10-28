@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Step: Documentation style ──────────────────────────────────────────────
 #
 # Giudica lo stile delle sezioni di un documento con un modello Azure OpenAI

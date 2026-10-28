@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Accesso alla Structurizr CLI per Test-C4Model.ps1 e Publish-Arc42Wiki.ps1: valida il modello C4
 # scritto in Structurizr DSL, lo esporta in JSON ed esporta le sue viste in C4-PlantUML.
 

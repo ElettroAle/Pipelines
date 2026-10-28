@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Step: Document language ────────────────────────────────────────────────
 #
 # Dichiara la lingua del documento per gli step che seguono nel job: DOCUMENT_LANGUAGE sceglie

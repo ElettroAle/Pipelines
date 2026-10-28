@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CD Step: Terraform Plan ───────────────────────────────────────────────────
 #
 # Calcola il piano di una configurazione Terraform su Azure e lo rende

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CD Step: Deploy su Azure Static Web Apps ──────────────────────────────────
 #
 # Step template atomico per il deploy di una SPA pre-buildata su

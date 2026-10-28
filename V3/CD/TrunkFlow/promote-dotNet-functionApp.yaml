@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CD: Promote TrunkFlow — .NET → Azure Function App ─────────────────────────
 #
 # Entry point di CD Promote per progetti .NET su Azure Function App (Windows)

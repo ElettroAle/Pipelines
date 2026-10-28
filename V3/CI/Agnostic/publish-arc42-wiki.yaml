@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CI Agnostic: Publish arc42 wiki ───────────────────────────────────────────
 #
 # Pubblica un documento arc42 nella wiki di progetto di Azure DevOps: il checkout del documento,

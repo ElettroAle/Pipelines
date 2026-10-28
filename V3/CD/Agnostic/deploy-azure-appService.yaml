@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # ── CD: Deploy Agnostic — .NET → Azure App Service ────────────────────────────
 #
 # Entry point di CD Deploy per progetti .NET su Azure App Service (Windows).

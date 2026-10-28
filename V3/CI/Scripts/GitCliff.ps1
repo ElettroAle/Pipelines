@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Accesso a git-cliff condiviso da Set-Versioning.ps1, Verify-SemVer.ps1 e
 # New-ReleaseNotes.ps1. Compatibile con Windows PowerShell 5.1: PowerShell@2 senza
 # pwsh gira su powershell.exe negli agent Windows.

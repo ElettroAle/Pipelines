@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Accesso al parser Mermaid per Test-MermaidDiagrams.ps1: le dipendenze sono fissate
 # da mermaid/package-lock.json e installate con npm ci in una cache per lockfile.
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 # Verifica il corpus degli ADR (MADR, intestazioni nella lingua del documento) di un repository.
 # Si valida l'intero corpus, non solo i file della PR: cosi' resta sempre pulito.
 # Una decisione accettata cambia solo con una versione nuova e la sua voce nella sezione delle
