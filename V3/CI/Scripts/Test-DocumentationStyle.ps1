@@ -663,6 +663,18 @@ function Undo-Correction($Correction) {
     }
 }
 
+# Un nome contenuto in un nome piu' lungo (Handler in IHandler) compare piu' volte come testo ma una
+# volta sola come parola intera: in quel caso vale l'occorrenza della parola intera.
+function Find-UniqueOccurrence([string]$Text, [string]$Find) {
+    if (-not $Find) { return $null }
+    $matches = [regex]::Matches($Text, [regex]::Escape($Find))
+    if ($matches.Count -eq 1) { return $matches[0] }
+    if ($matches.Count -lt 2) { return $null }
+    $whole = [regex]::Matches($Text, '(?<![\p{L}\p{N}_])' + [regex]::Escape($Find) + '(?![\p{L}\p{N}_])')
+    if ($whole.Count -eq 1) { return $whole[0] }
+    return $null
+}
+
 function Invoke-Replacement($Target, $Finding, [hashtable]$Original, $Glossary, $Applied) {
     $segment = $Target.Segment
     if ($Target.Glossary) { return 'la correzione cambia una voce del glossario' }
@@ -670,13 +682,13 @@ function Invoke-Replacement($Target, $Finding, [hashtable]$Original, $Glossary, 
     $find = "$($Finding.Fix.find)"
     $before = Get-UnitText $segment
     if (-not $Original.ContainsKey($segment)) { $Original[$segment] = $before }
-    $occurrences = if ($find) { [regex]::Matches($before, [regex]::Escape($find)).Count } else { 0 }
-    if ($occurrences -ne 1) {
+    $occurrence = Find-UniqueOccurrence $before $find
+    if (-not $occurrence) {
         # Un'altra correzione ha gia' cambiato il tratto: l'unita' torna al giudizio nel giro dopo.
-        if ($find -and [regex]::Matches($Original[$segment], [regex]::Escape($find)).Count -eq 1) { $segment.Marked = $true; return $null }
+        if (Find-UniqueOccurrence $Original[$segment] $find) { $segment.Marked = $true; return $null }
         return 'il tratto da correggere non compare una volta sola nell''unità'
     }
-    $after = $before.Replace($find, "$($Finding.Fix.text)")
+    $after = $before.Substring(0, $occurrence.Index) + "$($Finding.Fix.text)" + $before.Substring($occurrence.Index + $occurrence.Length)
     $reason = Test-Correction $segment.Kind $before $after
     if ($reason) { return $reason }
     $correction = @{ Rule = $Finding.Rule; Unit = $segment; Document = $Target.Document; Lines = $segment.Lines; References = @() }
