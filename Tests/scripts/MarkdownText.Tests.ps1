@@ -86,6 +86,10 @@ Describe "MarkdownText — blocchi di una sezione" {
         $section.Diagrams[0].Line | Should -Be 16
         $section.Diagrams[0].Text | Should -Be 'sequenceDiagram'
     }
+    It "Ricorda la parte che contiene il diagramma" { $section.Diagrams[0].Part | Should -Be 'In breve' }
+    It "Un diagramma prima della prima parte non ha parte" {
+        (ConvertFrom-MarkdownSection "# Titolo`n`n``````mermaid`nsequenceDiagram`n```````n").Diagrams[0].Part | Should -BeNullOrEmpty
+    }
 }
 
 Describe "MarkdownText — sezioni di un documento" {

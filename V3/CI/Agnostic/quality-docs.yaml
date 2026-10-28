@@ -23,8 +23,9 @@
 #   docsMaxWords       → parole massime per frase (default: 0, nessuna soglia)
 #   docsAbbreviations  → abbreviazioni che non chiudono una frase (default: nessuna)
 #   docsGlossary       → file del glossario nella cartella del documento (default: nessuno)
-#   diagramSteps       → step di verifica dei diagrammi, es. CI/Common/Steps/c4-verify.yaml e
-#                        mermaid-verify.yaml (default: nessuno); non girano con docsMode off
+#   diagramSteps       → step di verifica dei diagrammi, es. CI/Common/Steps/c4-verify.yaml,
+#                        mermaid-verify.yaml e flows-verify.yaml (default: nessuno); non girano con
+#                        docsMode off
 #   styleMode          → off | warn | enforce (default: off): giudizio dello stile con il modello
 #   styleGuide         → guida di stile del repository (default: docs/STYLE.md)
 #   styleServiceConnection → service connection Azure per il modello [REQUIRED se styleMode non e' off]
