@@ -29,13 +29,14 @@ BeforeAll {
 
     function New-EngineRepository {
         $files = [ordered]@{}
-        Add-Project $files 'Aidea.Dxp.AI.Api' (New-Project 'Microsoft.NET.Sdk.Web' @('Aidea.Dxp.AI.UseCase.WrittenConversations', 'Aidea.Dxp.AI.Utils', 'Aidea.Dxp.AI.DataAccess.AzureServiceBus'))
+        Add-Project $files 'Aidea.Dxp.AI.Api' (New-Project 'Microsoft.NET.Sdk.Web' @('Aidea.Dxp.AI.UseCase.WrittenConversations', 'Aidea.Dxp.AI.Utils', 'Aidea.Dxp.AI.DataAccess.AzureServiceBus', 'Aidea.Dxp.AI.DataAccess.AzureStorageAccount'))
         Add-Project $files 'Aidea.Dxp.AI.Worker' (New-Project 'Microsoft.NET.Sdk' @('Aidea.Dxp.AI.UseCase.WrittenConversations', 'Aidea.Dxp.AI.UnitTest.Engine') "    <OutputType>Exe</OutputType>`n    <AzureFunctionsVersion>v4</AzureFunctionsVersion>")
         Add-Project $files 'Aidea.Dxp.AI.Evals' (New-Project 'Microsoft.NET.Sdk' @('Aidea.Dxp.AI.Api') '    <OutputType>Exe</OutputType>')
         Add-Project $files 'Aidea.Dxp.AI.UseCase.WrittenConversations' (New-Project)
         Add-Project $files 'Aidea.Dxp.AI.Utils' (New-Project)
         Add-Project $files 'Aidea.Dxp.AI.Utils.Reflection' (New-Project)
-        Add-Project $files 'Aidea.Dxp.AI.DataAccess.AzureServiceBus' (New-Project 'Microsoft.NET.Sdk' @('Aidea.Dxp.AI.UseCase.WrittenConversations'))
+        Add-Project $files 'Aidea.Dxp.AI.DataAccess.AzureServiceBus' (New-Project 'Microsoft.NET.Sdk' @('Aidea.Dxp.AI.UseCase.WrittenConversations') '' "    <PackageReference Include=`"Azure.Messaging.ServiceBus`" />`n    <PackageReference Include=`"Azure.Identity`" />")
+        Add-Project $files 'Aidea.Dxp.AI.DataAccess.AzureStorageAccount' (New-Project 'Microsoft.NET.Sdk' @() '' "    <PackageReference Include=`"Azure.Storage.Blobs`" />`n    <PackageReference Include=`"Azure.Data.Tables`" />")
         Add-Project $files 'Aidea.Dxp.AI.UnitTest.Engine' (New-Project 'Microsoft.NET.Sdk' @('Aidea.Dxp.AI.Utils.Reflection', 'Aidea.Dxp.AI.UseCase.WrittenConversations') '' '    <PackageReference Include="Microsoft.NET.Test.Sdk" />')
         return $files
     }
@@ -155,6 +156,31 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         }
     }
 
+    Context "Schema dello scenario: servizi Azure delle librerie di un componente — <progetto>" -ForEach @(
+        @{ progetto = 'Aidea.Dxp.AI.DataAccess.AzureServiceBus'; nome = 'DataAccess.AzureServiceBus'; servizi = 'Service Bus' }
+        @{ progetto = 'Aidea.Dxp.AI.DataAccess.AzureStorageAccount'; nome = 'DataAccess.AzureStorageAccount'; servizi = 'Storage' }
+    ) {
+        BeforeAll {
+            $res = Invoke-Generation (New-EngineRepository) 'Aidea.Dxp.AI'
+            $component = Get-Block (Get-ContainerBlock $res.Generated['aidea.dxp.ai.dsl'] 'Api') "=\s*component\s+`"$([regex]::Escape($nome))`""
+        }
+
+        It "Allora il componente <nome> dichiara i servizi <servizi>" {
+            $component | Should -Match "`"servizi`"\s+`"$([regex]::Escape($servizi))`""
+        }
+    }
+
+    Context "Scenario: un componente senza librerie di servizi Azure" {
+        BeforeAll {
+            $res = Invoke-Generation (New-EngineRepository) 'Aidea.Dxp.AI'
+            $component = Get-Block (Get-ContainerBlock $res.Generated['aidea.dxp.ai.dsl'] 'Api') '=\s*component\s+"Utils"'
+        }
+
+        It "Allora il componente non dichiara servizi" {
+            $component | Should -Not -Match '"servizi"'
+        }
+    }
+
     Context "Scenario: test e strumenti non entrano nel modello" {
         BeforeAll {
             $res = Invoke-Generation (New-EngineRepository) 'Aidea.Dxp.AI'
@@ -267,6 +293,10 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         @{
             repository = 'Aidea.Dxp.AI'; elemento = 'Aidea.Dxp.AI.Console'
             Build      = { $f = New-EngineRepository; Add-Project $f 'Aidea.Dxp.AI.Console' (New-Project 'Microsoft.NET.Sdk.BlazorWebAssembly'); $f }
+        }
+        @{
+            repository = 'Aidea.Dxp.AI'; elemento = 'Azure.Mystery.Things'
+            Build      = { $f = New-EngineRepository; Add-Project $f 'Aidea.Dxp.AI.Utils' (New-Project 'Microsoft.NET.Sdk' @() '' '    <PackageReference Include="Azure.Mystery.Things" />'); $f }
         }
         @{
             repository = 'Aidea.Dxp.Client.Web'; elemento = 'ui-kit'

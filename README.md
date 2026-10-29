@@ -354,6 +354,11 @@ Parte del modello C4 generata dal codice (`c4-generate.yaml`, `CI/Scripts/Export
   senza i progetti di test; un progetto usato da più applicazioni è un componente di ognuna. Di
   un'applicazione Angular, le cartelle di funzionalità e i moduli di base con un file `*.providers.ts`.
   Le relazioni sono i riferimenti fra progetti e gli import fra cartelle.
+- **Servizi Azure di un componente .NET.** Le librerie Azure del progetto dicono con quale tipo di
+  servizio parla (proprietà `servizi` in italiano, ad esempio `Service Bus,Storage`), secondo la tabella
+  di `CI/Scripts/AzureServices.psd1`. Le librerie che non parlano con un servizio (identità, telemetria,
+  hosting delle Function) si ignorano; una libreria `Azure.*` o `Microsoft.Azure.*` fuori dalla tabella
+  ferma la generazione.
 - **Nomi.** Il nome nel codice senza il prefisso comune ai progetti del repository, a segmenti interi e
   più corto di ogni nome; l'applicazione Angular prende il nome del repository senza il prefisso comune
   ai repository sorgente. Il nome completo resta nella proprietà `codice` in italiano, e l'identificativo

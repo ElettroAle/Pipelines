@@ -24,6 +24,8 @@ $ModuleDirectories = @(if ($env:ANGULAR_MODULE_DIRECTORIES) { $env:ANGULAR_MODUL
 $GeneratedTag = $DocumentLanguage.GeneratedTag
 $ApplicationTag = $DocumentLanguage.ApplicationTag
 $CodeNameProperty = $DocumentLanguage.CodeNameProperty
+$ServicesProperty = $DocumentLanguage.ServicesProperty
+$AzureServices = Import-PowerShellDataFile "$PSScriptRoot/AzureServices.psd1"
 $IgnoredDirectories = @('node_modules', 'bin', 'obj', '.git', 'dist', '.angular')
 $UnrecognizedProjectFiles = @('*.fsproj', '*.vbproj', '*.sqlproj', '*.esproj', '*.njsproj', '*.shproj', 'pom.xml', 'build.gradle', 'go.mod', 'pyproject.toml', 'Cargo.toml')
 
@@ -85,9 +87,18 @@ function Read-DotNetProjects {
         $references = @($xml.Project.ItemGroup.ProjectReference | Where-Object { $_ } | ForEach-Object {
                 [IO.Path]::GetFullPath((Join-Path $file.DirectoryName ($_.Include -replace '\\', '/')))
             })
-        $projects[$file.FullName] = [pscustomobject]@{ Name = $name; Path = $file.FullName; Kind = (Get-ProjectKind $xml); References = $references }
+        $packages = @($xml.Project.ItemGroup.PackageReference | Where-Object { $_ -and $_.Include } | ForEach-Object Include)
+        $projects[$file.FullName] = [pscustomobject]@{ Name = $name; Path = $file.FullName; Kind = (Get-ProjectKind $xml); References = $references; Packages = $packages }
     }
     return $projects
+}
+
+function Test-AzurePackage([string]$Package) {
+    return $Package -match '^(Azure|Microsoft\.Azure)\.'
+}
+
+function Get-AzureServices($Project) {
+    return @($Project.Packages | Where-Object { $AzureServices.Packages.ContainsKey($_) } | ForEach-Object { $AzureServices.Packages[$_] } | Sort-Object -Unique)
 }
 
 function Get-ProjectClosure($Application, $Projects) {
@@ -114,6 +125,7 @@ function Get-DotNetApplications($Projects) {
                 Name       = Remove-CommonPrefix $project.Name $allNames
                 CodeName   = $project.Name
                 Technology = '.NET'
+                Services   = Get-AzureServices $project
                 Targets    = @($project.References | Where-Object { $Projects.Contains($_) -and $Projects[$_].Kind -ne 'test' } |
                         ForEach-Object { "${containerId}__$(ConvertTo-Identifier $Projects[$_].Name)" } | Sort-Object -Unique)
             }
@@ -189,6 +201,10 @@ function Get-UnrecognizedIssues($Projects, $AngularWorkspaces) {
         Get-SourceFiles $pattern | ForEach-Object { New-Issue $Repository 'progetto di un tipo non riconosciuto' (Get-RelativePath $_.FullName) }
     }
     $Projects.Values | Where-Object { -not $_.Kind } | ForEach-Object { New-Issue $Repository 'progetto .NET di un tipo non riconosciuto' $_.Name }
+    foreach ($project in ($Projects.Values | Where-Object { $_.Kind -ne 'test' })) {
+        $project.Packages | Where-Object { (Test-AzurePackage $_) -and -not $AzureServices.Packages.ContainsKey($_) -and $AzureServices.IgnoredPackages -notcontains $_ } |
+            ForEach-Object { New-Issue $Repository 'libreria Azure non riconosciuta' "$_ in $($project.Name)" }
+    }
     $angularDirectories = @($AngularWorkspaces | ForEach-Object { $_.DirectoryName })
     Get-SourceFiles 'package.json' | Where-Object { $angularDirectories -notcontains $_.DirectoryName } | ForEach-Object {
         $package = Get-Content -Raw $_.FullName | ConvertFrom-Json
@@ -211,7 +227,9 @@ function Format-Container($Container, [string]$Indent) {
     $lines += "$Indent    properties {", "$Indent        $(Format-Text $CodeNameProperty) $(Format-Text $Container.CodeName)", "$Indent    }"
     foreach ($component in $Container.Components) {
         $lines += "$Indent    $($component.Id) = component $(Format-Text $component.Name) `"`" $(Format-Text $component.Technology) $(Format-Text $GeneratedTag) {"
-        $lines += "$Indent        properties {", "$Indent            $(Format-Text $CodeNameProperty) $(Format-Text $component.CodeName)", "$Indent        }", "$Indent    }"
+        $lines += "$Indent        properties {", "$Indent            $(Format-Text $CodeNameProperty) $(Format-Text $component.CodeName)"
+        if ($component.Services) { $lines += "$Indent            $(Format-Text $ServicesProperty) $(Format-Text ($component.Services -join ','))" }
+        $lines += "$Indent        }", "$Indent    }"
     }
     foreach ($component in $Container.Components) {
         $component.Targets | Where-Object { $_ -ne $component.Id } | ForEach-Object { $lines += "$Indent    $($component.Id) -> $_ `"`" `"`" $(Format-Text $GeneratedTag)" }
