@@ -15,7 +15,7 @@
 steps:
   - task: Bash@3
     displayName: 'Ensure fonts (Linux)'
-    condition: ne(variables['Agent.OS'], 'Windows_NT')
+    condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'))
     inputs:
       targetType: 'inline'
       script: |
