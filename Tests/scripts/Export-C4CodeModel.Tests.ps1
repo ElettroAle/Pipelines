@@ -2,113 +2,24 @@
 
 <#
 .SYNOPSIS
-    Test Pester per V3/CI/Scripts/Export-C4CodeModel.ps1
+    Test Pester per V3/CI/Scripts/Export-C4CodeModel.ps1 e per la composizione dei lettori
 
 .DESCRIPTION
-    Ogni scenario costruisce un repository sorgente finto (progetti .NET o un'applicazione Angular)
-    e genera la sua parte del modello C4 come in pipeline. Lo scenario che controlla la validita'
-    del DSL richiede Java 17 o successivo (STRUCTURIZR_JAVA, JAVA_HOME_17_X64 o JAVA_HOME).
+    Ogni scenario costruisce un repository sorgente finto (progetti .NET o un'applicazione Angular),
+    esegue i lettori delle sue tecnologie e poi lo scrittore, come in pipeline. Lo scenario che
+    controlla la validita' del DSL richiede Java 17 o successivo (STRUCTURIZR_JAVA, JAVA_HOME_17_X64 o
+    JAVA_HOME).
 #>
 
 BeforeAll {
-    . "$PSScriptRoot/../fixtures/documentation/DocumentationFixture.ps1"
+    . "$PSScriptRoot/../fixtures/c4/C4CodeFixture.ps1"
     . "$PSScriptRoot/../../V3/CI/Scripts/Structurizr.ps1"
-    $ScriptPath = Resolve-Path "$PSScriptRoot/../../V3/CI/Scripts/Export-C4CodeModel.ps1"
     $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-code-$(New-Guid)"
-    $SourceRepositories = 'Aidea.Dxp.AI,Aidea.Dxp.Bff.Web,Aidea.Dxp.Client.Web'
-
-    function New-Project([string]$Sdk = 'Microsoft.NET.Sdk', [string[]]$References = @(), [string]$Properties = '', [string]$Items = '') {
-        $refs = ($References | ForEach-Object { "    <ProjectReference Include=`"..\$_\$_.csproj`" />" }) -join "`n"
-        return "<Project Sdk=`"$Sdk`">`n  <PropertyGroup>`n    <TargetFramework>net10.0</TargetFramework>`n$Properties`n  </PropertyGroup>`n  <ItemGroup>`n$refs`n$Items`n  </ItemGroup>`n</Project>`n"
-    }
-
-    function Add-Project([System.Collections.IDictionary]$Files, [string]$Name, [string]$Content) {
-        $Files["source/$Name/$Name.csproj"] = $Content
-    }
-
-    function New-EngineRepository {
-        $files = [ordered]@{}
-        Add-Project $files 'Aidea.Dxp.AI.Api' (New-Project 'Microsoft.NET.Sdk.Web' @('Aidea.Dxp.AI.UseCase.WrittenConversations', 'Aidea.Dxp.AI.Utils', 'Aidea.Dxp.AI.DataAccess.AzureServiceBus', 'Aidea.Dxp.AI.DataAccess.AzureStorageAccount'))
-        Add-Project $files 'Aidea.Dxp.AI.Worker' (New-Project 'Microsoft.NET.Sdk' @('Aidea.Dxp.AI.UseCase.WrittenConversations', 'Aidea.Dxp.AI.UnitTest.Engine') "    <OutputType>Exe</OutputType>`n    <AzureFunctionsVersion>v4</AzureFunctionsVersion>")
-        Add-Project $files 'Aidea.Dxp.AI.Evals' (New-Project 'Microsoft.NET.Sdk' @('Aidea.Dxp.AI.Api') '    <OutputType>Exe</OutputType>')
-        Add-Project $files 'Aidea.Dxp.AI.UseCase.WrittenConversations' (New-Project)
-        Add-Project $files 'Aidea.Dxp.AI.Utils' (New-Project)
-        Add-Project $files 'Aidea.Dxp.AI.Utils.Reflection' (New-Project)
-        Add-Project $files 'Aidea.Dxp.AI.DataAccess.AzureServiceBus' (New-Project 'Microsoft.NET.Sdk' @('Aidea.Dxp.AI.UseCase.WrittenConversations') '' "    <PackageReference Include=`"Azure.Messaging.ServiceBus`" />`n    <PackageReference Include=`"Azure.Identity`" />")
-        Add-Project $files 'Aidea.Dxp.AI.DataAccess.AzureStorageAccount' (New-Project 'Microsoft.NET.Sdk' @() '' "    <PackageReference Include=`"Azure.Storage.Blobs`" />`n    <PackageReference Include=`"Azure.Data.Tables`" />")
-        Add-Project $files 'Aidea.Dxp.AI.UnitTest.Engine' (New-Project 'Microsoft.NET.Sdk' @('Aidea.Dxp.AI.Utils.Reflection', 'Aidea.Dxp.AI.UseCase.WrittenConversations') '' '    <PackageReference Include="Microsoft.NET.Test.Sdk" />')
-        return $files
-    }
-
-    function New-BffRepository {
-        $files = [ordered]@{}
-        Add-Project $files 'Aidea.Dxp.Bff.Web' (New-Project 'Microsoft.NET.Sdk.Web' @('Aidea.Dxp.Bff.Web.BusinessLogic'))
-        Add-Project $files 'Aidea.Dxp.Bff.Web.BusinessLogic' (New-Project)
-        return $files
-    }
-
-    function New-ClientRepository {
-        $files = [ordered]@{}
-        $files['source/angular.json'] = '{ "projects": { "aidea-dxp-client-web": { "projectType": "application", "sourceRoot": "src" } } }'
-        $files['source/package.json'] = '{ "name": "aidea-dxp-client-web", "dependencies": { "@angular/core": "^18.2.0" } }'
-        $files['source/src/app/features/settings/settings.providers.ts'] = "export const provideSettings = () => [];`n"
-        $files['source/src/app/features/chat/pages/chat.page.ts'] = "import { SUGGESTIONS } from '../../ai-suggestions/tokens/ai-suggestions.tokens';`nimport { HUB } from '../../../core/realtime/tokens/realtime.tokens';`nimport { guard } from '../../../core/guards/auth.guard';`n"
-        $files['source/src/app/features/ai-suggestions/tokens/ai-suggestions.tokens.ts'] = "export const SUGGESTIONS = 'x';`n"
-        $files['source/src/app/core/realtime/realtime.providers.ts'] = "export const provideRealtime = () => [];`n"
-        $files['source/src/app/core/realtime/tokens/realtime.tokens.ts'] = "export const HUB = 'x';`n"
-        $files['source/src/app/core/guards/auth.guard.ts'] = "export const guard = () => true;`n"
-        return $files
-    }
 
     function Invoke-Generation([System.Collections.IDictionary]$Files, [string]$Repository, [string]$Mode = 'write') {
-        $root = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-code-$(New-Guid)"
-        foreach ($path in $Files.Keys) {
-            if ($null -eq $Files[$path]) { continue }
-            $file = Join-Path $root $path
-            New-Item -ItemType Directory -Force -Path (Split-Path $file) | Out-Null
-            [IO.File]::WriteAllText($file, ($Files[$path] -replace "`r`n", "`n"))
-        }
-        $variables = @{ SOURCE_DIRECTORY = 'source'; SOURCE_REPOSITORY = $Repository; SOURCE_REPOSITORIES = $SourceRepositories; GENERATED_DIRECTORY = 'docs/architecture/model/generated'; GENERATION_MODE = $Mode; DOCUMENT_LANGUAGE = '' }
-        $previous = @{}
-        foreach ($name in $variables.Keys) {
-            $previous[$name] = [Environment]::GetEnvironmentVariable($name)
-            [Environment]::SetEnvironmentVariable($name, $variables[$name])
-        }
-        Push-Location $root
-        try {
-            $output = & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -File $ScriptPath 2>&1
-            $exitCode = $LASTEXITCODE
-            $generated = [ordered]@{}
-            Get-ChildItem -Path (Join-Path $root 'docs/architecture/model/generated') -Filter '*.dsl' -ErrorAction SilentlyContinue | ForEach-Object { $generated[$_.Name] = [IO.File]::ReadAllText($_.FullName) }
-            return @{ ExitCode = $exitCode; Output = ($output -join "`n"); Generated = $generated }
-        }
-        finally {
-            Pop-Location
-            foreach ($name in $previous.Keys) { [Environment]::SetEnvironmentVariable($name, $previous[$name]) }
-            Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
-        }
-    }
-
-    function Get-ElementLine([string]$Dsl, [string]$Kind, [string]$Name) {
-        return @($Dsl -split "`n" | Where-Object { $_ -match "=\s*$Kind\s+`"$([regex]::Escape($Name))`"" })
-    }
-
-    function Get-Block([string]$Dsl, [string]$OpeningPattern) {
-        $lines = $Dsl -split "`n"
-        $start = [Array]::FindIndex($lines, [Predicate[string]] { param($l) $l -match $OpeningPattern })
-        if ($start -lt 0) { return '' }
-        $depth = 0
-        $block = foreach ($line in $lines[$start..($lines.Count - 1)]) {
-            $line
-            $depth += ([regex]::Matches($line, '\{')).Count - ([regex]::Matches($line, '\}')).Count
-            if ($depth -le 0) { break }
-        }
-        return $block -join "`n"
-    }
-
-    function Get-ContainerBlock([string]$Dsl, [string]$Name) {
-        return Get-Block $Dsl "=\s*container\s+`"$([regex]::Escape($Name))`""
+        $readers = @{ 'Aidea.Dxp.AI' = 'dotnet'; 'Aidea.Dxp.Bff.Web' = 'dotnet'; 'Aidea.Dxp.Client.Web' = 'angular' }
+        return Invoke-C4Generation $Files $Repository @($readers[$Repository]) $Mode
     }
 }
 
@@ -148,7 +59,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         }
 
         It "E il modello contiene la relazione fra i componenti di ""DataAccess.AzureServiceBus"" e ""UseCase.WrittenConversations""" {
-            Get-ContainerBlock $dsl 'Api' | Should -Match 'aidea_dxp_ai_api__aidea_dxp_ai_dataaccess_azureservicebus\s+->\s+aidea_dxp_ai_api__aidea_dxp_ai_usecase_writtenconversations'
+            $dsl | Should -Match 'aidea_dxp_ai_api__aidea_dxp_ai_dataaccess_azureservicebus\s+->\s+aidea_dxp_ai_api__aidea_dxp_ai_usecase_writtenconversations'
         }
 
         It "E un'applicazione e' componente di se stessa" {
@@ -249,11 +160,11 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         }
 
         It "E il modello contiene la relazione da ""chat"" a ""ai-suggestions""" {
-            $client | Should -Match '__features_chat\s+->\s+\S+__features_ai_suggestions'
+            $dsl | Should -Match '__features_chat\s+->\s+\S+__features_ai_suggestions'
         }
 
         It "E il modello contiene la relazione da ""chat"" a ""realtime""" {
-            $client | Should -Match '__features_chat\s+->\s+\S+__core_realtime'
+            $dsl | Should -Match '__features_chat\s+->\s+\S+__core_realtime'
         }
     }
 
@@ -374,6 +285,94 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         It "E i componenti generati portano il tag dei generati" {
             $components = @($export.Workspace.model.softwareSystems[0].containers | ForEach-Object { @($_.components) })
             $components | Where-Object { ($_.tags -split ',') -notcontains 'Generato' } | Should -BeNullOrEmpty
+        }
+    }
+
+    Context "Scenario: un file di progetto che nessun lettore della composizione legge" {
+        BeforeAll {
+            $files = New-EngineRepository
+            $files['docs/architecture/model/generated/aidea.dxp.ai.dsl'] = "# parte precedente`n"
+            $res = Invoke-C4Generation $files 'Aidea.Dxp.AI' @('angular')
+        }
+
+        It "Allora la generazione fallisce" {
+            $res.ExitCode | Should -Be 1
+        }
+
+        It "E nomina il file di progetto non letto" {
+            Get-Issues $res.Output | Where-Object { $_ -match 'Aidea\.Dxp\.AI\.Api/Aidea\.Dxp\.AI\.Api\.csproj' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+
+        It "E il modello non cambia" {
+            $res.Generated['aidea.dxp.ai.dsl'] | Should -Be "# parte precedente`n"
+        }
+    }
+
+    Context "Scenario: un frammento che non si legge" {
+        BeforeAll {
+            $res = Invoke-C4Generation (New-BffRepository) 'Aidea.Dxp.Bff.Web' @('dotnet') -Fragments @{ 'aidea.dxp.bff.web.terraform.json' = '{ non e'' json' }
+        }
+
+        It "Allora la generazione fallisce" {
+            $res.ExitCode | Should -Be 1
+        }
+
+        It "E nomina il frammento" {
+            Get-Issues $res.Output | Where-Object { $_ -match 'aidea\.dxp\.bff\.web\.terraform\.json' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+    }
+
+    Context "Scenario: i frammenti di un altro repository non entrano nella parte generata" {
+        BeforeAll {
+            $other = '{ "manifests": [], "containers": [ { "id": "aidea_dxp_ai_tools_x", "name": "X", "codeName": "Aidea.Dxp.AI.Tools.X", "technology": ".NET", "tags": [], "properties": {}, "components": [] } ], "relationships": [] }'
+            $res = Invoke-C4Generation (New-EngineRepository) 'Aidea.Dxp.AI' @('dotnet') -Fragments @{ 'aidea.dxp.ai.tools.dotnet.json' = $other }
+        }
+
+        It "Allora la generazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E la parte generata non contiene il container dell'altro repository" {
+            $res.Generated['aidea.dxp.ai.dsl'] | Should -Not -Match 'Tools\.X'
+        }
+    }
+
+    Context "Scenario: un repository senza applicazioni" {
+        BeforeAll {
+            $res = Invoke-C4Generation ([ordered]@{ 'source/README.md' = "# Strumenti`n" }) 'Aidea.Dxp.Client.Web' @('angular')
+        }
+
+        It "Allora la generazione fallisce" {
+            $res.ExitCode | Should -Be 1
+        }
+
+        It "E dice che nessuna applicazione e' riconosciuta" {
+            Get-Issues $res.Output | Where-Object { $_ -match 'nessuna applicazione riconosciuta' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+
+        It "E non scrive la parte generata" {
+            $res.Generated.Keys | Should -BeNullOrEmpty
+        }
+    }
+
+    Context "Scenario: un lettore scritto nel repository del consumer si compone con gli altri" {
+        BeforeAll {
+            $files = New-BffRepository
+            $files['source/infra/storage.tf'] = "resource `"azurerm_storage_account`" `"x`" {}`n"
+            $res = Invoke-C4Generation $files 'Aidea.Dxp.Bff.Web' @('dotnet', 'consumer')
+            $dsl = $res.Generated['aidea.dxp.bff.web.dsl']
+        }
+
+        It "Allora la generazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E la parte generata contiene il container del lettore del consumer" {
+            Get-ElementLine $dsl 'container' 'storage' | Should -Not -BeNullOrEmpty -Because $dsl
+        }
+
+        It "E la parte generata contiene ancora il container .NET" {
+            Get-ElementLine $dsl 'container' 'Web' | Should -Not -BeNullOrEmpty -Because $dsl
         }
     }
 }

@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# ── CI Step: C4 read .NET ─────────────────────────────────────────────────────
+#
+# Lettore .NET del modello C4 generato (V3/CI/Scripts/Read-C4DotNetModel.ps1): legge i progetti del
+# checkout del repository sorgente e scrive in fragmentDirectory il frammento che c4-generate.yaml
+# unisce. Le applicazioni web e le Function App sono container, i progetti di produzione che
+# raggiungono sono componenti con i servizi Azure delle loro librerie; un progetto o una libreria
+# Azure che le tabelle di DotNetModel.psd1 non riconoscono ferma la lettura.
+#
+# Riusato da:
+#   il consumer, prima di c4-generate.yaml, per un repository sorgente con progetti .NET
+#
+# Parametri
+# ─────────
+#   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
+#   sourceRepository   → nome del repository sorgente, es. $(Build.Repository.Name)
+#   sourceDirectory    → checkout del repository sorgente (default: $(Build.SourcesDirectory))
+#   fragmentDirectory  → cartella dei frammenti (default: $(Agent.TempDirectory)/c4-fragments)
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: mode
+    type: string
+    default: 'enforce'
+    values: ['off', 'warn', 'enforce']
+
+  - name: sourceRepository
+    type: string
+    default: '$(Build.Repository.Name)'
+
+  - name: sourceDirectory
+    type: string
+    default: '$(Build.SourcesDirectory)'
+
+  - name: fragmentDirectory
+    type: string
+    default: '$(Agent.TempDirectory)/c4-fragments'
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: PowerShell@2
+    displayName: 'C4 .NET projects of ${{ parameters.sourceRepository }} (${{ parameters.mode }})'
+    inputs:
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Read-C4DotNetModel.ps1'
+      pwsh: true
+    env:
+      GATE_MODE: ${{ parameters.mode }}
+      SOURCE_REPOSITORY: ${{ parameters.sourceRepository }}
+      SOURCE_DIRECTORY: ${{ parameters.sourceDirectory }}
+      FRAGMENT_DIRECTORY: ${{ parameters.fragmentDirectory }}

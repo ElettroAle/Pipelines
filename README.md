@@ -242,7 +242,10 @@ parametri di formato e senza condizioni sul formato.
 |---|---|---|---|
 | `adr-verify.yaml` | `Test-AdrCorpus.ps1` | corpus delle decisioni | MADR |
 | `arc42-verify.yaml` | `Test-Arc42Document.ps1` | un file per sezione con nome e titolo del template ufficiale | arc42 |
-| `c4-generate.yaml` | `Export-C4CodeModel.ps1` | parte del modello C4 generata da un repository sorgente, allineata al codice | C4 |
+| `c4-read-dotnet.yaml` | `Read-C4DotNetModel.ps1` | progetti .NET di un repository sorgente letti nel frammento del modello C4 | C4, .NET |
+| `c4-read-angular.yaml` | `Read-C4AngularModel.ps1` | applicazione Angular di un repository sorgente letta nel frammento del modello C4 | C4, Angular |
+| `c4-read-script.yaml` | script del consumer | tecnologia o convenzione del consumer letta nel frammento del modello C4 | C4 |
+| `c4-generate.yaml` | `Export-C4CodeModel.ps1` | parte del modello C4 generata dai frammenti di un repository sorgente, allineata al codice | C4 |
 | `c4-verify.yaml` | `Test-C4Model.ps1` | modello Structurizr valido e completo, parte scritta a mano coerente con quella generata, viste mostrate nelle sezioni | C4 |
 | `mermaid-verify.yaml` | `Test-MermaidDiagrams.ps1` | diagrammi Mermaid validi, nel documento e nelle decisioni | Mermaid |
 | `flows-verify.yaml` | `Test-DiagramFlows.ps1` | flussi fatti degli elementi del modello C4 e delle classi delle decisioni | C4, Mermaid |
@@ -342,29 +345,47 @@ Modello C4 (`c4-verify.yaml`, `CI/Scripts/Test-C4Model.ps1`):
   step lo prepara con `ensure-java.yaml`. Senza Java la verifica fallisce nominando il controllo non
   eseguito.
 
-Parte del modello C4 generata dal codice (`c4-generate.yaml`, `CI/Scripts/Export-C4CodeModel.ps1`):
+Parte del modello C4 generata dal codice (`c4-read-*.yaml` e `c4-generate.yaml`):
 
-- Legge solo il checkout del repository sorgente e scrive `<repository in minuscolo>.dsl` nella cartella
-  delle parti generate, da includere con `!include` nel sistema di `model/workspace.dsl`. Il file non si
-  scrive a mano.
-- **Container.** Un progetto .NET con SDK Web o una Function App, e un'applicazione Angular; le
-  applicazioni di uno stesso repository stanno in un gruppo. Un progetto da riga di comando è uno
-  strumento e resta fuori.
-- **Componenti.** Di un'applicazione .NET, i progetti di produzione che raggiunge con i riferimenti,
-  senza i progetti di test; un progetto usato da più applicazioni è un componente di ognuna. Di
-  un'applicazione Angular, le cartelle di funzionalità e i moduli di base con un file `*.providers.ts`.
-  Le relazioni sono i riferimenti fra progetti e gli import fra cartelle.
+- **Un lettore per tecnologia.** Ogni passo `c4-read-<tecnologia>.yaml` conosce solo la sua tecnologia:
+  legge il checkout del repository sorgente e lascia in `fragmentDirectory` un frammento,
+  `<repository in minuscolo>.<tecnologia>.json`. Il consumer compone i lettori delle tecnologie del
+  repository, poi `c4-generate.yaml`, come una pipeline di build compone gli step di una tecnologia.
+- **Il frammento** (`CI/Scripts/C4CodeModel.ps1`, che i lettori includono) ha tre parti: `manifests`,
+  i file di progetto letti, relativi al repository; `containers`, ognuno con `id`, `name`, `codeName`,
+  `technology`, `tags`, `properties` e i `components` con gli stessi campi tranne `tags`;
+  `relationships`, coppie `source` e `target` di identificativi.
+- **Un lettore del consumer** (`c4-read-script.yaml`). Per una tecnologia o una convenzione che questo
+  repository non conosce, ad esempio come l'infrastruttura di un progetto lega un'applicazione al suo
+  progetto, il consumer scrive il lettore nel proprio repository e lo passa con `scriptPath`. Lo
+  script trova `C4CodeModel.ps1`, `VerificationGate.ps1` e `DocumentLanguage.ps1` in
+  `C4_SCRIPTS_DIRECTORY` e scrive il frammento con lo stesso contratto.
+- **Lo scrittore** (`CI/Scripts/Export-C4CodeModel.ps1`) unisce i frammenti del repository e scrive
+  `<repository in minuscolo>.dsl` nella cartella delle parti generate, da includere con `!include` nel
+  sistema di `model/workspace.dsl`. I container stanno in un gruppo con il nome del repository senza il
+  prefisso comune ai repository sorgente; ogni elemento porta il tag `Generato` in italiano e il nome
+  completo nella proprietà `codice`, e una proprietà vuota non si scrive. Non conosce le tecnologie: un
+  file di progetto del repository (`*.csproj`, `package.json`, `angular.json`, `*.tf`, `pom.xml` e gli
+  altri della sua lista) che nessun frammento dichiara letto ferma la generazione nominando il file, e
+  così un frammento che non si legge. Il file generato non si scrive a mano.
+- **.NET** (`c4-read-dotnet.yaml`). Il tipo di un progetto viene dalla prima regola di
+  `CI/Scripts/DotNetModel.psd1` che gli corrisponde: SDK Web e Function App sono applicazioni e
+  diventano container, un progetto da riga di comando è uno strumento e resta fuori. I componenti di
+  un'applicazione sono i progetti di produzione che raggiunge con i riferimenti, senza i progetti di
+  test; un progetto usato da più applicazioni è un componente di ognuna. Le relazioni sono i
+  riferimenti fra progetti.
 - **Servizi Azure di un componente .NET.** Le librerie Azure del progetto dicono con quale tipo di
-  servizio parla (proprietà `servizi` in italiano, ad esempio `Service Bus,Storage`), secondo la tabella
-  di `CI/Scripts/AzureServices.psd1`. Le librerie che non parlano con un servizio (identità, telemetria,
-  hosting delle Function) si ignorano; una libreria `Azure.*` o `Microsoft.Azure.*` fuori dalla tabella
-  ferma la generazione.
+  servizio parla (proprietà `servizi` in italiano, ad esempio `Service Bus,Storage`), secondo la
+  tabella di `DotNetModel.psd1`. Le librerie che non parlano con un servizio (identità, telemetria,
+  hosting delle Function) si ignorano; una libreria `Azure.*` o `Microsoft.Azure.*` fuori dalla tabella,
+  o un progetto che nessuna regola riconosce, ferma la lettura.
+- **Angular** (`c4-read-angular.yaml`). L'applicazione del workspace è un container con il nome del
+  repository senza il prefisso comune ai repository sorgente; i componenti sono le cartelle di
+  funzionalità e i moduli di base con un file `*.providers.ts`, le relazioni gli import fra cartelle. Un
+  progetto che non è l'unica applicazione del workspace, o un secondo workspace, ferma la lettura.
 - **Nomi.** Il nome nel codice senza il prefisso comune ai progetti del repository, a segmenti interi e
-  più corto di ogni nome; l'applicazione Angular prende il nome del repository senza il prefisso comune
-  ai repository sorgente. Il nome completo resta nella proprietà `codice` in italiano, e l'identificativo
-  se ne ricava, così un repository nomina gli elementi degli altri senza leggerli.
-- **Casi non riconosciuti.** Un progetto, un'applicazione o un manifest di un tipo che queste regole
-  non riconoscono ferma la generazione nominando repository ed elemento, e il file non cambia.
+  più corto di ogni nome. L'identificativo si ricava dal nome completo, così un repository nomina gli
+  elementi degli altri senza leggerli.
 - Con `generationMode: check` il file del documento si confronta con quello che la generazione produce:
   una differenza nomina il file.
 
@@ -557,7 +578,10 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | `CI/Scripts/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, versione intera, sostituzioni reciproche, ADR `accepted` con l'esito invariato e cambiati solo con una versione nuova rispetto al ramo di destinazione della PR |
 | `CI/Scripts/Test-Arc42Document.ps1` | Struttura di un documento arc42 (`arc42-verify.yaml`): un file per sezione con nome e titolo del template ufficiale; release, URL e SHA-256 per lingua fissati nello script |
 | `CI/Scripts/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, nessun elemento tecnico nelle viste di contesto, elementi generati descritti e relazioni generate non ripetute a mano, marcatori di vista nelle sezioni |
-| `CI/Scripts/Export-C4CodeModel.ps1` | Parte del modello C4 generata da un repository sorgente (`c4-generate.yaml`): applicazioni .NET e Angular come container, progetti di produzione e cartelle come componenti, errore sui tipi non riconosciuti, confronto in modalità `check` |
+| `CI/Scripts/C4CodeModel.ps1` | Contratto del frammento del modello C4 generato, incluso dai lettori: file di progetto letti, container, componenti, relazioni |
+| `CI/Scripts/Read-C4DotNetModel.ps1` | Lettore .NET (`c4-read-dotnet.yaml`): applicazioni come container, progetti di produzione come componenti con i servizi Azure, regole in `DotNetModel.psd1` |
+| `CI/Scripts/Read-C4AngularModel.ps1` | Lettore Angular (`c4-read-angular.yaml`): l'applicazione come container, cartelle di funzionalità e moduli di base come componenti |
+| `CI/Scripts/Export-C4CodeModel.ps1` | Parte del modello C4 generata dai frammenti di un repository sorgente (`c4-generate.yaml`): errore sui file di progetto che nessun lettore legge, confronto in modalità `check` |
 | `CI/Scripts/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |
 | `CI/Scripts/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni e delle decisioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
 | `CI/Scripts/Test-DiagramFlows.ps1` | Flussi coerenti con la struttura (`flows-verify.yaml`): partecipanti e chiamate dei diagrammi di sequenza contro il modello C4, flusso delle decisioni contro le classi della loro struttura |
