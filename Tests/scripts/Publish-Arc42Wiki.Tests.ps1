@@ -255,6 +255,8 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
             $wiki = New-Wiki
             $docs = New-ValidDocs
             Add-DecisionIndex $docs
+            Edit-Docs $docs 'docs/decisions/0001-esempio.md' "status: accepted`n" "status: accepted`nversion: 2`ndate: 2026-10-25`n"
+            Edit-Docs $docs 'docs/decisions/0001-esempio.md' "# Esempio`n" "# Esempio`n`nIl BFF e' l'unico ingresso.`n"
             $res = Invoke-WikiPublish $docs $wiki
             $index = Get-WikiPage $wiki 'Architettura/9.-Decisioni-di-progettazione.md'
             $decision = Get-WikiPage $wiki 'Architettura/9.-Decisioni-di-progettazione/0001-Esempio.md'
@@ -273,7 +275,40 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
         }
 
         It "E la pagina della decisione non mostra i suoi metadati" {
-            $decision | Should -Not -Match 'status:'
+            $decision | Should -Be "Il BFF e' l'unico ingresso."
+        }
+    }
+
+    Context "Scenario: decisione sostituita" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-ValidDocs
+            Add-DecisionIndex $docs
+            Edit-Docs $docs 'docs/decisions/0001-esempio.md' 'status: accepted' "status: superseded`nsuperseded-by: 0002-sostituta"
+            $docs['docs/decisions/0002-sostituta.md'] = "---`nstatus: accepted`nsupersedes: 0001-esempio`n---`n`n# Sostituta`n`nIl BFF resta l'unico ingresso.`n"
+            $res = Invoke-WikiPublish $docs $wiki
+            $index = Get-WikiPage $wiki 'Architettura/9.-Decisioni-di-progettazione.md'
+            $replaced = Get-WikiPage $wiki 'Architettura/9.-Decisioni-di-progettazione/0001-Esempio.md'
+            $successor = Get-WikiPage $wiki 'Architettura/9.-Decisioni-di-progettazione/0002-Sostituta.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora la pagina della decisione sostituita comincia con l'avviso in rosso" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            ($replaced -split "`n")[0] | Should -BeLike '> <span style="color:red;font-weight:bold">DECISIONE SOSTITUITA.*</span>*'
+        }
+
+        It "E l'avviso porta alla decisione che vale al suo posto" {
+            ($replaced -split "`n")[0] | Should -BeLike '*[[]0002 Sostituta](/Architettura/9.-Decisioni-di-progettazione/0002-Sostituta).'
+        }
+
+        It "E l'indice mostra in rosso lo stato della decisione sostituita" {
+            $index | Should -Match ([regex]::Escape('| <span style="color:red;font-weight:bold">sostituita</span> |'))
+        }
+
+        It "E la decisione che vale non ha avvisi" {
+            $successor | Should -Not -BeNullOrEmpty
+            $successor | Should -Not -Match 'color:red'
         }
     }
 

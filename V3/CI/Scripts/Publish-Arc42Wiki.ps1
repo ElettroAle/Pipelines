@@ -46,13 +46,16 @@ function ConvertTo-RepositoryPath([string]$Path) {
 function Read-Markdown([string]$Path) {
     $text = [IO.File]::ReadAllText($Path) -replace "`r`n", "`n"
     $status = $null
+    $supersededBy = $null
     if ($text -match '^---\n(?<front>[\s\S]*?)\n---\n') {
-        if ($Matches.front -match '(?m)^status:\s*(\S+)') { $status = $Matches[1] }
+        $front = $Matches.front
         $text = $text.Substring($Matches[0].Length)
+        if ($front -match '(?m)^status:\s*(\S+)') { $status = $Matches[1] }
+        if ($front -match '(?m)^superseded-by:\s*(\S+)') { $supersededBy = $Matches[1] }
     }
     $title = [regex]::Match($text, '(?m)^#\s+(.+?)\s*$').Groups[1].Value
     $body = ([regex]::new('(?m)^#\s+.+\n+')).Replace($text, '', 1)
-    return [pscustomobject]@{ Title = $title; Status = $status; Body = $body.TrimStart("`n") }
+    return [pscustomobject]@{ Title = $title; Status = $status; SupersededBy = $supersededBy; Body = $body.TrimStart("`n") }
 }
 
 # Il titolo di una decisione e' una frase intera, troppo lunga per il nome di una pagina: il nome
@@ -69,6 +72,7 @@ function New-Page([string]$Source, [string]$Name, [string]$ParentPath, $Markdown
         Name     = ConvertTo-WikiName $Name
         WikiPath = "$ParentPath/$(ConvertTo-WikiName $Name)"
         Status   = $Markdown.Status
+        SupersededBy = $Markdown.SupersededBy
         Body     = $Markdown.Body
         Children = [Collections.Generic.List[object]]::new()
     }
@@ -137,9 +141,26 @@ function Get-RowDecision([string]$Row, $Page, [hashtable]$PagesBySource) {
     return $null
 }
 
+function Format-Alert([string]$Text) {
+    return "<span style=`"color:red;font-weight:bold`">$Text</span>"
+}
+
 function Get-StatusLabel([string]$Status) {
-    if ($DocumentLanguage.StatusLabels.ContainsKey($Status)) { return $DocumentLanguage.StatusLabels[$Status] }
-    return $Status
+    $label = if ($DocumentLanguage.StatusLabels.ContainsKey($Status)) { $DocumentLanguage.StatusLabels[$Status] } else { $Status }
+    if ($DocumentLanguage.StatusNotices.ContainsKey($Status)) { return Format-Alert $label }
+    return $label
+}
+
+# Una decisione che non vale piu' resta nella wiki con il testo di quando valeva: chi ci arriva da un
+# link se ne accorge prima di leggerla e trova la decisione che vale al suo posto.
+function Get-StatusNotice($Page, [hashtable]$PagesBySource) {
+    if (-not $Page.Status -or -not $DocumentLanguage.StatusNotices.ContainsKey($Page.Status)) { return $null }
+    $notice = "> $(Format-Alert $DocumentLanguage.StatusNotices[$Page.Status])"
+    if ($Page.Status -ne 'superseded' -or -not $Page.SupersededBy) { return $notice }
+    $successor = $PagesBySource["$decisionsDirectory/$($Page.SupersededBy).md"]
+    $name = Get-DecisionPageName "$($Page.SupersededBy).md"
+    $reference = if ($successor) { "[$name]($($successor.WikiPath))" } else { $name }
+    return "$notice $reference."
 }
 
 # Una tabella le cui righe rimandano tutte a una decisione e' un indice delle decisioni: riceve la
@@ -161,6 +182,8 @@ function Convert-PageBody($Page, [hashtable]$PagesBySource, [hashtable]$Views, [
     $output = [Collections.Generic.List[string]]::new()
     $table = [Collections.Generic.List[string]]::new()
     $fence = $null
+    $notice = Get-StatusNotice $Page $PagesBySource
+    if ($notice) { $output.Add($notice); $output.Add('') }
     $flushTable = {
         foreach ($row in (Add-DecisionStatus $table.ToArray() $Page $PagesBySource)) { $output.Add((Convert-Links $row $Page $PagesBySource)) }
         $table.Clear()
