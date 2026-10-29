@@ -36,7 +36,7 @@ parameters:
 steps:
   - task: PowerShell@2
     displayName: 'Ensure Java (Windows)'
-    condition: eq(variables['Agent.OS'], 'Windows_NT')
+    condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'))
     inputs:
       targetType: 'inline'
       script: |
@@ -77,7 +77,7 @@ steps:
 
   - task: Bash@3
     displayName: 'Ensure Java (Linux)'
-    condition: ne(variables['Agent.OS'], 'Windows_NT')
+    condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'))
     inputs:
       targetType: 'inline'
       script: |
