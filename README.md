@@ -273,6 +273,7 @@ template d'ingresso: lo step `document-directories.yaml` le mette in `DOCS_DIREC
 | Parti della decisione con struttura e flusso nel codice | `Struttura nel codice`, `Flusso nel codice` | `Code structure`, `Code flow` |
 | Pagina della wiki (default di `wikiRoot`) | `Architettura` | `Architecture` |
 | Colonna dello stato nella wiki | `Stato` | `Status` |
+| Avviso di una decisione sostituita, deprecata o respinta | `DECISIONE SOSTITUITA. …` | `SUPERSEDED DECISION. …` |
 
 I diagrammi li sceglie il consumer: il parametro `diagramSteps` (stepList, default vuoto) riceve gli step
 dei diagrammi che il documento usa. Chi non usa C4, o usa un'altra notazione, cambia la lista nel suo
@@ -433,6 +434,9 @@ Dopo il merge su `main` il documento arc42 si pubblica nella wiki di progetto di
 - Ogni sezione diventa una pagina sotto `wikiRoot` (default il nome della lingua, `Architettura` o
   `Architecture`), nell'ordine dei numeri; le decisioni diventano sottopagine della sezione 9, quella
   delle decisioni nel template arc42, e la tabella che le elenca riceve la colonna dello stato.
+- Una decisione sostituita, deprecata o respinta comincia con un avviso in rosso, e l'indice ne mostra lo
+  stato in rosso. L'avviso di una decisione sostituita rimanda alla pagina di `superseded-by`: il testo
+  della decisione non cambia, l'avviso viene dallo stato.
 - I marcatori di vista diventano le immagini PNG delle viste C4: la Structurizr CLI le esporta in
   C4-PlantUML e PlantUML (versione fissata, SHA-256 verificato) le disegna con le librerie C4 interne e il
   layout smetana, senza Graphviz e senza rete. Le immagini stanno in `.attachments/<wikiRoot>/<vista>.png`.
