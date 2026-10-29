@@ -147,6 +147,10 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
             Get-ElementLine $dsl 'container' 'Client.Web' | Should -Not -BeNullOrEmpty -Because $dsl
         }
 
+        It "E il container unico del repository non sta in un gruppo" {
+            $dsl | Should -Not -Match '(?m)^\s*group\s' -Because $dsl
+        }
+
         It "E il modello contiene il componente ""settings"" nel container ""Client.Web""" {
             $client | Should -Match 'component\s+"settings"'
         }
@@ -373,6 +377,14 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
 
         It "E la parte generata contiene ancora il container .NET" {
             Get-ElementLine $dsl 'container' 'Web' | Should -Not -BeNullOrEmpty -Because $dsl
+        }
+
+        It "E il container del lettore del consumer sta nel gruppo di ""Aidea.Dxp.Bff.Web""" {
+            Get-Block $dsl 'group\s+"Bff.Web"' | Should -Match 'container\s+"storage"' -Because $dsl
+        }
+
+        It "E il container .NET sta nel gruppo di ""Aidea.Dxp.Bff.Web""" {
+            Get-Block $dsl 'group\s+"Bff.Web"' | Should -Match 'container\s+"Web"' -Because $dsl
         }
     }
 }

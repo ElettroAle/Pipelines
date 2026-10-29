@@ -362,8 +362,8 @@ Parte del modello C4 generata dal codice (`c4-read-*.yaml` e `c4-generate.yaml`)
   `C4_SCRIPTS_DIRECTORY` e scrive il frammento con lo stesso contratto.
 - **Lo scrittore** (`CI/Scripts/Export-C4CodeModel.ps1`) unisce i frammenti del repository e scrive
   `<repository in minuscolo>.dsl` nella cartella delle parti generate, da includere con `!include` nel
-  sistema di `model/workspace.dsl`. I container stanno in un gruppo con il nome del repository senza il
-  prefisso comune ai repository sorgente; ogni elemento porta il tag `Generato` in italiano e il nome
+  sistema di `model/workspace.dsl`. Con più di un container, i container stanno in un gruppo con il nome
+  del repository senza il prefisso comune ai repository sorgente; un container unico non ha gruppo; ogni elemento porta il tag `Generato` in italiano e il nome
   completo nella proprietà `codice`, e una proprietà vuota non si scrive. Non conosce le tecnologie: un
   file di progetto del repository (`*.csproj`, `package.json`, `angular.json`, `*.tf`, `pom.xml` e gli
   altri della sua lista) che nessun frammento dichiara letto ferma la generazione nominando il file, e

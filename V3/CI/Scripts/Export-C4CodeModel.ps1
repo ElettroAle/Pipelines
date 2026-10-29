@@ -60,11 +60,19 @@ function Format-Container($Container, [string]$Indent) {
     return $lines + "$Indent}"
 }
 
-function Format-Model($Fragments) {
+function Format-Group($Containers) {
     $group = Remove-CommonPrefix $Repository @($SourceRepositories + $Repository | Select-Object -Unique)
-    $lines = @("// Parte del modello C4 generata da $Repository con Export-C4CodeModel.ps1: non si modifica a mano.", "group $(Format-Text $group) {")
-    $Fragments.Content.containers | ForEach-Object { $lines += Format-Container $_ '    ' }
-    $lines += '}'
+    return @("group $(Format-Text $group) {") + @($Containers | ForEach-Object { Format-Container $_ '    ' }) + '}'
+}
+
+function Format-Containers($Containers) {
+    if ($Containers.Count -gt 1) { return Format-Group $Containers }
+    return Format-Container $Containers[0] ''
+}
+
+function Format-Model($Fragments) {
+    $lines = @("// Parte del modello C4 generata da $Repository con Export-C4CodeModel.ps1: non si modifica a mano.")
+    $lines += Format-Containers @($Fragments.Content.containers)
     $Fragments.Content.relationships | ForEach-Object { $lines += "$($_.source) -> $($_.target) `"`" `"`" $(Format-Text $GeneratedTag)" }
     return ($lines -join "`n") + "`n"
 }
