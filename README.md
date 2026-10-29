@@ -242,7 +242,8 @@ parametri di formato e senza condizioni sul formato.
 |---|---|---|---|
 | `adr-verify.yaml` | `Test-AdrCorpus.ps1` | corpus delle decisioni | MADR |
 | `arc42-verify.yaml` | `Test-Arc42Document.ps1` | un file per sezione con nome e titolo del template ufficiale | arc42 |
-| `c4-verify.yaml` | `Test-C4Model.ps1` | modello Structurizr valido e completo, viste mostrate nelle sezioni | C4 |
+| `c4-generate.yaml` | `Export-C4CodeModel.ps1` | parte del modello C4 generata da un repository sorgente, allineata al codice | C4 |
+| `c4-verify.yaml` | `Test-C4Model.ps1` | modello Structurizr valido e completo, parte scritta a mano coerente con quella generata, viste mostrate nelle sezioni | C4 |
 | `mermaid-verify.yaml` | `Test-MermaidDiagrams.ps1` | diagrammi Mermaid validi, nel documento e nelle decisioni | Mermaid |
 | `flows-verify.yaml` | `Test-DiagramFlows.ps1` | flussi fatti degli elementi del modello C4 e delle classi delle decisioni | C4, Mermaid |
 | `documentation-verify.yaml` | `Test-Documentation.ps1` | rimandi esistenti, soglie numeriche di leggibilità | nessun formato |
@@ -333,9 +334,34 @@ Modello C4 (`c4-verify.yaml`, `CI/Scripts/Test-C4Model.ps1`):
 - Una sezione mostra una vista con il marcatore di vista (`<!-- vista: <chiave> -->` in italiano); ogni vista è mostrata da
   almeno una sezione e ogni marcatore nomina una vista esistente. Senza questo step i marcatori non si
   controllano.
+- La parte generata dal codice (`c4-generate.yaml`) porta il tag `Generato` in italiano: ogni elemento
+  generato ha una descrizione nella parte scritta a mano (`!element <id> { description "…" }`), e una
+  relazione scritta a mano non ripete una relazione generata. Un riferimento a un elemento che nessuna
+  parte contiene rende il modello non valido, e l'errore nomina l'identificativo.
 - **Requisiti.** Java 17 o successivo per la Structurizr CLI (versione fissata, SHA-256 verificato); lo
   step lo prepara con `ensure-java.yaml`. Senza Java la verifica fallisce nominando il controllo non
   eseguito.
+
+Parte del modello C4 generata dal codice (`c4-generate.yaml`, `CI/Scripts/Export-C4CodeModel.ps1`):
+
+- Legge solo il checkout del repository sorgente e scrive `<repository in minuscolo>.dsl` nella cartella
+  delle parti generate, da includere con `!include` nel sistema di `model/workspace.dsl`. Il file non si
+  scrive a mano.
+- **Container.** Un progetto .NET con SDK Web o una Function App, e un'applicazione Angular; le
+  applicazioni di uno stesso repository stanno in un gruppo. Un progetto da riga di comando è uno
+  strumento e resta fuori.
+- **Componenti.** Di un'applicazione .NET, i progetti di produzione che raggiunge con i riferimenti,
+  senza i progetti di test; un progetto usato da più applicazioni è un componente di ognuna. Di
+  un'applicazione Angular, le cartelle di funzionalità e i moduli di base con un file `*.providers.ts`.
+  Le relazioni sono i riferimenti fra progetti e gli import fra cartelle.
+- **Nomi.** Il nome nel codice senza il prefisso comune ai progetti del repository, a segmenti interi e
+  più corto di ogni nome; l'applicazione Angular prende il nome del repository senza il prefisso comune
+  ai repository sorgente. Il nome completo resta nella proprietà `codice` in italiano, e l'identificativo
+  se ne ricava, così un repository nomina gli elementi degli altri senza leggerli.
+- **Casi non riconosciuti.** Un progetto, un'applicazione o un manifest di un tipo che queste regole
+  non riconoscono ferma la generazione nominando repository ed elemento, e il file non cambia.
+- Con `generationMode: check` il file del documento si confronta con quello che la generazione produce:
+  una differenza nomina il file.
 
 Diagrammi Mermaid (`mermaid-verify.yaml`, `CI/Scripts/Test-MermaidDiagrams.ps1`):
 
@@ -525,7 +551,8 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | `CI/Scripts/Test-PublishedArtifact.ps1` | Prima dell'upload dell'artifact negli orchestratori GitFlow e TrunkFlow: se la run lo ha già pubblicato (rerun dello stage) setta `artifactAlreadyPublished` e l'upload si salta; se la verifica non riesce l'upload procede |
 | `CI/Scripts/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, versione intera, sostituzioni reciproche, ADR `accepted` con l'esito invariato e cambiati solo con una versione nuova rispetto al ramo di destinazione della PR |
 | `CI/Scripts/Test-Arc42Document.ps1` | Struttura di un documento arc42 (`arc42-verify.yaml`): un file per sezione con nome e titolo del template ufficiale; release, URL e SHA-256 per lingua fissati nello script |
-| `CI/Scripts/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, nessun elemento tecnico nelle viste di contesto, marcatori di vista nelle sezioni |
+| `CI/Scripts/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, nessun elemento tecnico nelle viste di contesto, elementi generati descritti e relazioni generate non ripetute a mano, marcatori di vista nelle sezioni |
+| `CI/Scripts/Export-C4CodeModel.ps1` | Parte del modello C4 generata da un repository sorgente (`c4-generate.yaml`): applicazioni .NET e Angular come container, progetti di produzione e cartelle come componenti, errore sui tipi non riconosciuti, confronto in modalità `check` |
 | `CI/Scripts/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |
 | `CI/Scripts/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni e delle decisioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
 | `CI/Scripts/Test-DiagramFlows.ps1` | Flussi coerenti con la struttura (`flows-verify.yaml`): partecipanti e chiamate dei diagrammi di sequenza contro il modello C4, flusso delle decisioni contro le classi della loro struttura |

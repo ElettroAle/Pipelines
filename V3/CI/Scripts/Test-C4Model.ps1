@@ -16,6 +16,7 @@ $WorkspaceDsl = Join-Path $docsDirectory 'model/workspace.dsl'
 
 $ApplicationTag = $DocumentLanguage.ApplicationTag
 $TechnicalTag = $DocumentLanguage.TechnicalTag
+$GeneratedTag = $DocumentLanguage.GeneratedTag
 $ModelScope = 'modello C4'
 $RequiredLevels = [ordered]@{ systemContextViews = 'vista di contesto'; containerViews = 'vista dei container'; deploymentViews = 'vista di deployment' }
 $ViewKinds = @('systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews', 'dynamicViews', 'deploymentViews')
@@ -49,6 +50,28 @@ function Test-ContextViewsWithoutTechnicalElements($Workspace) {
     $technical.Keys | Where-Object { $shown -contains $_ } | ForEach-Object { New-Issue $ModelScope 'elemento tecnico nella vista di contesto' $technical[$_] }
 }
 
+function Get-ModelElements($Workspace) {
+    $systems = @($Workspace.model.softwareSystems | Where-Object { $_ })
+    $containers = @($systems | ForEach-Object { @($_.containers) } | Where-Object { $_ })
+    $components = @($containers | ForEach-Object { @($_.components) } | Where-Object { $_ })
+    return @($Workspace.model.people | Where-Object { $_ }) + $systems + $containers + $components
+}
+
+function Test-GeneratedElementsDescribed($Elements) {
+    $Elements | Where-Object { (Test-HasTag $_ $GeneratedTag) -and -not $_.description } | ForEach-Object { New-Issue $ModelScope 'elemento generato senza descrizione' $_.name }
+}
+
+# Le relazioni implicite che Structurizr deriva da quelle dichiarate portano linkedRelationshipId e non
+# sono scritte da nessuno.
+function Test-GeneratedRelationshipsNotRepeated($Elements) {
+    $names = @{}
+    $Elements | ForEach-Object { $names[$_.id] = $_.name }
+    $declared = @($Elements | ForEach-Object { @($_.relationships) } | Where-Object { $_ -and -not $_.linkedRelationshipId })
+    $generated = @($declared | Where-Object { Test-HasTag $_ $GeneratedTag } | ForEach-Object { "$($_.sourceId)>$($_.destinationId)" })
+    $declared | Where-Object { -not (Test-HasTag $_ $GeneratedTag) -and $generated -contains "$($_.sourceId)>$($_.destinationId)" } |
+        ForEach-Object { New-Issue $ModelScope 'relazione generata ripetuta a mano' "$($names[$_.sourceId]) -> $($names[$_.destinationId])" }
+}
+
 function Test-ViewsShown([string[]]$ViewKeys, $Sections) {
     $shown = @($Sections | ForEach-Object { $_.Content.Views })
     $ViewKeys | Where-Object { $shown -notcontains $_ } | ForEach-Object { New-Issue $ModelScope 'vista non mostrata in nessuna sezione' $_ }
@@ -68,9 +91,12 @@ function Get-ModelIssues {
 
     $sections = Get-DocumentSections $docsDirectory
     $viewKeys = Get-ViewKeys $export.Workspace
+    $elements = Get-ModelElements $export.Workspace
     Test-RequiredLevels $export.Workspace
     Test-ComponentViews $export.Workspace
     Test-ContextViewsWithoutTechnicalElements $export.Workspace
+    Test-GeneratedElementsDescribed $elements
+    Test-GeneratedRelationshipsNotRepeated $elements
     Test-ViewsShown $viewKeys $sections
     Test-ViewMarkers $viewKeys $sections
 }

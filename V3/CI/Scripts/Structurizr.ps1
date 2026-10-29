@@ -75,8 +75,10 @@ function Export-StructurizrWorkspace([string]$WorkspaceDsl) {
         $global:LASTEXITCODE = 0
         $exported = Get-ChildItem -Path $outputDir -Filter '*.json' -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($exitCode -ne 0 -or -not $exported) {
-            $reason = @($output | ForEach-Object { "$_" } | Where-Object { $_ -match 'does not exist|error|Error|unexpected|expected' }) | Select-Object -Last 1
-            if (-not $reason) { $reason = @($output | ForEach-Object { "$_" }) | Select-Object -Last 1 }
+            $lines = @($output | ForEach-Object { "$_" })
+            $reason = $lines | Where-Object { $_ -match '^[\w.]+Exception:' } | Select-Object -First 1
+            if (-not $reason) { $reason = $lines | Where-Object { $_ -match 'does not exist|error|Error|unexpected|expected' } | Select-Object -Last 1 }
+            if (-not $reason) { $reason = $lines | Select-Object -Last 1 }
             return [pscustomobject]@{ Workspace = $null; Error = ($reason -replace '^[\w.]+Exception:\s*', '' -replace ' of .+?\.dsl', '') }
         }
         return [pscustomobject]@{ Workspace = (Get-Content -Raw $exported.FullName | ConvertFrom-Json); Error = $null }
