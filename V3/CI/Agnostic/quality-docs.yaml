@@ -14,7 +14,7 @@
 # Parametri
 # ─────────
 #   checkoutRepository → repository da fare checkout [REQUIRED]
-#   language           → lingua del documento, es. 'IT' o 'EN' (V3/CI/Scripts/Common/Languages, default: IT)
+#   language           → lingua del documento, es. 'IT' o 'EN' (V3/CI/Scripts/Common/Documentation/Languages, default: IT)
 #   adrMode           → off | warn | enforce (default: enforce)
 #   decisionsDirectory → cartella degli ADR (default: docs/decisions)
 #   docsMode           → off | warn | enforce (default: off, finché il repo non ha la documentazione)

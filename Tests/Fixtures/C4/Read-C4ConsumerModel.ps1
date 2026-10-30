@@ -3,8 +3,8 @@
 # Lettore finto scritto nel repository di un consumer (c4-read.yaml): ogni file *.tf dichiara
 # un servizio di dati, che diventa un container con il nome del file.
 
-. "$env:C4_SCRIPTS_DIRECTORY/VerificationGate.ps1"
-. "$env:C4_SCRIPTS_DIRECTORY/C4CodeModel.ps1"
+. "$env:C4_SCRIPTS_DIRECTORY/Documentation/VerificationGate.ps1"
+. "$env:C4_SCRIPTS_DIRECTORY/C4/C4CodeModel.ps1"
 
 function Get-ReadIssues {
     $files = Get-SourceFiles '*.tf'

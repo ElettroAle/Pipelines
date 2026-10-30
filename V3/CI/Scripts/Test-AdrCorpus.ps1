@@ -6,8 +6,8 @@
 # versioni, perche' il cambiamento resti tracciato; il suo esito non cambia mai: una scelta
 # diversa e' una decisione nuova che la sostituisce.
 
-. "$PSScriptRoot/Common/VerificationGate.ps1"
-. "$PSScriptRoot/Common/DocumentLanguage.ps1"
+. "$PSScriptRoot/Common/Documentation/VerificationGate.ps1"
+. "$PSScriptRoot/Common/Documentation/DocumentLanguage.ps1"
 
 $decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }
 # Fuori da una PR ADO lascia la macro non espansa: non c'e' un ramo di destinazione.

@@ -12,7 +12,7 @@
 #>
 
 BeforeAll {
-    . "$PSScriptRoot/../fixtures/documentation/DocumentationFixture.ps1"
+    . "$PSScriptRoot/../Fixtures/Documentation/DocumentationFixture.ps1"
     $ScriptPath = Resolve-Path "$PSScriptRoot/../../V3/CI/Scripts/Test-DiagramFlows.ps1"
     $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-flows-$(New-Guid)"

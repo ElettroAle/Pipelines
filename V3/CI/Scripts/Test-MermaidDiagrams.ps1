@@ -3,9 +3,9 @@
 # Diagrammi Mermaid delle sezioni di un documento e delle sue decisioni: ogni diagramma passa dal
 # parser di Mermaid e uno non valido si segnala con la sezione, il file e la riga dell'errore.
 
-. "$PSScriptRoot/Common/VerificationGate.ps1"
-. "$PSScriptRoot/Common/MarkdownText.ps1"
-. "$PSScriptRoot/Common/Mermaid.ps1"
+. "$PSScriptRoot/Common/Documentation/VerificationGate.ps1"
+. "$PSScriptRoot/Common/Documentation/MarkdownText.ps1"
+. "$PSScriptRoot/Common/Diagrams/Mermaid.ps1"
 
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
 $decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }

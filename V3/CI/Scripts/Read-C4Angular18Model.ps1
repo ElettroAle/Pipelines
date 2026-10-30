@@ -8,9 +8,9 @@
 # provate solo su Angular 18: un workspace che dipende da un'altra versione di @angular/core ferma la
 # lettura invece di essere letto con regole non sue.
 
-. "$PSScriptRoot/Common/VerificationGate.ps1"
-. "$PSScriptRoot/Common/DocumentLanguage.ps1"
-. "$PSScriptRoot/Common/C4CodeModel.ps1"
+. "$PSScriptRoot/Common/Documentation/VerificationGate.ps1"
+. "$PSScriptRoot/Common/Documentation/DocumentLanguage.ps1"
+. "$PSScriptRoot/Common/C4/C4CodeModel.ps1"
 
 $SourceRepositories = @("$env:SOURCE_REPOSITORIES" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $FeatureDirectories = @(if ($env:ANGULAR_FEATURE_DIRECTORIES) { $env:ANGULAR_FEATURE_DIRECTORIES -split ',' } else { 'app/features' })

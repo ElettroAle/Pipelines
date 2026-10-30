@@ -3,7 +3,7 @@
 # Repository sorgente finti e composizione dei passi del modello C4 generato come in pipeline: i
 # lettori delle tecnologie scelte, poi lo scrittore. Un passo che fallisce ferma la composizione.
 
-. "$PSScriptRoot/../documentation/DocumentationFixture.ps1"
+. "$PSScriptRoot/../Documentation/DocumentationFixture.ps1"
 
 $C4ScriptsDirectory = Resolve-Path "$PSScriptRoot/../../../V3/CI/Scripts"
 $C4Readers = @{ dotnet10 = 'Read-C4DotNet10Model.ps1'; angular18 = 'Read-C4Angular18Model.ps1'; consumer = "$PSScriptRoot/Read-C4ConsumerModel.ps1" }

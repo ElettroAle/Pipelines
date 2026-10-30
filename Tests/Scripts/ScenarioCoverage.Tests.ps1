@@ -6,7 +6,7 @@
 
 .DESCRIPTION
     Lo script si esegue come processo (dotnet run), come in pipeline. Le fixture
-    in Tests/fixtures/scenario-coverage sono prodotte da una run reale di
+    in Tests/Fixtures/ScenarioCoverage sono prodotte da una run reale di
     Reqnroll 3.3.4 + xUnit con BUILD_BUILDID=4242:
       green → scenari verdi, uno Schema dello scenario, una Regola, @ignore su
               scenario e su Funzionalità
@@ -16,7 +16,7 @@
 
 BeforeAll {
     $ScriptPath = Resolve-Path "$PSScriptRoot/../../V3/CI/Scripts/ScenarioCoverage.cs"
-    $FixturesRoot = Resolve-Path "$PSScriptRoot/../fixtures/scenario-coverage"
+    $FixturesRoot = Resolve-Path "$PSScriptRoot/../Fixtures/ScenarioCoverage"
     $MessagesFile = 'scenario-coverage/4242.ndjson'
 
     function Invoke-ScenarioCoverage {
@@ -46,7 +46,7 @@ BeforeAll {
 Describe 'ScenarioCoverage' {
 
     Context 'Corpus interamente verificato' {
-        BeforeAll { $result = Invoke-OnCorpus (Join-Path $FixturesRoot 'green') }
+        BeforeAll { $result = Invoke-OnCorpus (Join-Path $FixturesRoot 'Green') }
 
         It 'esce con 0' {
             $result.ExitCode | Should -Be 0
@@ -63,7 +63,7 @@ Describe 'ScenarioCoverage' {
     }
 
     Context 'Scenari eseguiti ma non superati' {
-        BeforeAll { $result = Invoke-OnCorpus (Join-Path $FixturesRoot 'red') }
+        BeforeAll { $result = Invoke-OnCorpus (Join-Path $FixturesRoot 'Red') }
 
         It 'esce con 1' {
             $result.ExitCode | Should -Be 1
@@ -81,7 +81,7 @@ Describe 'ScenarioCoverage' {
 
     Context 'Un .feature che nessun test esegue' {
         BeforeAll {
-            $root = Copy-Fixture 'green'
+            $root = Copy-Fixture 'Green'
             New-Item -ItemType Directory -Path "$root/docs" | Out-Null
             Set-Content -Path "$root/docs/Orfano.feature" -Encoding utf8 -Value @(
                 '# language: it', 'Funzionalità: Documento orfano', '  Scenario: Mai compilato', '    Dato qualcosa')
@@ -95,7 +95,7 @@ Describe 'ScenarioCoverage' {
     }
 
     Context 'Messages di una run diversa da quella corrente' {
-        BeforeAll { $result = Invoke-OnCorpus (Join-Path $FixturesRoot 'green') 'scenario-coverage/9999.ndjson' }
+        BeforeAll { $result = Invoke-OnCorpus (Join-Path $FixturesRoot 'Green') 'scenario-coverage/9999.ndjson' }
 
         It 'non li legge: ogni scenario non @ignore risulta non eseguito' {
             $result.ExitCode | Should -Be 1
@@ -105,7 +105,7 @@ Describe 'ScenarioCoverage' {
 
     Context 'Sorgenti non allineati alla build che ha prodotto i messages' {
         BeforeAll {
-            $root = Copy-Fixture 'green'
+            $root = Copy-Fixture 'Green'
             $feature = "$root/Spec/Features/Carrello.feature"
             $lines = [System.Collections.Generic.List[string]](Get-Content $feature -Encoding utf8)
             $lines.Insert(5, '  # riga aggiunta dopo la build')
@@ -122,7 +122,7 @@ Describe 'ScenarioCoverage' {
 
     Context 'Un .feature eseguito che non esiste più sotto la root' {
         BeforeAll {
-            $root = Copy-Fixture 'green'
+            $root = Copy-Fixture 'Green'
             Remove-Item "$root/Spec/Features/Carrello.feature"
             $result = Invoke-OnCorpus $root
         }
@@ -135,7 +135,7 @@ Describe 'ScenarioCoverage' {
 
     Context 'Gherkin non valido' {
         BeforeAll {
-            $root = Copy-Fixture 'green'
+            $root = Copy-Fixture 'Green'
             Set-Content -Path "$root/Spec/Features/Rotto.feature" -Encoding utf8 -Value @(
                 '# language: it', 'Funzionalità: Rotto', '  Scenario: X', '    Dato qualcosa', 'Funzionalità: Seconda funzionalità nello stesso file')
             $result = Invoke-OnCorpus $root
@@ -163,7 +163,7 @@ Describe 'ScenarioCoverage' {
     Context 'Riepilogo markdown' {
         BeforeAll {
             $summary = Join-Path $TestDrive "summary-$(New-Guid).md"
-            $result = Invoke-ScenarioCoverage @('--root', (Join-Path $FixturesRoot 'red'), '--messages-file', $MessagesFile, '--summary', $summary)
+            $result = Invoke-ScenarioCoverage @('--root', (Join-Path $FixturesRoot 'Red'), '--messages-file', $MessagesFile, '--summary', $summary)
         }
 
         It 'riporta problemi e scenari in attesa in tabelle separate' {
@@ -176,7 +176,7 @@ Describe 'ScenarioCoverage' {
 
     Context 'File .feature con fine riga CRLF' {
         BeforeAll {
-            $root = Copy-Fixture 'green'
+            $root = Copy-Fixture 'Green'
             Get-ChildItem "$root/Spec/Features" -Filter *.feature | ForEach-Object {
                 $text = [System.IO.File]::ReadAllText($_.FullName) -replace "`r?`n", "`r`n"
                 [System.IO.File]::WriteAllText($_.FullName, $text)
@@ -192,12 +192,12 @@ Describe 'ScenarioCoverage' {
 
     Context 'Modalità warn' {
         BeforeAll {
-            $red = Join-Path $FixturesRoot 'red'
+            $red = Join-Path $FixturesRoot 'Red'
             $local = Invoke-ScenarioCoverage @('--root', $red, '--messages-file', $MessagesFile, '--mode', 'warn')
             $env:TF_BUILD = 'True'
             try {
                 $agent = Invoke-ScenarioCoverage @('--root', $red, '--messages-file', $MessagesFile, '--mode', 'warn')
-                $unreadable = Copy-Fixture 'green'
+                $unreadable = Copy-Fixture 'Green'
                 Add-Content -Path "$unreadable/Spec/bin/Release/net10.0/$MessagesFile" -Value '{non json'
                 $agentUnreadable = Invoke-ScenarioCoverage @('--root', $unreadable, '--messages-file', $MessagesFile, '--mode', 'warn')
             }
@@ -231,7 +231,7 @@ Describe 'ScenarioCoverage' {
             $summary = Join-Path $TestDrive "summary-$(New-Guid).md"
             $env:TF_BUILD = 'True'
             try {
-                $result = Invoke-ScenarioCoverage @('--root', (Join-Path $FixturesRoot 'red'), '--messages-file', $MessagesFile, '--mode', 'enforce', '--summary', $summary)
+                $result = Invoke-ScenarioCoverage @('--root', (Join-Path $FixturesRoot 'Red'), '--messages-file', $MessagesFile, '--mode', 'enforce', '--summary', $summary)
             }
             finally {
                 Remove-Item Env:TF_BUILD
@@ -273,7 +273,7 @@ Describe 'ScenarioCoverage' {
         }
 
         It 'esce con 2 su un file di messages illeggibile' {
-            $root = Copy-Fixture 'green'
+            $root = Copy-Fixture 'Green'
             Add-Content -Path "$root/Spec/bin/Release/net10.0/$MessagesFile" -Value '{non json'
             $result = Invoke-OnCorpus $root
             $result.ExitCode | Should -Be 2

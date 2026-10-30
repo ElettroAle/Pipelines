@@ -19,13 +19,13 @@ on:
   #   branches: ["**"]
   #   paths:
   #     - "V3/CI/**"
-  #     - "Tests/preview/**"
+  #     - "Tests/Preview/**"
   #     - ".github/workflows/test-preview.yml"
   # pull_request:
   #   branches: [main]
   #   paths:
   #     - "V3/CI/**"
-  #     - "Tests/preview/**"
+  #     - "Tests/Preview/**"
 
 jobs:
   preview:

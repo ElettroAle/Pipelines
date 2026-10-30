@@ -6,10 +6,10 @@
 # decisione con la struttura nel codice ha anche il flusso nel codice, con un diagramma di sequenza
 # fatto delle classi del suo diagramma delle classi.
 
-. "$PSScriptRoot/Common/VerificationGate.ps1"
-. "$PSScriptRoot/Common/MarkdownText.ps1"
-. "$PSScriptRoot/Common/Structurizr.ps1"
-. "$PSScriptRoot/Common/Mermaid.ps1"
+. "$PSScriptRoot/Common/Documentation/VerificationGate.ps1"
+. "$PSScriptRoot/Common/Documentation/MarkdownText.ps1"
+. "$PSScriptRoot/Common/Diagrams/Structurizr.ps1"
+. "$PSScriptRoot/Common/Diagrams/Mermaid.ps1"
 
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
 $decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }

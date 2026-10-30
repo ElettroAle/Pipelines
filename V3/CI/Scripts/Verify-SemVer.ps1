@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-. "$PSScriptRoot/Common/GitCliff.ps1"
+. "$PSScriptRoot/Common/Versioning/GitCliff.ps1"
 
 $targetBranch = $env:TARGET_BRANCH -replace 'refs/heads/', ''
 $gateMode = if ($env:GATE_MODE) { $env:GATE_MODE.ToLower() } else { 'enforce' }
