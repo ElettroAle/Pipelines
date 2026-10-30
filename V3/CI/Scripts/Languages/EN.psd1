@@ -7,6 +7,8 @@
     GeneratedTag   = 'Generated'
     CodeNameProperty = 'code'
     ServicesProperty = 'services'
+    ExternalTag    = 'External'
+    TextLanguage   = 'English'
     AdrSections    = @('Context and Problem Statement', 'Considered Options', 'Decision Outcome')
     StyleRuleParts = @{ Common = 'Rules'; Sections = 'Section rules'; Decisions = 'Decision rules' }
     AdrVersionsSection = 'Versions'

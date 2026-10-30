@@ -65,6 +65,7 @@ function New-ApplicationContainer($Workspace) {
             id         = Get-ComponentId $containerId $sourceRoot $module
             name       = $module.Name
             codeName   = Get-RelativePath $module.FullName
+            sources    = @(Get-RelativePath $module.FullName)
             technology = 'Angular'
             properties = [ordered]@{}
         }
@@ -73,6 +74,7 @@ function New-ApplicationContainer($Workspace) {
         id         = $containerId
         name       = Get-RepositoryShortName
         codeName   = $Repository
+        sources    = @(Get-RelativePath $sourceRoot)
         technology = 'Angular'
         tags       = @($ApplicationTag)
         properties = [ordered]@{}

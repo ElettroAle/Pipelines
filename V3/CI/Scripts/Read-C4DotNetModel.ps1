@@ -90,6 +90,7 @@ function New-ApplicationContainer($Application, $Projects, [string[]]$AllNames) 
             id         = Get-ComponentId $containerId $project
             name       = Remove-CommonPrefix $project.Name $AllNames
             codeName   = $project.Name
+            sources    = @(Get-RelativePath (Split-Path $project.Path))
             technology = '.NET'
             properties = [ordered]@{ $ServicesProperty = (Get-AzureServices $project) -join ',' }
         }
@@ -98,6 +99,7 @@ function New-ApplicationContainer($Application, $Projects, [string[]]$AllNames) 
         id         = $containerId
         name       = Remove-CommonPrefix $Application.Name $AllNames
         codeName   = $Application.Name
+        sources    = @(Get-RelativePath (Split-Path $Application.Path))
         technology = $Rules.Applications[$Application.Kind]
         tags       = @($ApplicationTag)
         properties = [ordered]@{}

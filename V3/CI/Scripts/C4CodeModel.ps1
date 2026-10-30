@@ -3,7 +3,8 @@
 # Contratto fra i lettori di una tecnologia e Export-C4CodeModel.ps1. Un lettore legge solo il
 # checkout del repository sorgente (SOURCE_DIRECTORY) e scrive in FRAGMENT_DIRECTORY il frammento
 # <repository in minuscolo>.<tecnologia>.json: i file manifest che ha letto, i container con i loro
-# componenti e le relazioni. Lo scrittore unisce i frammenti di un repository senza conoscere le
+# componenti e le relazioni. Ogni elemento dichiara in sources le cartelle del suo codice, che il
+# generatore del testo del modello legge. Lo scrittore unisce i frammenti di un repository senza conoscere le
 # tecnologie che li hanno prodotti.
 
 $SourceDirectory = if ($env:SOURCE_DIRECTORY) { $env:SOURCE_DIRECTORY } else { '.' }

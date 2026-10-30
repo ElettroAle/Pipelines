@@ -260,7 +260,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         BeforeAll {
             $files = New-BffRepository
             $first = Invoke-Generation $files 'Aidea.Dxp.Bff.Web'
-            $files['docs/architecture/model/generated/aidea.dxp.bff.web.dsl'] = $first.Generated['aidea.dxp.bff.web.dsl']
+            $first.Generated.Keys | ForEach-Object { $files["docs/architecture/model/generated/$_"] = $first.Generated[$_] }
             $res = Invoke-Generation $files 'Aidea.Dxp.Bff.Web' 'check'
         }
 
