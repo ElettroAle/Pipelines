@@ -62,14 +62,29 @@ function Test-GeneratedElementsDescribed($Elements) {
 }
 
 # Le relazioni implicite che Structurizr deriva da quelle dichiarate portano linkedRelationshipId e non
-# sono scritte da nessuno.
-function Test-GeneratedRelationshipsNotRepeated($Elements) {
+# le dichiara nessuno.
+function Get-DeclaredRelationships($Elements) {
+    return @($Elements | ForEach-Object { @($_.relationships) } | Where-Object { $_ -and -not $_.linkedRelationshipId })
+}
+
+function Get-RelationshipName($Relationship, $Elements) {
     $names = @{}
     $Elements | ForEach-Object { $names[$_.id] = $_.name }
-    $declared = @($Elements | ForEach-Object { @($_.relationships) } | Where-Object { $_ -and -not $_.linkedRelationshipId })
-    $generated = @($declared | Where-Object { Test-HasTag $_ $GeneratedTag } | ForEach-Object { "$($_.sourceId)>$($_.destinationId)" })
-    $declared | Where-Object { -not (Test-HasTag $_ $GeneratedTag) -and $generated -contains "$($_.sourceId)>$($_.destinationId)" } |
-        ForEach-Object { New-Issue $ModelScope 'relazione generata ripetuta a mano' "$($names[$_.sourceId]) -> $($names[$_.destinationId])" }
+    return "$($names[$Relationship.sourceId]) -> $($names[$Relationship.destinationId])"
+}
+
+function Test-GeneratedRelationshipsDescribed($Elements) {
+    Get-DeclaredRelationships $Elements | Where-Object { (Test-HasTag $_ $GeneratedTag) -and -not $_.description } |
+        ForEach-Object { New-Issue $ModelScope 'relazione generata senza cio'' che passa' (Get-RelationshipName $_ $Elements) }
+}
+
+# Fra due elementi nati dal codice solo il codice dichiara relazioni: il testo del modello le descrive e
+# non ne aggiunge.
+function Test-RelationshipsOnlyFromCode($Elements) {
+    $generated = @($Elements | Where-Object { Test-HasTag $_ $GeneratedTag } | ForEach-Object id)
+    Get-DeclaredRelationships $Elements |
+        Where-Object { -not (Test-HasTag $_ $GeneratedTag) -and $generated -contains $_.sourceId -and $generated -contains $_.destinationId } |
+        ForEach-Object { New-Issue $ModelScope 'relazione fra elementi generati che il codice non dichiara' (Get-RelationshipName $_ $Elements) }
 }
 
 function Test-ViewsShown([string[]]$ViewKeys, $Sections) {
@@ -96,7 +111,8 @@ function Get-ModelIssues {
     Test-ComponentViews $export.Workspace
     Test-ContextViewsWithoutTechnicalElements $export.Workspace
     Test-GeneratedElementsDescribed $elements
-    Test-GeneratedRelationshipsNotRepeated $elements
+    Test-GeneratedRelationshipsDescribed $elements
+    Test-RelationshipsOnlyFromCode $elements
     Test-ViewsShown $viewKeys $sections
     Test-ViewMarkers $viewKeys $sections
 }

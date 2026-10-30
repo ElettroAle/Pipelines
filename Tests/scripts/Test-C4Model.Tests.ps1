@@ -29,25 +29,25 @@ BeforeAll {
 
     function Add-GeneratedPart([System.Collections.IDictionary]$Docs) {
         $Docs['docs/architecture/model/generated/aidea.dxp.ai.dsl'] = @"
-aidea_dxp_ai_api = container "Api" "" "ASP.NET Core" "Applicazione,Generato" {
+aidea_dxp_ai_api = container "Api" "Riceve le richieste" "ASP.NET Core" "Applicazione,Generato" {
     properties {
         "codice" "Aidea.Dxp.AI.Api"
     }
-    aidea_dxp_ai_api__engine = component "Engine" "" ".NET" "Generato" {
+    aidea_dxp_ai_api__engine = component "Engine" "Il dominio" ".NET" "Generato" {
         properties {
             "codice" "Aidea.Dxp.AI.Engine"
         }
     }
-    aidea_dxp_ai_api__usecase = component "UseCase" "" ".NET" "Generato" {
+    aidea_dxp_ai_api__usecase = component "UseCase" "I casi d'uso" ".NET" "Generato" {
         properties {
             "codice" "Aidea.Dxp.AI.UseCase"
         }
     }
-    aidea_dxp_ai_api__usecase -> aidea_dxp_ai_api__engine "" "" "Generato"
+    aidea_dxp_ai_api__usecase -> aidea_dxp_ai_api__engine "Esegue i comandi del dominio" "" "Generato"
 }
 "@
         Edit-Docs $Docs 'docs/architecture/model/workspace.dsl' "                coda = component `"Coda`"`n            }" "                coda = component `"Coda`"`n            }`n            !include generated/aidea.dxp.ai.dsl"
-        Edit-Docs $Docs 'docs/architecture/model/workspace.dsl' '        motore -> worker "accoda"' "        motore -> worker `"accoda`"`n        bff -> aidea_dxp_ai_api `"inoltra`"`n        !element aidea_dxp_ai_api {`n            description `"Riceve le richieste`"`n        }`n        !element aidea_dxp_ai_api__engine {`n            description `"Il dominio`"`n        }`n        !element aidea_dxp_ai_api__usecase {`n            description `"I casi d'uso`"`n        }"
+        Edit-Docs $Docs 'docs/architecture/model/workspace.dsl' '        motore -> worker "accoda"' "        motore -> worker `"accoda`"`n        bff -> aidea_dxp_ai_api `"inoltra`""
         Edit-Docs $Docs 'docs/architecture/model/workspace.dsl' "        component worker `"componenti-worker`" {" "        component aidea_dxp_ai_api `"componenti-api`" {`n            include *`n        }`n        component worker `"componenti-worker`" {"
         Edit-Docs $Docs 'docs/architecture/05_building_block_view.md' '<!-- vista: componenti-worker -->' "<!-- vista: componenti-worker -->`n`n<!-- vista: componenti-api -->"
         return $Docs
@@ -203,9 +203,9 @@ Describe "Test-C4Model — lingua del documento" {
     }
 }
 
-Describe "Funzionalità: Parte del modello scritta a mano sopra la parte generata" {
+Describe "Funzionalità: Testo del modello sulla parte generata dal codice" {
 
-    Context "Scenario: modello generato e completato" {
+    Context "Scenario: modello generato e descritto" {
         BeforeAll {
             $res = Invoke-ModelCheck (Add-GeneratedPart (New-ValidDocs))
         }
@@ -216,29 +216,39 @@ Describe "Funzionalità: Parte del modello scritta a mano sopra la parte generat
         }
     }
 
-    Context "Schema dello scenario: parte scritta a mano non coerente con il modello generato — <difetto>" -ForEach @(
+    Context "Schema dello scenario: testo del modello non coerente con il modello generato — <difetto>" -ForEach @(
         @{
-            difetto  = 'il componente generato "UseCase" senza descrizione nella parte scritta a mano'
+            difetto  = 'il componente generato "UseCase" senza descrizione'
             elemento = '^modello C4: elemento generato senza descrizione \(UseCase\)'
-            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/workspace.dsl' "        !element aidea_dxp_ai_api__usecase {`n            description `"I casi d'uso`"`n        }" '' }
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/generated/aidea.dxp.ai.dsl' '"UseCase" "I casi d''uso"' '"UseCase" ""' }
         }
         @{
-            difetto  = 'il container generato "Api" senza descrizione nella parte scritta a mano'
+            difetto  = 'il container generato "Api" senza descrizione'
             elemento = '^modello C4: elemento generato senza descrizione \(Api\)'
-            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/workspace.dsl' "        !element aidea_dxp_ai_api {`n            description `"Riceve le richieste`"`n        }" '' }
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/generated/aidea.dxp.ai.dsl' '"Api" "Riceve le richieste"' '"Api" ""' }
         }
         @{
-            difetto  = 'la relazione scritta a mano da "UseCase" a "Engine", gia'' generata'
-            elemento = '^modello C4: relazione generata ripetuta a mano \(UseCase -> Engine\)'
+            difetto  = 'la relazione generata da "UseCase" a "Engine" senza cio'' che passa'
+            elemento = '^modello C4: relazione generata senza cio'' che passa \(UseCase -> Engine\)'
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/generated/aidea.dxp.ai.dsl' '"Esegue i comandi del dominio"' '""' }
+        }
+        @{
+            difetto  = 'la relazione del testo da "Engine" a "UseCase", che il codice non dichiara'
+            elemento = '^modello C4: relazione fra elementi generati che il codice non dichiara \(Engine -> UseCase\)'
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/workspace.dsl' '        bff -> aidea_dxp_ai_api "inoltra"' "        bff -> aidea_dxp_ai_api `"inoltra`"`n        aidea_dxp_ai_api__engine -> aidea_dxp_ai_api__usecase `"notifica`"" }
+        }
+        @{
+            difetto  = 'la relazione del testo da "UseCase" a "Engine", che ripete quella generata'
+            elemento = '^modello C4: relazione fra elementi generati che il codice non dichiara \(UseCase -> Engine\)'
             Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/workspace.dsl' '        bff -> aidea_dxp_ai_api "inoltra"' "        bff -> aidea_dxp_ai_api `"inoltra`"`n        aidea_dxp_ai_api__usecase -> aidea_dxp_ai_api__engine `"usa`"" }
         }
         @{
-            difetto  = 'la parte scritta a mano che descrive "DataAccess.Twilio", assente dal modello generato'
+            difetto  = 'il testo che descrive "DataAccess.Twilio", assente dal modello generato'
             elemento = '^modello C4: non valido \(.*aidea_dxp_ai_api__dataaccess_twilio'
             Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/workspace.dsl' '        bff -> aidea_dxp_ai_api "inoltra"' "        bff -> aidea_dxp_ai_api `"inoltra`"`n        !element aidea_dxp_ai_api__dataaccess_twilio {`n            description `"Invia gli SMS`"`n        }" }
         }
         @{
-            difetto  = 'la relazione scritta a mano dalla persona "Utente" al container "Aidea.Dxp.Portal", assente dal modello'
+            difetto  = 'la relazione del testo dalla persona "Utente" al container "Aidea.Dxp.Portal", assente dal modello'
             elemento = '^modello C4: non valido \(.*aidea_dxp_portal'
             Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/workspace.dsl' '        bff -> aidea_dxp_ai_api "inoltra"' "        bff -> aidea_dxp_ai_api `"inoltra`"`n        utente -> aidea_dxp_portal `"usa`"" }
         }

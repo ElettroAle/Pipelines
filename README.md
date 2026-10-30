@@ -246,7 +246,7 @@ parametri di formato e senza condizioni sul formato.
 | `c4-read-angular.yaml` | `Read-C4AngularModel.ps1` | applicazione Angular di un repository sorgente letta nel frammento del modello C4 | C4, Angular |
 | `c4-read-script.yaml` | script del consumer | tecnologia o convenzione del consumer letta nel frammento del modello C4 | C4 |
 | `c4-generate.yaml` | `Export-C4CodeModel.ps1` | parte del modello C4 generata dai frammenti di un repository sorgente, allineata al codice | C4 |
-| `c4-verify.yaml` | `Test-C4Model.ps1` | modello Structurizr valido e completo, parte scritta a mano coerente con quella generata, viste mostrate nelle sezioni | C4 |
+| `c4-verify.yaml` | `Test-C4Model.ps1` | modello Structurizr valido e completo, testo del modello coerente con la parte generata, viste mostrate nelle sezioni | C4 |
 | `mermaid-verify.yaml` | `Test-MermaidDiagrams.ps1` | diagrammi Mermaid validi, nel documento e nelle decisioni | Mermaid |
 | `flows-verify.yaml` | `Test-DiagramFlows.ps1` | flussi fatti degli elementi del modello C4 e delle classi delle decisioni | C4, Mermaid |
 | `documentation-verify.yaml` | `Test-Documentation.ps1` | rimandi esistenti, soglie numeriche di leggibilità | nessun formato |
@@ -338,8 +338,8 @@ Modello C4 (`c4-verify.yaml`, `CI/Scripts/Test-C4Model.ps1`):
   almeno una sezione e ogni marcatore nomina una vista esistente. Senza questo step i marcatori non si
   controllano.
 - La parte generata dal codice (`c4-generate.yaml`) porta il tag `Generato` in italiano: ogni elemento
-  generato ha una descrizione nella parte scritta a mano (`!element <id> { description "…" }`), e una
-  relazione scritta a mano non ripete una relazione generata. Un riferimento a un elemento che nessuna
+  generato ha una descrizione, ogni relazione generata dice cosa passa, e fra due elementi generati
+  nessuna relazione viene da fuori del codice, nemmeno per ripeterne una generata. Un riferimento a un elemento che nessuna
   parte contiene rende il modello non valido, e l'errore nomina l'identificativo.
 - **Requisiti.** Java 17 o successivo per la Structurizr CLI (versione fissata, SHA-256 verificato); lo
   step lo prepara con `ensure-java.yaml`. Senza Java la verifica fallisce nominando il controllo non
@@ -577,7 +577,7 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 | `CI/Scripts/Test-PublishedArtifact.ps1` | Prima dell'upload dell'artifact negli orchestratori GitFlow e TrunkFlow: se la run lo ha già pubblicato (rerun dello stage) setta `artifactAlreadyPublished` e l'upload si salta; se la verifica non riesce l'upload procede |
 | `CI/Scripts/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, versione intera, sostituzioni reciproche, ADR `accepted` con l'esito invariato e cambiati solo con una versione nuova rispetto al ramo di destinazione della PR |
 | `CI/Scripts/Test-Arc42Document.ps1` | Struttura di un documento arc42 (`arc42-verify.yaml`): un file per sezione con nome e titolo del template ufficiale; release, URL e SHA-256 per lingua fissati nello script |
-| `CI/Scripts/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, nessun elemento tecnico nelle viste di contesto, elementi generati descritti e relazioni generate non ripetute a mano, marcatori di vista nelle sezioni |
+| `CI/Scripts/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, nessun elemento tecnico nelle viste di contesto, elementi e relazioni generati descritti, nessuna relazione fra elementi generati che il codice non dichiara, marcatori di vista nelle sezioni |
 | `CI/Scripts/C4CodeModel.ps1` | Contratto del frammento del modello C4 generato, incluso dai lettori: file di progetto letti, container, componenti, relazioni |
 | `CI/Scripts/Read-C4DotNetModel.ps1` | Lettore .NET (`c4-read-dotnet.yaml`): applicazioni come container, progetti di produzione come componenti con i servizi Azure, regole in `DotNetModel.psd1` |
 | `CI/Scripts/Read-C4AngularModel.ps1` | Lettore Angular (`c4-read-angular.yaml`): l'applicazione come container, cartelle di funzionalità e moduli di base come componenti |
