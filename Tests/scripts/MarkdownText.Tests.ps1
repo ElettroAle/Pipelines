@@ -2,7 +2,7 @@
 
 <#
 .SYNOPSIS
-    Test Pester per V3/CI/Scripts/MarkdownText.ps1
+    Test Pester per V3/CI/Scripts/Common/MarkdownText.ps1
 
 .DESCRIPTION
     Lettura delle sezioni Markdown di un documento e misure di leggibilita', comuni a tutti
@@ -10,7 +10,7 @@
 #>
 
 BeforeAll {
-    . "$PSScriptRoot/../../V3/CI/Scripts/MarkdownText.ps1"
+    . "$PSScriptRoot/../../V3/CI/Scripts/Common/MarkdownText.ps1"
 }
 
 

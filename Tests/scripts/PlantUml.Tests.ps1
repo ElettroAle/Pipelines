@@ -2,7 +2,7 @@
 
 <#
 .SYNOPSIS
-    Test Pester per V3/CI/Scripts/PlantUml.ps1
+    Test Pester per V3/CI/Scripts/Common/PlantUml.ps1
 
 .DESCRIPTION
     Disegna con il jar vero: richiede Java 17 o successivo (STRUCTURIZR_JAVA, JAVA_HOME_17_X64 o
@@ -11,8 +11,8 @@
 #>
 
 BeforeAll {
-    . "$PSScriptRoot/../../V3/CI/Scripts/Structurizr.ps1"
-    . "$PSScriptRoot/../../V3/CI/Scripts/PlantUml.ps1"
+    . "$PSScriptRoot/../../V3/CI/Scripts/Common/Structurizr.ps1"
+    . "$PSScriptRoot/../../V3/CI/Scripts/Common/PlantUml.ps1"
     $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
     $previousPath = $env:PATH
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-plantuml-$(New-Guid)"

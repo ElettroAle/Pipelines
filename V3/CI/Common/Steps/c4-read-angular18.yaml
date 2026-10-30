@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# ── CI Step: C4 read Angular ──────────────────────────────────────────────────
+# ── CI Step: C4 read Angular 18 ───────────────────────────────────────────────
 #
-# Lettore Angular del modello C4 generato (V3/CI/Scripts/Read-C4AngularModel.ps1): legge il workspace
-# Angular del checkout del repository sorgente e scrive in fragmentDirectory il frammento che
-# c4-generate.yaml unisce. L'applicazione e' un container con il nome del repository senza il
-# prefisso comune ai repository sorgente; le cartelle di funzionalita' e i moduli di base con un file
-# *.providers.ts sono componenti. Un progetto che non e' l'unica applicazione ferma la lettura.
+# Lettore Angular 18 del modello C4 generato (V3/CI/Scripts/Read-C4Angular18Model.ps1), eseguito da
+# c4-read.yaml: legge il workspace Angular del checkout del repository sorgente e scrive in
+# fragmentDirectory il frammento che c4-generate.yaml unisce. L'applicazione e' un container con il
+# nome del repository senza il prefisso comune ai repository sorgente; le cartelle di funzionalita' e
+# i moduli di base con un file *.providers.ts sono componenti. Un progetto che non e' l'unica
+# applicazione, o un workspace di un'altra versione di Angular, ferma la lettura.
 #
 # Riusato da:
-#   il consumer, prima di c4-generate.yaml, per un repository sorgente con un'applicazione Angular
+#   il consumer, prima di c4-generate.yaml, per un repository sorgente con un'applicazione Angular 18
 #
 # Parametri
 # ─────────
@@ -62,19 +63,16 @@ parameters:
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
-  - task: PowerShell@2
-    displayName: 'C4 Angular application of ${{ parameters.sourceRepository }} (${{ parameters.mode }})'
-    inputs:
-      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Read-C4AngularModel.ps1'
-      pwsh: true
-    env:
-      GATE_MODE: ${{ parameters.mode }}
-      SOURCE_REPOSITORY: ${{ parameters.sourceRepository }}
-      SOURCE_DIRECTORY: ${{ parameters.sourceDirectory }}
-      FRAGMENT_DIRECTORY: ${{ parameters.fragmentDirectory }}
-      ${{ if ne(parameters.sourceRepositories, '') }}:
+  - template: c4-read.yaml
+    parameters:
+      scriptPath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Read-C4Angular18Model.ps1'
+      displayName: 'C4 Angular 18 application'
+      mode: ${{ parameters.mode }}
+      sourceRepository: ${{ parameters.sourceRepository }}
+      sourceDirectory: ${{ parameters.sourceDirectory }}
+      fragmentDirectory: ${{ parameters.fragmentDirectory }}
+      templatesDirectory: ${{ parameters.templatesDirectory }}
+      environment:
         SOURCE_REPOSITORIES: ${{ parameters.sourceRepositories }}
-      ${{ if ne(parameters.angularFeatureDirectories, '') }}:
         ANGULAR_FEATURE_DIRECTORIES: ${{ parameters.angularFeatureDirectories }}
-      ${{ if ne(parameters.angularModuleDirectories, '') }}:
         ANGULAR_MODULE_DIRECTORIES: ${{ parameters.angularModuleDirectories }}

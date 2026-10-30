@@ -13,7 +13,7 @@
 # ─────────
 #   checkoutRepository → repository del documento [REQUIRED]
 #   wikiRepository     → alias della repository resource della wiki [REQUIRED]
-#   language           → lingua del documento, es. 'IT' o 'EN' (V3/CI/Scripts/Languages) [REQUIRED]
+#   language           → lingua del documento, es. 'IT' o 'EN' (V3/CI/Scripts/Common/Languages) [REQUIRED]
 #   wikiBranch         → ramo della wiki (default: wikiMaster, il ramo della wiki di progetto)
 #   wikiRoot           → pagina della wiki sotto cui nasce il documento (default: il nome
 #                        dell'architettura nella lingua del documento, es. Architettura o Architecture)

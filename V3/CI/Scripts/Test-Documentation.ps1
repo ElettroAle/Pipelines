@@ -4,8 +4,8 @@
 # file, ancore e decisioni esistenti e soglie numeriche di leggibilita'. La struttura la
 # verifica il modulo del formato, lo stile lo giudica Test-DocumentationStyle.ps1.
 
-. "$PSScriptRoot/VerificationGate.ps1"
-. "$PSScriptRoot/MarkdownText.ps1"
+. "$PSScriptRoot/Common/VerificationGate.ps1"
+. "$PSScriptRoot/Common/MarkdownText.ps1"
 
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
 $decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }

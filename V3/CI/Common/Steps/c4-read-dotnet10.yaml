@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# ── CI Step: C4 read .NET ─────────────────────────────────────────────────────
+# ── CI Step: C4 read .NET 10 ──────────────────────────────────────────────────
 #
-# Lettore .NET del modello C4 generato (V3/CI/Scripts/Read-C4DotNetModel.ps1): legge i progetti del
-# checkout del repository sorgente e scrive in fragmentDirectory il frammento che c4-generate.yaml
-# unisce. Le applicazioni web e le Function App sono container, i progetti di produzione che
-# raggiungono sono componenti con i servizi Azure delle loro librerie; un progetto o una libreria
-# Azure che le tabelle di DotNetModel.psd1 non riconoscono ferma la lettura.
+# Lettore .NET 10 del modello C4 generato (V3/CI/Scripts/Read-C4DotNet10Model.ps1), eseguito da
+# c4-read.yaml: legge i progetti del checkout del repository sorgente e scrive in fragmentDirectory
+# il frammento che c4-generate.yaml unisce. Le applicazioni web e le Function App sono container, i
+# progetti di produzione che raggiungono sono componenti; un progetto di un'altra versione di .NET o
+# di un tipo che le regole di .NET 10 non riconoscono ferma la lettura.
 #
 # Riusato da:
-#   il consumer, prima di c4-generate.yaml, per un repository sorgente con progetti .NET
+#   il consumer, prima di c4-generate.yaml, per un repository sorgente con progetti .NET 10
 #
 # Parametri
 # ─────────
@@ -46,13 +46,12 @@ parameters:
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
-  - task: PowerShell@2
-    displayName: 'C4 .NET projects of ${{ parameters.sourceRepository }} (${{ parameters.mode }})'
-    inputs:
-      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Read-C4DotNetModel.ps1'
-      pwsh: true
-    env:
-      GATE_MODE: ${{ parameters.mode }}
-      SOURCE_REPOSITORY: ${{ parameters.sourceRepository }}
-      SOURCE_DIRECTORY: ${{ parameters.sourceDirectory }}
-      FRAGMENT_DIRECTORY: ${{ parameters.fragmentDirectory }}
+  - template: c4-read.yaml
+    parameters:
+      scriptPath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Read-C4DotNet10Model.ps1'
+      displayName: 'C4 .NET 10 projects'
+      mode: ${{ parameters.mode }}
+      sourceRepository: ${{ parameters.sourceRepository }}
+      sourceDirectory: ${{ parameters.sourceDirectory }}
+      fragmentDirectory: ${{ parameters.fragmentDirectory }}
+      templatesDirectory: ${{ parameters.templatesDirectory }}

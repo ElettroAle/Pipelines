@@ -4,7 +4,7 @@
 # summary della run e, se richiesto, pagina wiki. Un errore qui non ferma il publish:
 # la release e' gia' taggata.
 
-. "$PSScriptRoot/GitCliff.ps1"
+. "$PSScriptRoot/Common/GitCliff.ps1"
 
 $releaseTag = $env:RELEASE_TAG
 $outputDir = $env:OUTPUT_DIR

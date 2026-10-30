@@ -152,18 +152,18 @@ I test usano un **bare repo locale** come fake remote. L'unico accesso di rete Ã
 | Qualsiasi file in `V3/` | Livello 1 |
 | `CI/Scripts/Set-Versioning.ps1` | Livello 1 + Livello 2 (`Set-Versioning.Tests.ps1`) |
 | `CI/Scripts/Verify-SemVer.ps1` | Livello 1 + Livello 2 (`Verify-SemVer.Tests.ps1`) |
-| `CI/Scripts/cliff.toml`, `CI/Scripts/GitCliff.ps1` | Livello 1 + Livello 2 (`GitCliff.Tests.ps1` + `Verify-SemVer.Tests.ps1` + `Set-Versioning.Tests.ps1` + `New-ReleaseNotes.Tests.ps1`) |
+| `CI/Scripts/Common/cliff.toml`, `CI/Scripts/Common/GitCliff.ps1` | Livello 1 + Livello 2 (`GitCliff.Tests.ps1` + `Verify-SemVer.Tests.ps1` + `Set-Versioning.Tests.ps1` + `New-ReleaseNotes.Tests.ps1`) |
 | `CI/Scripts/New-ReleaseNotes.ps1` | Livello 1 + Livello 2 (`New-ReleaseNotes.Tests.ps1`) |
 | `CI/Scripts/Test-PublishedArtifact.ps1` | Livello 1 + Livello 2 (`Test-PublishedArtifact.Tests.ps1`) |
 | `CI/Scripts/Test-AdrCorpus.ps1` | Livello 1 + Livello 2 (`Test-AdrCorpus.Tests.ps1`) |
 | `CI/Scripts/Test-Arc42Document.ps1` | Livello 1 + Livello 2 (`Test-Arc42Document.Tests.ps1`) |
 | `CI/Scripts/Test-C4Model.ps1`, `Structurizr.ps1` | Livello 1 + Livello 2 (`Test-C4Model.Tests.ps1`, richiede Java 17) |
-| `CI/Scripts/C4CodeModel.ps1`, `Read-C4DotNetModel.ps1`, `DotNetModel.psd1`, `Read-C4AngularModel.ps1`, `Export-C4CodeModel.ps1`, `Tests/fixtures/c4/` | Livello 1 + Livello 2 (`Read-C4DotNetModel.Tests.ps1` + `Read-C4AngularModel.Tests.ps1` + `Export-C4CodeModel.Tests.ps1`, richiede Java 17) |
+| `CI/Scripts/Common/C4CodeModel.ps1`, `Read-C4DotNet10Model.ps1`, `Read-C4Angular18Model.ps1`, `Export-C4CodeModel.ps1`, `Tests/fixtures/c4/` | Livello 1 + Livello 2 (`Read-C4DotNet10Model.Tests.ps1` + `Read-C4Angular18Model.Tests.ps1` + `Export-C4CodeModel.Tests.ps1`, richiede Java 17) |
 | `CI/Scripts/Publish-Arc42Wiki.ps1`, `PlantUml.ps1` | Livello 1 + Livello 2 (`Publish-Arc42Wiki.Tests.ps1` + `PlantUml.Tests.ps1`, richiede Java 17) |
 | `CI/Scripts/Test-MermaidDiagrams.ps1`, `Mermaid.ps1`, `mermaid/` | Livello 1 + Livello 2 (`Test-MermaidDiagrams.Tests.ps1`, richiede Node.js) |
 | `CI/Scripts/Test-Documentation.ps1` | Livello 1 + Livello 2 (`Test-Documentation.Tests.ps1`) |
 | `CI/Scripts/Test-DocumentationStyle.ps1` | Livello 1 + Livello 2 (`Test-DocumentationStyle.Tests.ps1`) |
-| `CI/Scripts/MarkdownText.ps1`, `VerificationGate.ps1`, `Tests/fixtures/documentation/` | Livello 1 + Livello 2 (`MarkdownText.Tests.ps1` e i test di tutti gli script di verifica della documentazione) |
+| `CI/Scripts/Common/MarkdownText.ps1`, `VerificationGate.ps1`, `Tests/fixtures/documentation/` | Livello 1 + Livello 2 (`MarkdownText.Tests.ps1` e i test di tutti gli script di verifica della documentazione) |
 | `CI/Scripts/ScenarioCoverage.cs` | Livello 1 + Livello 2 (`ScenarioCoverage.Tests.ps1`, richiede .NET SDK 10) |
 
 I workflow GitHub Actions replicano questi stessi check automaticamente su ogni push.

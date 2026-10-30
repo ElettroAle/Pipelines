@@ -7,9 +7,9 @@
 # puntano alle pagine. Si scrive nel repository git della wiki con un commit solo, che tocca soltanto
 # WIKI_ROOT, le sue immagini e la sua voce nell'ordine della radice: il resto della wiki resta com'e'.
 
-. "$PSScriptRoot/MarkdownText.ps1"
-. "$PSScriptRoot/Structurizr.ps1"
-. "$PSScriptRoot/PlantUml.ps1"
+. "$PSScriptRoot/Common/MarkdownText.ps1"
+. "$PSScriptRoot/Common/Structurizr.ps1"
+. "$PSScriptRoot/Common/PlantUml.ps1"
 
 $ErrorActionPreference = 'Stop'
 

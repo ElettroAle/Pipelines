@@ -13,7 +13,7 @@
 #
 # Parametri
 # ─────────
-#   language           → lingua del documento, es. 'IT' o 'EN' (V3/CI/Scripts/Languages) [REQUIRED]
+#   language           → lingua del documento, es. 'IT' o 'EN' (V3/CI/Scripts/Common/Languages) [REQUIRED]
 #   wikiDirectory      → checkout del repository della wiki [REQUIRED]
 #   wikiBranch         → ramo della wiki (default: wikiMaster, il ramo della wiki di progetto)
 #   wikiRoot           → pagina sotto cui nasce il documento (default: il nome dell'architettura

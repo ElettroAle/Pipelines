@@ -43,8 +43,9 @@ V3/
 │   │   └── publish-dotNet.yaml
 │   │
 │   └── Scripts/
-│       ├── cliff.toml          # Regole Conventional Commits condivise
-│       ├── GitCliff.ps1
+│       ├── Common/             # Script inclusi da altri script, con i loro dati
+│       │   ├── cliff.toml      # Regole Conventional Commits condivise
+│       │   └── GitCliff.ps1
 │       ├── New-ReleaseNotes.ps1
 │       ├── Set-Versioning.ps1
 │       └── Verify-SemVer.ps1
