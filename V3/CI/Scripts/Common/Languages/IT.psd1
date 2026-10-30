@@ -6,6 +6,8 @@
     TechnicalTag   = 'Tecnico'
     GeneratedTag   = 'Generato'
     CodeNameProperty = 'codice'
+    ExternalTag    = 'Esterno'
+    TextLanguage   = 'italiano'
     AdrSections    = @('Contesto e problema', 'Opzioni considerate', 'Esito della decisione')
     StyleRuleParts = @{ Common = 'Regole'; Sections = 'Regole delle sezioni'; Decisions = 'Regole delle decisioni' }
     AdrVersionsSection = 'Versioni'
