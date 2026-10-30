@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# ── CI Step: C4 generation ────────────────────────────────────────────────────
+#
+# Parte del modello C4 che nasce da un repository sorgente (V3/CI/Scripts/C4/Export-C4CodeModel.ps1):
+# un file Structurizr DSL per repository in generatedDirectory, scritto dai frammenti che i passi di
+# lettura delle tecnologie (c4-read-*.yaml) hanno lasciato in fragmentDirectory. Non conosce le
+# tecnologie: un file di progetto del repository che nessun lettore ha letto ferma la generazione.
+# Con generationMode 'check' il file del documento si confronta con quello che la generazione produce.
+# Tag e proprieta' seguono DOCUMENT_LANGUAGE (document-language.yaml).
+#
+# Riusato da:
+#   il consumer, nella pipeline della documentazione che rigenera la parte di un repository sorgente
+#   dopo la sua integrazione o la verifica sulle PR, dopo i passi di lettura delle sue tecnologie
+#
+# Parametri
+# ─────────
+#   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
+#   generationMode     → 'write' (default, scrive il file) | 'check' (confronta senza scrivere)
+#   sourceRepository   → nome del repository sorgente, es. $(Build.Repository.Name)
+#   sourceDirectory    → checkout del repository sorgente (default: $(Build.SourcesDirectory))
+#   sourceRepositories → repository sorgente del documento separati da virgola, per il nome del
+#                        gruppo senza il loro prefisso comune
+#   fragmentDirectory  → cartella dei frammenti dei lettori (default: $(Agent.TempDirectory)/c4-fragments)
+#   generatedDirectory → cartella delle parti generate (default: docs/architecture/model/generated)
+#   workingDirectory   → checkout del repository del documento (default: $(Build.SourcesDirectory))
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: mode
+    type: string
+    default: 'enforce'
+    values: ['off', 'warn', 'enforce']
+
+  - name: generationMode
+    type: string
+    default: 'write'
+    values: ['write', 'check']
+
+  - name: sourceRepository
+    type: string
+    default: '$(Build.Repository.Name)'
+
+  - name: sourceDirectory
+    type: string
+    default: '$(Build.SourcesDirectory)'
+
+  - name: sourceRepositories
+    type: string
+    default: ''
+
+  - name: fragmentDirectory
+    type: string
+    default: '$(Agent.TempDirectory)/c4-fragments'
+
+  - name: generatedDirectory
+    type: string
+    default: ''
+
+  - name: workingDirectory
+    type: string
+    default: '$(Build.SourcesDirectory)'
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: PowerShell@2
+    displayName: 'C4 model from ${{ parameters.sourceRepository }} (${{ parameters.generationMode }}, ${{ parameters.mode }})'
+    inputs:
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/C4/Export-C4CodeModel.ps1'
+      workingDirectory: '${{ parameters.workingDirectory }}'
+      pwsh: true
+    env:
+      GATE_MODE: ${{ parameters.mode }}
+      GENERATION_MODE: ${{ parameters.generationMode }}
+      SOURCE_REPOSITORY: ${{ parameters.sourceRepository }}
+      SOURCE_DIRECTORY: ${{ parameters.sourceDirectory }}
+      FRAGMENT_DIRECTORY: ${{ parameters.fragmentDirectory }}
+      ${{ if ne(parameters.sourceRepositories, '') }}:
+        SOURCE_REPOSITORIES: ${{ parameters.sourceRepositories }}
+      ${{ if ne(parameters.generatedDirectory, '') }}:
+        GENERATED_DIRECTORY: ${{ parameters.generatedDirectory }}

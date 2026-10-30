@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# ── CI Step: C4 read Angular 18 ───────────────────────────────────────────────
+#
+# Lettore Angular 18 del modello C4 generato (V3/CI/Scripts/C4/Read-C4Angular18Model.ps1), eseguito da
+# c4-read.yaml: legge il workspace Angular del checkout del repository sorgente e scrive in
+# fragmentDirectory il frammento che c4-generate.yaml unisce. L'applicazione e' un container con il
+# nome del repository senza il prefisso comune ai repository sorgente; le cartelle di funzionalita' e
+# i moduli di base con un file *.providers.ts sono componenti. Un progetto che non e' l'unica
+# applicazione, o un workspace di un'altra versione di Angular, ferma la lettura.
+#
+# Riusato da:
+#   il consumer, prima di c4-generate.yaml, per un repository sorgente con un'applicazione Angular 18
+#
+# Parametri
+# ─────────
+#   mode                      → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
+#   sourceRepository          → nome del repository sorgente, es. $(Build.Repository.Name)
+#   sourceDirectory           → checkout del repository sorgente (default: $(Build.SourcesDirectory))
+#   sourceRepositories        → repository sorgente del documento separati da virgola, per il nome
+#                               dell'applicazione senza il loro prefisso comune
+#   angularFeatureDirectories → cartelle delle funzionalita' separate da virgola (default: app/features)
+#   angularModuleDirectories  → cartelle dei moduli di base separate da virgola (default: app/core)
+#   fragmentDirectory         → cartella dei frammenti (default: $(Agent.TempDirectory)/c4-fragments)
+#   templatesDirectory        → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: mode
+    type: string
+    default: 'enforce'
+    values: ['off', 'warn', 'enforce']
+
+  - name: sourceRepository
+    type: string
+    default: '$(Build.Repository.Name)'
+
+  - name: sourceDirectory
+    type: string
+    default: '$(Build.SourcesDirectory)'
+
+  - name: sourceRepositories
+    type: string
+    default: ''
+
+  - name: angularFeatureDirectories
+    type: string
+    default: ''
+
+  - name: angularModuleDirectories
+    type: string
+    default: ''
+
+  - name: fragmentDirectory
+    type: string
+    default: '$(Agent.TempDirectory)/c4-fragments'
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - template: c4-read.yaml
+    parameters:
+      scriptPath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/C4/Read-C4Angular18Model.ps1'
+      displayName: 'C4 Angular 18 application'
+      mode: ${{ parameters.mode }}
+      sourceRepository: ${{ parameters.sourceRepository }}
+      sourceDirectory: ${{ parameters.sourceDirectory }}
+      fragmentDirectory: ${{ parameters.fragmentDirectory }}
+      templatesDirectory: ${{ parameters.templatesDirectory }}
+      environment:
+        SOURCE_REPOSITORIES: ${{ parameters.sourceRepositories }}
+        ANGULAR_FEATURE_DIRECTORIES: ${{ parameters.angularFeatureDirectories }}
+        ANGULAR_MODULE_DIRECTORIES: ${{ parameters.angularModuleDirectories }}

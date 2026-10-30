@@ -108,7 +108,7 @@ stages:
                 - task: PowerShell@2
                   displayName: 'Conditional Versioning and Tagging'
                   inputs:
-                    filePath: '$(Build.SourcesDirectory)/infrastructure/V3/CI/Scripts/Set-Versioning.ps1'
+                    filePath: '$(Build.SourcesDirectory)/infrastructure/V3/CI/Scripts/Release/Set-Versioning.ps1'
                     workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
                   env:
                     TARGET_ENV: $(targetEnvironment)
@@ -120,7 +120,7 @@ stages:
                   displayName: 'Release Notes'
                   condition: and(succeeded(), eq(variables['requireTag'], 'true'))
                   inputs:
-                    filePath: '$(Build.SourcesDirectory)/infrastructure/V3/CI/Scripts/New-ReleaseNotes.ps1'
+                    filePath: '$(Build.SourcesDirectory)/infrastructure/V3/CI/Scripts/Release/New-ReleaseNotes.ps1'
                     workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
                   env:
                     RELEASE_TAG: $(currentTag)
@@ -133,7 +133,7 @@ stages:
                 - task: PowerShell@2
                   displayName: 'Check Published Artifact'
                   inputs:
-                    filePath: '$(Build.SourcesDirectory)/infrastructure/V3/CI/Scripts/Test-PublishedArtifact.ps1'
+                    filePath: '$(Build.SourcesDirectory)/infrastructure/V3/CI/Scripts/Release/Test-PublishedArtifact.ps1'
                   env:
                     ARTIFACT_NAME: $(computedArtifactName)
                     SYSTEM_ACCESSTOKEN: $(System.AccessToken)

@@ -3,7 +3,7 @@
 # ── CI Step: Documentation style ──────────────────────────────────────────────
 #
 # Giudica lo stile delle sezioni di un documento con un modello Azure OpenAI
-# (V3/CI/Scripts/Test-DocumentationStyle.ps1): la guida di stile del repository e'
+# (V3/CI/Scripts/Documentation/Test-DocumentationStyle.ps1): la guida di stile del repository e'
 # l'istruzione del modello. L'accesso al modello passa dalla service connection con un
 # token Entra ID, senza chiavi. In modalita' fix le correzioni del modello, validate e
 # rigiudicate, si salvano un file alla volta su un ramo di appoggio e tornano sul ramo della
@@ -109,7 +109,7 @@ steps:
         azureSubscription: ${{ parameters.serviceConnection }}
         scriptType: pscore
         scriptLocation: scriptPath
-        scriptPath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Test-DocumentationStyle.ps1'
+        scriptPath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Documentation/Test-DocumentationStyle.ps1'
         workingDirectory: '$(Build.SourcesDirectory)'
       env:
         GATE_MODE: ${{ replace(parameters.mode, 'fix', 'enforce') }}

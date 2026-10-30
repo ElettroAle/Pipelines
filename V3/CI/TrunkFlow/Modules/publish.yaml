@@ -97,7 +97,7 @@ stages:
                 - task: PowerShell@2
                   displayName: 'Dev Versioning (no tag)'
                   inputs:
-                    filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Set-Versioning.ps1'
+                    filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Release/Set-Versioning.ps1'
                     workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
                   env:
                     TARGET_ENV: $(targetEnvironment)
@@ -110,7 +110,7 @@ stages:
                 - task: PowerShell@2
                   displayName: 'Check Published Artifact'
                   inputs:
-                    filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Test-PublishedArtifact.ps1'
+                    filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Release/Test-PublishedArtifact.ps1'
                   env:
                     ARTIFACT_NAME: $(computedArtifactName)
                     SYSTEM_ACCESSTOKEN: $(System.AccessToken)

@@ -2,7 +2,7 @@
 
 # ── CI Step: Documentation ────────────────────────────────────────────────────
 #
-# Controlli oggettivi che valgono per ogni documento (V3/CI/Scripts/Test-Documentation.ps1):
+# Controlli oggettivi che valgono per ogni documento (V3/CI/Scripts/Documentation/Test-Documentation.ps1):
 # rimandi a file, ancore e decisioni esistenti, soglie numeriche di leggibilita'. La
 # struttura la verifica lo step del formato (es. arc42-verify.yaml), i diagrammi gli step
 # iniettati dal consumer, lo stile documentation-style.yaml.
@@ -59,7 +59,7 @@ steps:
   - task: PowerShell@2
     displayName: 'Documentation ${{ parameters.docsDirectory }} (${{ parameters.mode }})'
     inputs:
-      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Test-Documentation.ps1'
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Documentation/Test-Documentation.ps1'
       workingDirectory: '$(Build.SourcesDirectory)'
       pwsh: true
     env:

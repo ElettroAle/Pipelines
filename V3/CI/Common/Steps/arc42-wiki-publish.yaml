@@ -3,7 +3,7 @@
 # ── CI Step: arc42 wiki publish ──────────────────────────────────────────────
 #
 # Pubblica un documento arc42 in una wiki git di Azure DevOps
-# (V3/CI/Scripts/Publish-Arc42Wiki.ps1): una pagina per sezione sotto wikiRoot, le decisioni
+# (V3/CI/Scripts/Arc42/Publish-Arc42Wiki.ps1): una pagina per sezione sotto wikiRoot, le decisioni
 # sotto la sezione 9, le viste C4 come immagini C4-PlantUML. Un commit solo nel repository
 # della wiki, che tocca soltanto wikiRoot, le sue immagini e la sua voce nell'ordine della radice.
 # PlantUML richiede Java e i font di sistema.
@@ -13,7 +13,7 @@
 #
 # Parametri
 # ─────────
-#   language           → lingua del documento, es. 'IT' o 'EN' (V3/CI/Scripts/Languages) [REQUIRED]
+#   language           → lingua del documento, es. 'IT' o 'EN' (V3/CI/Scripts/Common/Languages) [REQUIRED]
 #   wikiDirectory      → checkout del repository della wiki [REQUIRED]
 #   wikiBranch         → ramo della wiki (default: wikiMaster, il ramo della wiki di progetto)
 #   wikiRoot           → pagina sotto cui nasce il documento (default: il nome dell'architettura
@@ -66,7 +66,7 @@ steps:
   - task: PowerShell@2
     displayName: 'Publish ${{ parameters.docsDirectory }} to the wiki'
     inputs:
-      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Publish-Arc42Wiki.ps1'
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Arc42/Publish-Arc42Wiki.ps1'
       workingDirectory: '${{ parameters.sourcesDirectory }}'
       pwsh: true
     env:

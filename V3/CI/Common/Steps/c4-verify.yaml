@@ -2,7 +2,7 @@
 
 # ── CI Step: C4 ───────────────────────────────────────────────────────────────
 #
-# Modello C4 di un documento in Structurizr DSL (V3/CI/Scripts/Test-C4Model.ps1):
+# Modello C4 di un documento in Structurizr DSL (V3/CI/Scripts/C4/Test-C4Model.ps1):
 # model/workspace.dsl nella cartella del documento, viste di contesto, dei container e di
 # deployment, componenti dei container con il tag delle applicazioni, nessun elemento con il tag
 # tecnico nelle viste di contesto, marcatori di vista nelle sezioni. Tag e marcatore seguono
@@ -45,7 +45,7 @@ steps:
   - task: PowerShell@2
     displayName: 'C4 model (${{ parameters.mode }})'
     inputs:
-      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Test-C4Model.ps1'
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/C4/Test-C4Model.ps1'
       workingDirectory: '$(Build.SourcesDirectory)'
       pwsh: true
     env:

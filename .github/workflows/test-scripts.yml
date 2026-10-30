@@ -5,15 +5,13 @@ on:
     branches: ["**"]
     paths:
       - "V3/CI/Scripts/**"
-      - "Tests/scripts/**"
-      - "Tests/fixtures/**"
+      - "Tests/V3/CI/**"
       - ".github/workflows/test-scripts.yml"
   pull_request:
     branches: [main]
     paths:
       - "V3/CI/Scripts/**"
-      - "Tests/scripts/**"
-      - "Tests/fixtures/**"
+      - "Tests/V3/CI/**"
 
 jobs:
   pester:
@@ -65,7 +63,7 @@ jobs:
         shell: pwsh
         run: |
           $config = New-PesterConfiguration
-          $config.Run.Path = "Tests/scripts/"
+          $config.Run.Path = "Tests/V3/CI/Scripts/"
           $config.Output.Verbosity = "Detailed"
           $config.TestResult.Enabled = $true
           $config.TestResult.OutputPath = "pester-results.xml"

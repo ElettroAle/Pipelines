@@ -117,7 +117,7 @@ stages:
                 - task: PowerShell@2
                   displayName: 'Verify SemVer Commits'
                   inputs:
-                    filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Verify-SemVer.ps1'
+                    filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Release/Verify-SemVer.ps1'
                     workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
                     pwsh: true
                   env:
@@ -133,7 +133,7 @@ stages:
                 - task: PowerShell@2
                   displayName: 'Set Versioning and Tagging'
                   inputs:
-                    filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Set-Versioning.ps1'
+                    filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Release/Set-Versioning.ps1'
                     workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
                     pwsh: true
                   env:
@@ -152,7 +152,7 @@ stages:
                 - task: PowerShell@2
                   displayName: 'Check Published Artifact'
                   inputs:
-                    filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Test-PublishedArtifact.ps1'
+                    filePath: '$(Build.SourcesDirectory)/infrastructure/pipelines/V3/CI/Scripts/Release/Test-PublishedArtifact.ps1'
                   env:
                     ARTIFACT_NAME: $(computedArtifactName)
                     SYSTEM_ACCESSTOKEN: $(System.AccessToken)

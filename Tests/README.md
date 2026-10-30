@@ -9,34 +9,29 @@ I livelli 1 e 2 girano interamente su GitHub Actions senza bisogno di Azure DevO
 
 ```
 Tests/
-├── static/                     # Livello 1: analisi statica YAML
+├── Static/                     # Livello 1: analisi statica YAML di V3 e V4
 │   ├── .yamllint.yaml          # Config yamllint
 │   ├── requirements.txt        # Dipendenze Python
 │   ├── check-references.py     # Verifica che ogni template: esista su disco
-│   └── check-parameters.py     # Verifica contratti parametri (unknown + required)
-├── scripts/                    # Livello 2: unit test PowerShell (Pester)
-│   ├── Set-Versioning.Tests.ps1
-│   ├── Verify-SemVer.Tests.ps1
-│   ├── New-ReleaseNotes.Tests.ps1
-│   ├── Test-PublishedArtifact.Tests.ps1
-│   ├── Test-AdrCorpus.Tests.ps1
-│   ├── Test-Arc42Document.Tests.ps1
-│   ├── Test-C4Model.Tests.ps1
-│   ├── Test-MermaidDiagrams.Tests.ps1
-│   ├── Test-DiagramFlows.Tests.ps1
-│   ├── Test-Documentation.Tests.ps1
-│   ├── Test-DocumentationStyle.Tests.ps1
-│   ├── MarkdownText.Tests.ps1
-│   ├── GitCliff.Tests.ps1
-│   └── ScenarioCoverage.Tests.ps1
-├── fixtures/
-│   ├── valid-commits.txt       # Messaggi commit validi — usati da Verify-SemVer.Tests
-│   ├── invalid-commits.txt     # Messaggi commit non validi — usati da Verify-SemVer.Tests
-│   ├── documentation/          # Documento valido condiviso e template arc42 italiano ufficiale — usati dai test della documentazione
-│   └── scenario-coverage/      # .feature + Cucumber Messages reali (Reqnroll 3.3.4) — usati da ScenarioCoverage.Tests
-└── preview/                    # Livello 3: pipeline ADO per az pipelines run --preview
-    ├── quality-dotNet.yaml
-    └── publish-dotNet.yaml
+│   ├── check-parameters.py     # Verifica contratti parametri (unknown + required)
+│   └── check-spdx.py           # Verifica l'header SPDX di ogni file sorgente
+└── V3/
+    ├── CI/Scripts/             # Livello 2: unit test PowerShell (Pester), stesso albero di V3/CI/Scripts
+    │   ├── Common/             # MarkdownText.Tests.ps1
+    │   │   └── Fixtures/Documentation/  # Documento valido e template arc42 italiano ufficiale, usati dai test della documentazione
+    │   ├── Adr/                # Test-AdrCorpus.Tests.ps1
+    │   ├── Arc42/              # Test-Arc42Document, Publish-Arc42Wiki, PlantUml
+    │   ├── C4/                 # Lettori, testo, scrittore e verifica del modello C4
+    │   │   └── Fixtures/       # Repository sorgente finti, lettore del consumer, finto modello del testo
+    │   ├── Mermaid/            # Test-MermaidDiagrams, Test-DiagramFlows
+    │   ├── Documentation/      # Test-Documentation, Test-DocumentationStyle
+    │   ├── Release/            # GitCliff, Set-Versioning, Verify-SemVer, New-ReleaseNotes, Test-PublishedArtifact
+    │   │   └── Fixtures/       # valid-commits.txt, invalid-commits.txt, usati da Verify-SemVer.Tests
+    │   └── ScenarioCoverage/   # ScenarioCoverage.Tests.ps1
+    │       └── Fixtures/       # .feature + Cucumber Messages reali (Reqnroll 3.3.4), Green/ e Red/
+    └── Preview/                # Livello 3: pipeline ADO per az pipelines run --preview
+        ├── quality-dotNet.yaml
+        └── publish-dotNet.yaml
 ```
 
 ---
@@ -45,7 +40,7 @@ Tests/
 
 ### Prerequisiti
 - Python 3.12+
-- `pip install -r Tests/static/requirements.txt`
+- `pip install -r Tests/Static/requirements.txt`
 
 ### Esecuzione locale
 
@@ -53,13 +48,13 @@ Tests/
 # Da root del repo
 
 # 1. YAML Lint su tutta V3/
-yamllint -c Tests/static/.yamllint.yaml V3/ V4/
+yamllint -c Tests/Static/.yamllint.yaml V3/ V4/
 
 # 2. Verifica che ogni 'template: path/file.yaml' esista su disco
-python Tests/static/check-references.py
+python Tests/Static/check-references.py
 
 # 3. Verifica contratti parametri (nomi passati ⊆ nomi definiti)
-python Tests/static/check-parameters.py
+python Tests/Static/check-parameters.py
 ```
 
 ### Cosa controlla
@@ -84,12 +79,12 @@ python Tests/static/check-parameters.py
 
 ```powershell
 # Da root del repo
-Invoke-Pester Tests/scripts/ -Output Detailed
+Invoke-Pester Tests/V3/CI/Scripts/ -Output Detailed
 ```
 
 Per eseguire solo un file:
 ```powershell
-Invoke-Pester Tests/scripts/Verify-SemVer.Tests.ps1 -Output Detailed
+Invoke-Pester Tests/V3/CI/Scripts/Release/Verify-SemVer.Tests.ps1 -Output Detailed
 ```
 
 ### Cosa controlla
@@ -155,14 +150,14 @@ Ogni test costruisce un repository con un bare repo come origin: il corpus di pa
 | Regole del corpus | ADR accepted eliminato, ADR senza versione alla versione 1, versione senza la sua voce, versione non intera, versione più bassa, ADR proposed riscrivibile, superseded-by verso una decisione inesistente, file senza frontmatter, file non numerati ignorati, run fuori da una PR, modalità `off`, una segnalazione per difetto |
 
 I test degli script di verifica della documentazione partono dal documento valido di
-`Tests/fixtures/documentation/DocumentationFixture.ps1` (le dodici sezioni del template arc42 italiano,
+`Tests/V3/CI/Scripts/Common/Fixtures/Documentation/DocumentationFixture.ps1` (le dodici sezioni del template arc42 italiano,
 modello C4, diagramma Mermaid, testo entro le soglie) e vi introducono un solo difetto per scenario.
 Lo script gira come in pipeline, in un processo separato.
 
 #### `Test-Arc42Document.Tests.ps1`
 
 Il template è l'archivio ufficiale `arc42-template-IT-plain-markdownMP.zip` della release fissata nello
-script (CC BY-SA 4.0, in `Tests/fixtures/documentation/`), servito da un HttpListener locale al posto di
+script (CC BY-SA 4.0, in `Tests/V3/CI/Scripts/Common/Fixtures/Documentation/`), servito da un HttpListener locale al posto di
 GitHub: lo SHA-256 verificato è quello vero e nessuna prova scarica dalla rete.
 
 | Suite | Scenario testato |
@@ -262,8 +257,8 @@ I workflow si attivano automaticamente su ogni PR verso `main` e su ogni push.
 
 | Workflow | File | Trigger |
 |---|---|---|
-| Static Analysis | `.github/workflows/test-static.yml` | modifiche in `V3/**`, `V4/**` o `Tests/static/**` |
-| Script Unit Tests | `.github/workflows/test-scripts.yml` | modifiche in `V3/CI/Scripts/**` o `Tests/scripts/**` |
+| Static Analysis | `.github/workflows/test-static.yml` | modifiche in `V3/**`, `V4/**` o `Tests/Static/**` |
+| Script Unit Tests | `.github/workflows/test-scripts.yml` | modifiche in `V3/CI/Scripts/**` o `Tests/V3/CI/Scripts/**` |
 | Template Expansion Preview | `.github/workflows/test-preview.yml` | `workflow_dispatch` (da abilitare, vedi Livello 3) |
 
 I risultati Pester vengono pubblicati come report JUnit nella tab "Checks" di GitHub.
@@ -278,7 +273,7 @@ Cattura errori che la static analysis non può vedere:
 - Condizioni `${{ if }}` con parametri mancanti
 - Step template con parametri obbligatori non soddisfatti dalla pipeline host
 
-I file di test pipeline ADO sono in `Tests/preview/`.
+I file di test pipeline ADO sono in `Tests/V3/Preview/`.
 
 ### Setup (una tantum)
 
@@ -288,8 +283,8 @@ Creare due pipeline in ADO puntando ai file di questo repo:
 
 | Nome pipeline ADO | File |
 |---|---|
-| `Pipelines - Preview quality-dotNet` | `Tests/preview/quality-dotNet.yaml` |
-| `Pipelines - Preview publish-dotNet` | `Tests/preview/publish-dotNet.yaml` |
+| `Pipelines - Preview quality-dotNet` | `Tests/V3/Preview/quality-dotNet.yaml` |
+| `Pipelines - Preview publish-dotNet` | `Tests/V3/Preview/publish-dotNet.yaml` |
 
 **2. Aggiungere secret e variabili in GitHub**
 
