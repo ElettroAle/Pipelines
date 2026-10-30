@@ -16,3 +16,9 @@ L'header è la prima riga del file, seguita da una riga vuota. Ogni file nuovo n
 
 I commit su questo repository usano l'autore `Alessandro Fiani <fiani.alessandro@gmail.com>`, mai
 l'email aziendale: il repository è personale. Prima di fare commit si verifica `git config user.email`.
+
+## Regole per percorso
+
+Le regole di una parte del repository vivono in `.claude/rules/`, ognuna con i percorsi a cui si applica
+nel frontmatter (`paths`): `v3-pipelines.md` (struttura e convenzioni dei template di `V3/`),
+`tests.md` (test da eseguire prima di una PR, per `V3/`, `V4/` e `Tests/`).
