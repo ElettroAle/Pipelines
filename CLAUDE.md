@@ -9,7 +9,7 @@ Il repository è distribuito con licenza Apache 2.0 (`LICENSE`, `NOTICE`). Ogni 
 - `// SPDX-License-Identifier: Apache-2.0` in `.mjs`, `.cs` (nei `.cs` dopo le direttive `#:`)
 
 L'header è la prima riga del file, seguita da una riga vuota. Ogni file nuovo nasce con l'header:
-`Tests/static/check-spdx.py` lo verifica nel workflow Static Analysis e fa fallire la build se manca.
+`Tests/Static/check-spdx.py` lo verifica nel workflow Static Analysis e fa fallire la build se manca.
 `LICENSE` resta identico al testo ufficiale e non si modifica.
 
 ## Identità dei commit

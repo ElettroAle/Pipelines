@@ -4,8 +4,8 @@
 # del template ufficiale nella lingua del documento. Le sottosezioni e il testo li giudica il
 # modello con la guida di stile del repository (Test-DocumentationStyle.ps1).
 
-. "$PSScriptRoot/Common/VerificationGate.ps1"
-. "$PSScriptRoot/Common/MarkdownText.ps1"
+. "$PSScriptRoot/Common/Documentation/VerificationGate.ps1"
+. "$PSScriptRoot/Common/Documentation/MarkdownText.ps1"
 
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
 $language = "$env:ARC42_LANGUAGE".Trim().ToUpperInvariant()

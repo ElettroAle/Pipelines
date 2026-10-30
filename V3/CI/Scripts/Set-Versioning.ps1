@@ -6,7 +6,7 @@
 # Dipendenze: Variabili d'ambiente impostate da Azure DevOps
 # ====================================================================
 
-. "$PSScriptRoot/Common/GitCliff.ps1"
+. "$PSScriptRoot/Common/Versioning/GitCliff.ps1"
 
 $envName = $env:TARGET_ENV.ToLower()
 $isRequireTag = $env:REQUIRE_TAG

@@ -6,9 +6,9 @@
 # sotto, provate solo su .NET 10: un progetto di un'altra versione, o di un tipo che le regole non
 # riconoscono, ferma la lettura invece di essere letto con regole non sue.
 
-. "$PSScriptRoot/Common/VerificationGate.ps1"
-. "$PSScriptRoot/Common/DocumentLanguage.ps1"
-. "$PSScriptRoot/Common/C4CodeModel.ps1"
+. "$PSScriptRoot/Common/Documentation/VerificationGate.ps1"
+. "$PSScriptRoot/Common/Documentation/DocumentLanguage.ps1"
+. "$PSScriptRoot/Common/C4/C4CodeModel.ps1"
 
 $SupportedTargetFramework = '^net10\.0(-[a-z0-9.]+)?$'
 $TestKind = 'test'

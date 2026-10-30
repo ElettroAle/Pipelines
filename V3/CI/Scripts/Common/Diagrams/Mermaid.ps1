@@ -3,7 +3,7 @@
 # Accesso al parser Mermaid per Test-MermaidDiagrams.ps1 e Test-DiagramFlows.ps1: le dipendenze sono fissate
 # da mermaid/package-lock.json e installate con npm ci in una cache per lockfile.
 
-$MermaidCheckerSource = Join-Path $PSScriptRoot 'mermaid'
+$MermaidCheckerSource = Join-Path $PSScriptRoot 'Mermaid'
 
 function Get-MermaidCheckerDirectory {
     $lockFile = Join-Path $MermaidCheckerSource 'package-lock.json'

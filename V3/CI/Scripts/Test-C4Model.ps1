@@ -7,9 +7,9 @@
 # tecnico nelle viste di contesto. Tag e marcatore seguono la lingua del documento: in italiano
 # Applicazione, Tecnico e <!-- vista: chiave -->.
 
-. "$PSScriptRoot/Common/VerificationGate.ps1"
-. "$PSScriptRoot/Common/MarkdownText.ps1"
-. "$PSScriptRoot/Common/Structurizr.ps1"
+. "$PSScriptRoot/Common/Documentation/VerificationGate.ps1"
+. "$PSScriptRoot/Common/Documentation/MarkdownText.ps1"
+. "$PSScriptRoot/Common/Diagrams/Structurizr.ps1"
 
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
 $WorkspaceDsl = Join-Path $docsDirectory 'model/workspace.dsl'

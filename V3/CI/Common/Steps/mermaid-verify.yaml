@@ -4,7 +4,7 @@
 #
 # Diagrammi Mermaid delle sezioni di un documento e delle sue decisioni
 # (V3/CI/Scripts/Test-MermaidDiagrams.ps1):
-# ogni diagramma passa dal parser di Mermaid fissato da V3/CI/Scripts/Common/mermaid/package-lock.json,
+# ogni diagramma passa dal parser di Mermaid fissato da V3/CI/Scripts/Common/Diagrams/Mermaid/package-lock.json,
 # e uno non valido si segnala con file e riga. Il parser richiede Node.js.
 #
 # Riusato da:

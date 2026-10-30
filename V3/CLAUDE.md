@@ -124,10 +124,10 @@ Prima di aprire una PR esegui sempre i due livelli di test dalla root del repo.
 ### Livello 1 — Static Analysis (Python)
 
 ```bash
-pip install -r Tests/static/requirements.txt
-yamllint -c Tests/static/.yamllint.yaml V3/
-python Tests/static/check-references.py
-python Tests/static/check-parameters.py
+pip install -r Tests/Static/requirements.txt
+yamllint -c Tests/Static/.yamllint.yaml V3/
+python Tests/Static/check-references.py
+python Tests/Static/check-parameters.py
 ```
 
 Cosa intercetta:
@@ -140,7 +140,7 @@ Cosa intercetta:
 Eseguire solo se hai modificato `CI/Scripts/`:
 
 ```powershell
-Invoke-Pester Tests/scripts/ -Output Detailed
+Invoke-Pester Tests/Scripts/ -Output Detailed
 ```
 
 I test usano un **bare repo locale** come fake remote. L'unico accesso di rete è il download di git-cliff alla prima esecuzione, evitabile puntando `GIT_CLIFF_PATH` a un binario locale.
@@ -152,18 +152,18 @@ I test usano un **bare repo locale** come fake remote. L'unico accesso di rete �
 | Qualsiasi file in `V3/` | Livello 1 |
 | `CI/Scripts/Set-Versioning.ps1` | Livello 1 + Livello 2 (`Set-Versioning.Tests.ps1`) |
 | `CI/Scripts/Verify-SemVer.ps1` | Livello 1 + Livello 2 (`Verify-SemVer.Tests.ps1`) |
-| `CI/Scripts/Common/cliff.toml`, `CI/Scripts/Common/GitCliff.ps1` | Livello 1 + Livello 2 (`GitCliff.Tests.ps1` + `Verify-SemVer.Tests.ps1` + `Set-Versioning.Tests.ps1` + `New-ReleaseNotes.Tests.ps1`) |
+| `CI/Scripts/Common/Versioning/cliff.toml`, `CI/Scripts/Common/Versioning/GitCliff.ps1` | Livello 1 + Livello 2 (`GitCliff.Tests.ps1` + `Verify-SemVer.Tests.ps1` + `Set-Versioning.Tests.ps1` + `New-ReleaseNotes.Tests.ps1`) |
 | `CI/Scripts/New-ReleaseNotes.ps1` | Livello 1 + Livello 2 (`New-ReleaseNotes.Tests.ps1`) |
 | `CI/Scripts/Test-PublishedArtifact.ps1` | Livello 1 + Livello 2 (`Test-PublishedArtifact.Tests.ps1`) |
 | `CI/Scripts/Test-AdrCorpus.ps1` | Livello 1 + Livello 2 (`Test-AdrCorpus.Tests.ps1`) |
 | `CI/Scripts/Test-Arc42Document.ps1` | Livello 1 + Livello 2 (`Test-Arc42Document.Tests.ps1`) |
 | `CI/Scripts/Test-C4Model.ps1`, `Structurizr.ps1` | Livello 1 + Livello 2 (`Test-C4Model.Tests.ps1`, richiede Java 17) |
-| `CI/Scripts/Common/C4CodeModel.ps1`, `Read-C4DotNet10Model.ps1`, `Read-C4Angular18Model.ps1`, `Write-C4ModelText.ps1`, `Export-C4CodeModel.ps1`, `Tests/fixtures/c4/` | Livello 1 + Livello 2 (`Read-C4DotNet10Model.Tests.ps1` + `Read-C4Angular18Model.Tests.ps1` + `Write-C4ModelText.Tests.ps1` + `Export-C4CodeModel.Tests.ps1`, richiede Java 17) |
+| `CI/Scripts/Common/C4/C4CodeModel.ps1`, `Read-C4DotNet10Model.ps1`, `Read-C4Angular18Model.ps1`, `Write-C4ModelText.ps1`, `Export-C4CodeModel.ps1`, `Tests/Fixtures/C4/` | Livello 1 + Livello 2 (`Read-C4DotNet10Model.Tests.ps1` + `Read-C4Angular18Model.Tests.ps1` + `Write-C4ModelText.Tests.ps1` + `Export-C4CodeModel.Tests.ps1`, richiede Java 17) |
 | `CI/Scripts/Publish-Arc42Wiki.ps1`, `PlantUml.ps1` | Livello 1 + Livello 2 (`Publish-Arc42Wiki.Tests.ps1` + `PlantUml.Tests.ps1`, richiede Java 17) |
 | `CI/Scripts/Test-MermaidDiagrams.ps1`, `Mermaid.ps1`, `mermaid/` | Livello 1 + Livello 2 (`Test-MermaidDiagrams.Tests.ps1`, richiede Node.js) |
 | `CI/Scripts/Test-Documentation.ps1` | Livello 1 + Livello 2 (`Test-Documentation.Tests.ps1`) |
 | `CI/Scripts/Test-DocumentationStyle.ps1` | Livello 1 + Livello 2 (`Test-DocumentationStyle.Tests.ps1`) |
-| `CI/Scripts/Common/MarkdownText.ps1`, `VerificationGate.ps1`, `Tests/fixtures/documentation/` | Livello 1 + Livello 2 (`MarkdownText.Tests.ps1` e i test di tutti gli script di verifica della documentazione) |
+| `CI/Scripts/Common/Documentation/MarkdownText.ps1`, `VerificationGate.ps1`, `Tests/Fixtures/Documentation/` | Livello 1 + Livello 2 (`MarkdownText.Tests.ps1` e i test di tutti gli script di verifica della documentazione) |
 | `CI/Scripts/ScenarioCoverage.cs` | Livello 1 + Livello 2 (`ScenarioCoverage.Tests.ps1`, richiede .NET SDK 10) |
 
 I workflow GitHub Actions replicano questi stessi check automaticamente su ogni push.

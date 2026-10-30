@@ -10,11 +10,11 @@
 #>
 
 BeforeDiscovery {
-    . "$PSScriptRoot/../fixtures/c4/C4CodeFixture.ps1"
+    . "$PSScriptRoot/../Fixtures/C4/C4CodeFixture.ps1"
 }
 
 BeforeAll {
-    . "$PSScriptRoot/../fixtures/c4/C4CodeFixture.ps1"
+    . "$PSScriptRoot/../Fixtures/C4/C4CodeFixture.ps1"
 
     function New-HostedRepository([string]$Subject) {
         $files = [ordered]@{}

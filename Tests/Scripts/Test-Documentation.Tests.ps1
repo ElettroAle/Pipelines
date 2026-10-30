@@ -11,7 +11,7 @@
 #>
 
 BeforeAll {
-    . "$PSScriptRoot/../fixtures/documentation/DocumentationFixture.ps1"
+    . "$PSScriptRoot/../Fixtures/Documentation/DocumentationFixture.ps1"
     $ScriptPath = Resolve-Path "$PSScriptRoot/../../V3/CI/Scripts/Test-Documentation.ps1"
 
     function Invoke-DocsCheck([System.Collections.IDictionary]$Docs, [hashtable]$Environment = @{}) {

@@ -11,7 +11,7 @@
 #>
 
 BeforeAll {
-    . "$PSScriptRoot/../fixtures/documentation/DocumentationFixture.ps1"
+    . "$PSScriptRoot/../Fixtures/Documentation/DocumentationFixture.ps1"
     $ScriptPath = Resolve-Path "$PSScriptRoot/../../V3/CI/Scripts/Test-Arc42Document.ps1"
     $ExpectedPath = '/2026.10.19/arc42-template-IT-plain-markdownMP.zip'
 

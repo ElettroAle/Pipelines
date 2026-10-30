@@ -15,7 +15,7 @@
 # ─────────
 #   checkoutRepository → repository da fare checkout [REQUIRED]
 #   arc42Language      → lingua del template arc42 e del documento, es. 'IT' o 'EN' [REQUIRED];
-#                        sceglie anche V3/CI/Scripts/Common/Languages per ADR, marcatori di vista e tag C4
+#                        sceglie anche V3/CI/Scripts/Common/Documentation/Languages per ADR, marcatori di vista e tag C4
 #   adrMode            → off | warn | enforce (default: enforce)
 #   decisionsDirectory → cartella degli ADR (default: docs/decisions)
 #   docsMode           → off | warn | enforce (default: off, finché il repo non ha la documentazione)

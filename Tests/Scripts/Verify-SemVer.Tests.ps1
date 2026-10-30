@@ -370,13 +370,13 @@ Describe "Verify-SemVer — ADDITIONAL_TAG_BRANCHES" {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SUITE 4: Data-driven da fixtures/valid-commits.txt e invalid-commits.txt
+# SUITE 4: Data-driven da Fixtures/valid-commits.txt e invalid-commits.txt
 # ─────────────────────────────────────────────────────────────────────────────
 
 Describe "Verify-SemVer — Fixture: commit validi su main" {
 
     BeforeDiscovery {
-        $lines = Get-Content "$PSScriptRoot/../fixtures/valid-commits.txt" -ErrorAction Stop
+        $lines = Get-Content "$PSScriptRoot/../Fixtures/valid-commits.txt" -ErrorAction Stop
         $script:ValidCases = $lines |
             Where-Object { $_ -match '\S' } |
             ForEach-Object { @{ Msg = $_.Trim() } }
@@ -395,7 +395,7 @@ Describe "Verify-SemVer — Fixture: commit validi su main" {
 Describe "Verify-SemVer — Fixture: commit non validi su main" {
 
     BeforeDiscovery {
-        $lines = Get-Content "$PSScriptRoot/../fixtures/invalid-commits.txt" -ErrorAction Stop
+        $lines = Get-Content "$PSScriptRoot/../Fixtures/invalid-commits.txt" -ErrorAction Stop
         $script:InvalidCases = $lines |
             Where-Object { $_ -match '\S' } |
             ForEach-Object { @{ Msg = $_.Trim() } }

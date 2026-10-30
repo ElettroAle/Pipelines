@@ -88,7 +88,7 @@ def resolve_ref(ref: str, source_file: Path, repo_root: Path) -> tuple[bool, str
 def main():
     # Determina la root del repo: due livelli sopra questo script
     script_dir = Path(__file__).resolve().parent
-    repo_root = script_dir.parent.parent  # Tests/static/ -> Tests/ -> repo root
+    repo_root = script_dir.parent.parent  # Tests/Static/ -> Tests/ -> repo root
 
     v3_root = repo_root / "V3"
     if not v3_root.exists():

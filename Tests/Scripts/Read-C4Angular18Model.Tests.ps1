@@ -10,7 +10,7 @@
 #>
 
 BeforeAll {
-    . "$PSScriptRoot/../fixtures/c4/C4CodeFixture.ps1"
+    . "$PSScriptRoot/../Fixtures/C4/C4CodeFixture.ps1"
 }
 
 Describe "Lettore Angular 18 del modello C4" {

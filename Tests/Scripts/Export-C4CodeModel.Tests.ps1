@@ -12,8 +12,8 @@
 #>
 
 BeforeAll {
-    . "$PSScriptRoot/../fixtures/c4/C4CodeFixture.ps1"
-    . "$PSScriptRoot/../../V3/CI/Scripts/Common/Structurizr.ps1"
+    . "$PSScriptRoot/../Fixtures/C4/C4CodeFixture.ps1"
+    . "$PSScriptRoot/../../V3/CI/Scripts/Common/Diagrams/Structurizr.ps1"
     $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-code-$(New-Guid)"
 

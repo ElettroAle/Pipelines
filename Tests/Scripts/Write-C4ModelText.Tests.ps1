@@ -7,7 +7,7 @@
 .DESCRIPTION
     Ogni scenario costruisce un repository sorgente finto ed esegue, come in pipeline, il lettore .NET,
     il generatore del testo e lo scrittore. Il modello e' sostituito da un endpoint locale
-    (Tests/fixtures/c4/ModelTextStub.ps1) che descrive ogni elemento e ogni relazione della parte, salvo
+    (Tests/Fixtures/C4/ModelTextStub.ps1) che descrive ogni elemento e ogni relazione della parte, salvo
     le stesure cambiate dallo scenario; le prove verificano cosa il generatore manda al modello, quali
     stesure accetta, cosa salva e cosa lo scrittore compone. Il testo vero del modello si giudica sul
     repository della documentazione. Lo scenario che controlla la validita' del DSL richiede Java 17 o
@@ -15,8 +15,8 @@
 #>
 
 BeforeAll {
-    . "$PSScriptRoot/../fixtures/c4/C4CodeFixture.ps1"
-    . "$PSScriptRoot/../../V3/CI/Scripts/Common/Structurizr.ps1"
+    . "$PSScriptRoot/../Fixtures/C4/C4CodeFixture.ps1"
+    . "$PSScriptRoot/../../V3/CI/Scripts/Common/Diagrams/Structurizr.ps1"
     $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-text-tools-$(New-Guid)"
 
@@ -25,7 +25,7 @@ BeforeAll {
     $probe = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
     $probe.Start(); $port = $probe.LocalEndpoint.Port; $probe.Stop()
     $script:StubEndpoint = "http://127.0.0.1:$port"
-    $stubScript = Resolve-Path "$PSScriptRoot/../fixtures/c4/ModelTextStub.ps1"
+    $stubScript = Resolve-Path "$PSScriptRoot/../Fixtures/C4/ModelTextStub.ps1"
     $script:Stub = Start-ThreadJob -ArgumentList $StubEndpoint, $StubState, "$stubScript" -ScriptBlock {
         param($Endpoint, $State, $Script)
         & $Script $Endpoint $State
