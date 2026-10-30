@@ -3,8 +3,8 @@
 # ── CI Step: Mermaid ──────────────────────────────────────────────────────────
 #
 # Diagrammi Mermaid delle sezioni di un documento e delle sue decisioni
-# (V3/CI/Scripts/Test-MermaidDiagrams.ps1):
-# ogni diagramma passa dal parser di Mermaid fissato da V3/CI/Scripts/Common/Diagrams/Mermaid/package-lock.json,
+# (V3/CI/Scripts/Mermaid/Test-MermaidDiagrams.ps1):
+# ogni diagramma passa dal parser di Mermaid fissato da V3/CI/Scripts/Mermaid/Parser/package-lock.json,
 # e uno non valido si segnala con file e riga. Il parser richiede Node.js.
 #
 # Riusato da:
@@ -57,7 +57,7 @@ steps:
   - task: PowerShell@2
     displayName: 'Mermaid diagrams (${{ parameters.mode }})'
     inputs:
-      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Test-MermaidDiagrams.ps1'
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Mermaid/Test-MermaidDiagrams.ps1'
       workingDirectory: '$(Build.SourcesDirectory)'
       pwsh: true
     env:

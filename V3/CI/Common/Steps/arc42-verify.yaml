@@ -2,7 +2,7 @@
 
 # ── CI Step: arc42 ────────────────────────────────────────────────────────────
 #
-# Struttura di un documento arc42 (V3/CI/Scripts/Test-Arc42Document.ps1): un file per
+# Struttura di un documento arc42 (V3/CI/Scripts/Arc42/Test-Arc42Document.ps1): un file per
 # sezione con il nome e il titolo del template ufficiale. Release del template, URL e
 # SHA-256 per lingua sono fissati nello script, come ogni strumento scaricato in pipeline.
 #
@@ -42,7 +42,7 @@ steps:
   - task: PowerShell@2
     displayName: 'arc42 ${{ parameters.docsDirectory }} (${{ parameters.mode }})'
     inputs:
-      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Test-Arc42Document.ps1'
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Arc42/Test-Arc42Document.ps1'
       workingDirectory: '$(Build.SourcesDirectory)'
       pwsh: true
     env:

@@ -4,9 +4,9 @@
 #
 # Esegue un lettore del modello C4 generato: uno script che legge il checkout del repository
 # sorgente e scrive in fragmentDirectory un frammento con il contratto di
-# V3/CI/Scripts/Common/C4/C4CodeModel.ps1, che c4-generate.yaml unisce agli altri. Lo script e' uno dei
+# V3/CI/Scripts/C4/C4CodeModel.ps1, che c4-generate.yaml unisce agli altri. Lo script e' uno dei
 # lettori di questo repository o uno scritto nel repository del consumer, per una tecnologia o una
-# convenzione che questo repository non conosce; trova gli script comuni in C4_SCRIPTS_DIRECTORY.
+# convenzione che questo repository non conosce; trova gli script del repository in C4_SCRIPTS_DIRECTORY (V3/CI/Scripts).
 #
 # Riusato da:
 #   c4-read-dotnet10.yaml, c4-read-angular18.yaml
@@ -77,6 +77,6 @@ steps:
       SOURCE_REPOSITORY: ${{ parameters.sourceRepository }}
       SOURCE_DIRECTORY: ${{ parameters.sourceDirectory }}
       FRAGMENT_DIRECTORY: ${{ parameters.fragmentDirectory }}
-      C4_SCRIPTS_DIRECTORY: ${{ parameters.templatesDirectory }}/V3/CI/Scripts/Common
+      C4_SCRIPTS_DIRECTORY: ${{ parameters.templatesDirectory }}/V3/CI/Scripts
       ${{ each variable in parameters.environment }}:
         ${{ variable.key }}: ${{ variable.value }}

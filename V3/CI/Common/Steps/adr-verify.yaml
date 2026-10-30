@@ -2,7 +2,7 @@
 
 # ── CI Step: Architecture Decision Records ────────────────────────────────────
 #
-# Verifica il corpus degli ADR del repository (V3/CI/Scripts/Test-AdrCorpus.ps1):
+# Verifica il corpus degli ADR del repository (V3/CI/Scripts/Adr/Test-AdrCorpus.ps1):
 # nome NNNN-titolo.md, stato ammesso, versione intera, sezioni obbligatorie, sostituzioni
 # reciproche; rispetto al ramo di destinazione della PR un ADR accepted mantiene l'esito e cambia
 # solo con una versione nuova e la sua voce fra le versioni.
@@ -38,7 +38,7 @@ steps:
   - task: PowerShell@2
     displayName: 'Architecture decisions (${{ parameters.mode }})'
     inputs:
-      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Test-AdrCorpus.ps1'
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Adr/Test-AdrCorpus.ps1'
       workingDirectory: '$(Build.SourcesDirectory)'
       pwsh: true
     env:

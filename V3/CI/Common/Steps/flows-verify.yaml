@@ -2,7 +2,7 @@
 
 # ── CI Step: Flussi ───────────────────────────────────────────────────────────
 #
-# Flussi coerenti con la struttura del documento (V3/CI/Scripts/Test-DiagramFlows.ps1):
+# Flussi coerenti con la struttura del documento (V3/CI/Scripts/Mermaid/Test-DiagramFlows.ps1):
 # nelle sezioni ogni partecipante di un diagramma di sequenza Mermaid e' un elemento del modello C4
 # (model/workspace.dsl), un container con il tag delle applicazioni compare con i suoi componenti e
 # ogni chiamata e' una relazione del modello; una decisione con la parte della struttura nel codice
@@ -62,7 +62,7 @@ steps:
   - task: PowerShell@2
     displayName: 'Diagram flows (${{ parameters.mode }})'
     inputs:
-      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Test-DiagramFlows.ps1'
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Mermaid/Test-DiagramFlows.ps1'
       workingDirectory: '$(Build.SourcesDirectory)'
       pwsh: true
     env:

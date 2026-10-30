@@ -2,7 +2,7 @@
 
 # ── CI Step: C4 generation ────────────────────────────────────────────────────
 #
-# Parte del modello C4 che nasce da un repository sorgente (V3/CI/Scripts/Export-C4CodeModel.ps1):
+# Parte del modello C4 che nasce da un repository sorgente (V3/CI/Scripts/C4/Export-C4CodeModel.ps1):
 # un file Structurizr DSL per repository in generatedDirectory, scritto dai frammenti che i passi di
 # lettura delle tecnologie (c4-read-*.yaml) hanno lasciato in fragmentDirectory. Non conosce le
 # tecnologie: un file di progetto del repository che nessun lettore ha letto ferma la generazione.
@@ -73,7 +73,7 @@ steps:
   - task: PowerShell@2
     displayName: 'C4 model from ${{ parameters.sourceRepository }} (${{ parameters.generationMode }}, ${{ parameters.mode }})'
     inputs:
-      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Export-C4CodeModel.ps1'
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/C4/Export-C4CodeModel.ps1'
       workingDirectory: '${{ parameters.workingDirectory }}'
       pwsh: true
     env:

@@ -188,7 +188,7 @@ extends:
 
 - **Come funziona.** `dotnet-test.yaml` attiva il formatter Cucumber Messages di Reqnroll
   (variabile `REQNROLL_FORMATTERS`, file `scenario-coverage/$(Build.BuildId).ndjson` nell'output
-  di ogni progetto). `gherkin-scenario-coverage.yaml` esegue `CI/Scripts/ScenarioCoverage.cs`, che
+  di ogni progetto). `gherkin-scenario-coverage.yaml` esegue `CI/Scripts/ScenarioCoverage/ScenarioCoverage.cs`, che
   legge i `.feature` su disco con il parser Gherkin ufficiale e li confronta con i messages.
   Lo step è una sola riga `dotnet run` senza sintassi di shell: gira su agent Linux e Windows.
 - **Cosa fa fallire.** Scenario mai eseguito (feature fuori da ogni progetto di test o esclusa da
@@ -259,7 +259,7 @@ Due ingressi:
   formato con struttura propria.
 
 **Lingua del documento.** Le convenzioni che dipendono dalla lingua stanno in
-`CI/Scripts/Common/Documentation/Languages/<lingua>.psd1`, una per file: sezioni degli ADR, marcatore di vista, tag dei
+`CI/Scripts/Common/Languages/<lingua>.psd1`, una per file: sezioni degli ADR, marcatore di vista, tag dei
 container C4, nome della pagina e colonna dello stato nella wiki. `quality-arc42` la prende da
 `arc42Language`, `quality-docs` da `language` (default `IT`); lo step `document-language.yaml` la
 dichiara in `DOCUMENT_LANGUAGE` per tutto il job, compresi gli step che il consumer inietta. Una lingua
@@ -314,7 +314,7 @@ extends:
     styleModel: '<deployment>'
 ```
 
-Struttura arc42 (`arc42-verify.yaml`, `CI/Scripts/Test-Arc42Document.ps1`):
+Struttura arc42 (`arc42-verify.yaml`, `CI/Scripts/Arc42/Test-Arc42Document.ps1`):
 
 - **Template.** La release del template ufficiale (variante `plain-markdownMP`), l'URL e lo SHA-256 di
   ogni lingua sono fissati nello script, come per ogni strumento scaricato in pipeline: il consumer
@@ -326,7 +326,7 @@ Struttura arc42 (`arc42-verify.yaml`, `CI/Scripts/Test-Arc42Document.ps1`):
   è una sezione fuori template; i file non numerati non sono sezioni. Le sottosezioni e il testo li
   giudica il modello con la guida di stile.
 
-Modello C4 (`c4-verify.yaml`, `CI/Scripts/Test-C4Model.ps1`):
+Modello C4 (`c4-verify.yaml`, `CI/Scripts/C4/Test-C4Model.ps1`):
 
 - Il modello è `model/workspace.dsl` nella cartella del documento: il DSL è valido e ha vista di contesto,
   vista dei container e vista di deployment; ogni container con il tag delle applicazioni (`Applicazione`
@@ -354,7 +354,7 @@ Parte del modello C4 generata dal codice (`c4-read-*.yaml` e `c4-generate.yaml`)
   provate su un'altra. Ogni lettore gira con `c4-read.yaml`, che gli passa repository, checkout,
   cartella dei frammenti e script comuni; `c4-read-<tecnologia><versione>.yaml` sceglie solo lo script. Il consumer compone i lettori delle tecnologie del
   repository, poi `c4-generate.yaml`, come una pipeline di build compone gli step di una tecnologia.
-- **Il frammento** (`CI/Scripts/Common/C4/C4CodeModel.ps1`, che i lettori includono) ha tre parti: `manifests`,
+- **Il frammento** (`CI/Scripts/C4/C4CodeModel.ps1`, che i lettori includono) ha tre parti: `manifests`,
   i file di progetto letti, relativi al repository; `containers`, ognuno con `id`, `name`, `codeName`,
   `technology`, `tags`, `properties` e i `components` con gli stessi campi tranne `tags`;
   `relationships`, coppie `source` e `target` di identificativi.
@@ -362,10 +362,10 @@ Parte del modello C4 generata dal codice (`c4-read-*.yaml` e `c4-generate.yaml`)
   repository non conosce, ad esempio come l'infrastruttura di un progetto lega un'applicazione al suo
   progetto, il consumer scrive il lettore nel proprio repository e lo passa con `scriptPath`, con le sue
   variabili in `environment`. Lo script trova gli script comuni (`CI/Scripts/Common/`) in
-  `C4_SCRIPTS_DIRECTORY`, ad esempio `$env:C4_SCRIPTS_DIRECTORY/C4/C4CodeModel.ps1` e
-  `$env:C4_SCRIPTS_DIRECTORY/Documentation/VerificationGate.ps1`, e scrive il frammento con lo stesso
+  `C4_SCRIPTS_DIRECTORY` (`V3/CI/Scripts`), ad esempio `$env:C4_SCRIPTS_DIRECTORY/C4/C4CodeModel.ps1` e
+  `$env:C4_SCRIPTS_DIRECTORY/Common/VerificationGate.ps1`, e scrive il frammento con lo stesso
   contratto.
-- **Lo scrittore** (`CI/Scripts/Export-C4CodeModel.ps1`) unisce i frammenti del repository e scrive
+- **Lo scrittore** (`CI/Scripts/C4/Export-C4CodeModel.ps1`) unisce i frammenti del repository e scrive
   `<repository in minuscolo>.dsl` nella cartella delle parti generate, da includere con `!include` nel
   sistema di `model/workspace.dsl`. Con più di un container, i container stanno in un gruppo con il nome
   del repository senza il prefisso comune ai repository sorgente; un container unico non ha gruppo; ogni elemento porta il tag `Generato` in italiano e il nome
@@ -394,14 +394,14 @@ Parte del modello C4 generata dal codice (`c4-read-*.yaml` e `c4-generate.yaml`)
 - Con `generationMode: check` il file del documento si confronta con quello che la generazione produce:
   una differenza nomina il file.
 
-Diagrammi Mermaid (`mermaid-verify.yaml`, `CI/Scripts/Test-MermaidDiagrams.ps1`):
+Diagrammi Mermaid (`mermaid-verify.yaml`, `CI/Scripts/Mermaid/Test-MermaidDiagrams.ps1`):
 
 - Ogni diagramma Mermaid delle sezioni e delle decisioni passa dal parser: l'errore nomina sezione (o
   titolo della decisione), file e riga. Una cartella che non esiste non ha diagrammi da verificare.
-- **Requisiti.** Node.js (dipendenze fissate da `CI/Scripts/Common/Diagrams/Mermaid/package-lock.json`); lo step lo
+- **Requisiti.** Node.js (dipendenze fissate da `CI/Scripts/Mermaid/Parser/package-lock.json`); lo step lo
   prepara con `UseNode@1`. Senza Node.js la verifica fallisce nominando il controllo non eseguito.
 
-Flussi (`flows-verify.yaml`, `CI/Scripts/Test-DiagramFlows.ps1`):
+Flussi (`flows-verify.yaml`, `CI/Scripts/Mermaid/Test-DiagramFlows.ps1`):
 
 - **Sezioni.** Ogni partecipante di un diagramma di sequenza ha come nome mostrato
   (`participant T as Esecuzione del turno`) il nome di un elemento del modello C4: un componente, un
@@ -420,7 +420,7 @@ Flussi (`flows-verify.yaml`, `CI/Scripts/Test-DiagramFlows.ps1`):
 - **Requisiti.** Java 17 o successivo e Node.js, preparati dallo step come in `c4-verify.yaml` e
   `mermaid-verify.yaml`.
 
-Controlli comuni (`documentation-verify.yaml`, `CI/Scripts/Test-Documentation.ps1`), su ogni file
+Controlli comuni (`documentation-verify.yaml`, `CI/Scripts/Documentation/Test-Documentation.ps1`), su ogni file
 Markdown della cartella del documento:
 
 - **Rimandi.** I link relativi puntano a file e ancore esistenti; un identificativo di decisione
@@ -429,10 +429,10 @@ Markdown della cartella del documento:
   (`docsGulpease`) e parole massime per frase (`docsMaxWords`); `docsAbbreviations` sono le
   abbreviazioni che non chiudono una frase.
 
-Gli script condividono `CI/Scripts/Common/Documentation/VerificationGate.ps1` (modalità, rilievi, codice di uscita) e
-`CI/Scripts/Common/Documentation/MarkdownText.ps1` (lettura delle sezioni e misure di leggibilità).
+Gli script condividono `CI/Scripts/Common/VerificationGate.ps1` (modalità, rilievi, codice di uscita) e
+`CI/Scripts/Common/MarkdownText.ps1` (lettura delle sezioni e misure di leggibilità).
 
-Giudizio dello stile (`styleMode`, `CI/Scripts/Test-DocumentationStyle.ps1`):
+Giudizio dello stile (`styleMode`, `CI/Scripts/Documentation/Test-DocumentationStyle.ps1`):
 
 - Il modello riceve come istruzioni la guida `styleGuide` e giudica un documento per richiesta, con il
   glossario `docsGlossary` come contesto; il glossario non si giudica. In una PR si giudicano le sezioni
@@ -485,7 +485,7 @@ Giudizio dello stile (`styleMode`, `CI/Scripts/Test-DocumentationStyle.ps1`):
 
 Dopo il merge su `main` il documento arc42 si pubblica nella wiki di progetto di Azure DevOps
 (`CI/Agnostic/publish-arc42-wiki.yaml`, lo step `CI/Common/Steps/arc42-wiki-publish.yaml` e lo script
-`CI/Scripts/Publish-Arc42Wiki.ps1`). Lo step prepara Java e i font di sistema con `ensure-java.yaml` ed
+`CI/Scripts/Arc42/Publish-Arc42Wiki.ps1`). Lo step prepara Java e i font di sistema con `ensure-java.yaml` ed
 `ensure-fonts.yaml`:
 
 - Ogni sezione diventa una pagina sotto `wikiRoot` (default il nome della lingua, `Architettura` o
@@ -554,7 +554,7 @@ python Tests/Static/check-parameters.py
 
 ```powershell
 # Livello 2 — da root del repo
-Invoke-Pester Tests/Scripts/ -Output Detailed
+Invoke-Pester Tests/V3/CI/Scripts/ -Output Detailed
 ```
 
 ### GitHub Actions
@@ -564,7 +564,7 @@ I workflow si attivano automaticamente su ogni push e su ogni PR verso `main`, *
 | Workflow | Trigger (path) |
 |---|---|
 | `test-static.yml` | `V3/**`, `V4/**`, `Tests/Static/**` |
-| `test-scripts.yml` | `V3/CI/Scripts/**`, `Tests/Scripts/**` |
+| `test-scripts.yml` | `V3/CI/Scripts/**`, `Tests/V3/CI/Scripts/**` |
 
 Documentazione completa: [`Tests/README.md`](Tests/README.md)
 
@@ -572,38 +572,40 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 
 ## Script condivisi (V3)
 
-Gli script che uno step esegue stanno in `CI/Scripts/`; quelli che altri script includono, con i loro
-dati, in `CI/Scripts/Common/`, una cartella per ambito: `Documentation/` (modalità delle verifiche,
-lingua del documento, lettura del Markdown), `C4/` (contratto del frammento del modello C4),
-`Diagrams/` (Structurizr, PlantUML, Mermaid), `Versioning/` (git-cliff e le regole dei commit).
+Gli script stanno in `CI/Scripts/`, una cartella per strumento o standard, con le librerie e i dati
+che usano solo loro: `Adr/`, `Arc42/` (con PlantUML), `C4/` (con Structurizr e il contratto del
+frammento), `Mermaid/` (con il parser in `Parser/`), `Documentation/`, `Release/` (con git-cliff e
+`cliff.toml`), `ScenarioCoverage/`. `Common/` contiene solo ciò che usano più cartelle: modalità delle
+verifiche, lingua del documento con `Languages/`, lettura del Markdown. I test ricalcano lo stesso
+albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 
 | Script | Scopo |
 |---|---|
-| `CI/Scripts/Common/Versioning/cliff.toml` | Unica sorgente delle regole Conventional Commits: tipi ammessi, gruppi delle release notes, prefisso ADO `Merged PR <id>: `, regole di bump |
-| `CI/Scripts/Common/Versioning/GitCliff.ps1` | Scarica git-cliff (versione fissata, SHA-256 verificato) e lo espone a `Set-Versioning.ps1`, `Verify-SemVer.ps1` e `New-ReleaseNotes.ps1` |
-| `CI/Scripts/Verify-SemVer.ps1` | Gate sui Conventional Commits delle PR verso i branch configurati: segnala solo se né il titolo né alcun commit della PR è convenzionale (senza PR, l'ultimo commit non-merge); modalità `off`/`warn`/`enforce`, di default `enforce` su `dev`, `staging` e `main` |
-| `CI/Scripts/Set-Versioning.ps1` | Calcola la versione con `git cliff --bumped-version`: tag Git su staging/main, prerelease `x.y.z-dev.<BuildId>` senza tag altrove; setta `currentTag`, `assemblyVersion`, `gitHash`, `computedArtifactName`; usa la versione come build number del run e marca con il tag `release` le publish di rilascio |
-| `CI/Scripts/New-ReleaseNotes.ps1` | Release notes dal tag del rilascio precedente sullo stesso ramo, ogni voce con link al commit, alla PR che lo ha integrato e ai work item della PR: summary della run e, su main, pagina wiki |
-| `CI/Scripts/Test-PublishedArtifact.ps1` | Prima dell'upload dell'artifact negli orchestratori GitFlow e TrunkFlow: se la run lo ha già pubblicato (rerun dello stage) setta `artifactAlreadyPublished` e l'upload si salta; se la verifica non riesce l'upload procede |
-| `CI/Scripts/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, versione intera, sostituzioni reciproche, ADR `accepted` con l'esito invariato e cambiati solo con una versione nuova rispetto al ramo di destinazione della PR |
-| `CI/Scripts/Test-Arc42Document.ps1` | Struttura di un documento arc42 (`arc42-verify.yaml`): un file per sezione con nome e titolo del template ufficiale; release, URL e SHA-256 per lingua fissati nello script |
-| `CI/Scripts/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, nessun elemento tecnico nelle viste di contesto, elementi e relazioni generati descritti, nessuna relazione fra elementi generati che il codice non dichiara, marcatori di vista nelle sezioni |
-| `CI/Scripts/Common/C4/C4CodeModel.ps1` | Contratto del frammento del modello C4 generato, incluso dai lettori: file di progetto letti, container, componenti, relazioni |
-| `CI/Scripts/Read-C4DotNet10Model.ps1` | Lettore .NET 10 (`c4-read-dotnet10.yaml`): applicazioni come container, progetti di produzione come componenti, regole di .NET 10; un progetto di un'altra versione ferma la lettura |
-| `CI/Scripts/Read-C4Angular18Model.ps1` | Lettore Angular 18 (`c4-read-angular18.yaml`): l'applicazione come container, cartelle di funzionalità e moduli di base come componenti; un workspace di un'altra versione ferma la lettura |
-| `CI/Scripts/Export-C4CodeModel.ps1` | Parte del modello C4 generata dai frammenti di un repository sorgente (`c4-generate.yaml`): errore sui file di progetto che nessun lettore legge, confronto in modalità `check` |
-| `CI/Scripts/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |
-| `CI/Scripts/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni e delle decisioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
-| `CI/Scripts/Test-DiagramFlows.ps1` | Flussi coerenti con la struttura (`flows-verify.yaml`): partecipanti e chiamate dei diagrammi di sequenza contro il modello C4, flusso delle decisioni contro le classi della loro struttura |
-| `CI/Scripts/Test-Documentation.ps1` | Controlli comuni a ogni documento (`documentation-verify.yaml`): rimandi esistenti, soglie numeriche di leggibilità |
-| `CI/Scripts/Test-DocumentationStyle.ps1` | Giudizio dello stile di un documento (`documentation-style.yaml`) con un modello Azure OpenAI che riceve la guida di stile del repository come istruzioni |
-| `CI/Scripts/Common/Documentation/VerificationGate.ps1` | Parte comune degli script di verifica della documentazione: modalità `off`/`warn`/`enforce`, rilievi `##vso[task.logissue]`, codice di uscita |
-| `CI/Scripts/Common/Documentation/MarkdownText.ps1` | Lettura delle sezioni Markdown di un documento (blocchi, parti, marcatori di vista, diagrammi) e misure di leggibilità (frasi, parole, indice Gulpease) |
-| `CI/Scripts/Common/Diagrams/Structurizr.ps1` | Scarica la Structurizr CLI (versione fissata, SHA-256 verificato), sceglie un Java 17 o successivo ed esporta il modello C4 in JSON e le viste in C4-PlantUML |
-| `CI/Scripts/Common/Diagrams/PlantUml.ps1` | Scarica PlantUML (versione fissata, SHA-256 verificato) e disegna i diagrammi in PNG con una sola JVM, layout smetana |
-| `CI/Scripts/Common/Documentation/DocumentLanguage.ps1` | Carica da `CI/Scripts/Common/Documentation/Languages/<lingua>.psd1` le convenzioni della lingua del documento (`DOCUMENT_LANGUAGE`, default `IT`); una lingua senza file fa fallire lo script nominandola |
-| `CI/Scripts/Common/Diagrams/Mermaid.ps1`, `CI/Scripts/Common/Diagrams/Mermaid/` | Installa con `npm ci` il parser Mermaid fissato dal lockfile e ricava, per ogni diagramma, il tipo (con partecipanti e chiamate di un diagramma di sequenza, classi di un diagramma delle classi) o l'errore con la riga |
-| `CI/Scripts/ScenarioCoverage.cs` | File-based app .NET 10: verifica che ogni scenario dei `.feature` sia stato eseguito e superato, leggendo i Cucumber Messages del runner BDD |
+| `CI/Scripts/Release/cliff.toml` | Unica sorgente delle regole Conventional Commits: tipi ammessi, gruppi delle release notes, prefisso ADO `Merged PR <id>: `, regole di bump |
+| `CI/Scripts/Release/GitCliff.ps1` | Scarica git-cliff (versione fissata, SHA-256 verificato) e lo espone a `Set-Versioning.ps1`, `Verify-SemVer.ps1` e `New-ReleaseNotes.ps1` |
+| `CI/Scripts/Release/Verify-SemVer.ps1` | Gate sui Conventional Commits delle PR verso i branch configurati: segnala solo se né il titolo né alcun commit della PR è convenzionale (senza PR, l'ultimo commit non-merge); modalità `off`/`warn`/`enforce`, di default `enforce` su `dev`, `staging` e `main` |
+| `CI/Scripts/Release/Set-Versioning.ps1` | Calcola la versione con `git cliff --bumped-version`: tag Git su staging/main, prerelease `x.y.z-dev.<BuildId>` senza tag altrove; setta `currentTag`, `assemblyVersion`, `gitHash`, `computedArtifactName`; usa la versione come build number del run e marca con il tag `release` le publish di rilascio |
+| `CI/Scripts/Release/New-ReleaseNotes.ps1` | Release notes dal tag del rilascio precedente sullo stesso ramo, ogni voce con link al commit, alla PR che lo ha integrato e ai work item della PR: summary della run e, su main, pagina wiki |
+| `CI/Scripts/Release/Test-PublishedArtifact.ps1` | Prima dell'upload dell'artifact negli orchestratori GitFlow e TrunkFlow: se la run lo ha già pubblicato (rerun dello stage) setta `artifactAlreadyPublished` e l'upload si salta; se la verifica non riesce l'upload procede |
+| `CI/Scripts/Adr/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, versione intera, sostituzioni reciproche, ADR `accepted` con l'esito invariato e cambiati solo con una versione nuova rispetto al ramo di destinazione della PR |
+| `CI/Scripts/Arc42/Test-Arc42Document.ps1` | Struttura di un documento arc42 (`arc42-verify.yaml`): un file per sezione con nome e titolo del template ufficiale; release, URL e SHA-256 per lingua fissati nello script |
+| `CI/Scripts/C4/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, nessun elemento tecnico nelle viste di contesto, elementi e relazioni generati descritti, nessuna relazione fra elementi generati che il codice non dichiara, marcatori di vista nelle sezioni |
+| `CI/Scripts/C4/C4CodeModel.ps1` | Contratto del frammento del modello C4 generato, incluso dai lettori: file di progetto letti, container, componenti, relazioni |
+| `CI/Scripts/C4/Read-C4DotNet10Model.ps1` | Lettore .NET 10 (`c4-read-dotnet10.yaml`): applicazioni come container, progetti di produzione come componenti, regole di .NET 10; un progetto di un'altra versione ferma la lettura |
+| `CI/Scripts/C4/Read-C4Angular18Model.ps1` | Lettore Angular 18 (`c4-read-angular18.yaml`): l'applicazione come container, cartelle di funzionalità e moduli di base come componenti; un workspace di un'altra versione ferma la lettura |
+| `CI/Scripts/C4/Export-C4CodeModel.ps1` | Parte del modello C4 generata dai frammenti di un repository sorgente (`c4-generate.yaml`): errore sui file di progetto che nessun lettore legge, confronto in modalità `check` |
+| `CI/Scripts/Arc42/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |
+| `CI/Scripts/Mermaid/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni e delle decisioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
+| `CI/Scripts/Mermaid/Test-DiagramFlows.ps1` | Flussi coerenti con la struttura (`flows-verify.yaml`): partecipanti e chiamate dei diagrammi di sequenza contro il modello C4, flusso delle decisioni contro le classi della loro struttura |
+| `CI/Scripts/Documentation/Test-Documentation.ps1` | Controlli comuni a ogni documento (`documentation-verify.yaml`): rimandi esistenti, soglie numeriche di leggibilità |
+| `CI/Scripts/Documentation/Test-DocumentationStyle.ps1` | Giudizio dello stile di un documento (`documentation-style.yaml`) con un modello Azure OpenAI che riceve la guida di stile del repository come istruzioni |
+| `CI/Scripts/Common/VerificationGate.ps1` | Parte comune degli script di verifica della documentazione: modalità `off`/`warn`/`enforce`, rilievi `##vso[task.logissue]`, codice di uscita |
+| `CI/Scripts/Common/MarkdownText.ps1` | Lettura delle sezioni Markdown di un documento (blocchi, parti, marcatori di vista, diagrammi) e misure di leggibilità (frasi, parole, indice Gulpease) |
+| `CI/Scripts/C4/Structurizr.ps1` | Scarica la Structurizr CLI (versione fissata, SHA-256 verificato), sceglie un Java 17 o successivo ed esporta il modello C4 in JSON e le viste in C4-PlantUML |
+| `CI/Scripts/Arc42/PlantUml.ps1` | Scarica PlantUML (versione fissata, SHA-256 verificato) e disegna i diagrammi in PNG con una sola JVM, layout smetana |
+| `CI/Scripts/Common/DocumentLanguage.ps1` | Carica da `CI/Scripts/Common/Languages/<lingua>.psd1` le convenzioni della lingua del documento (`DOCUMENT_LANGUAGE`, default `IT`); una lingua senza file fa fallire lo script nominandola |
+| `CI/Scripts/Mermaid/Mermaid.ps1`, `CI/Scripts/Mermaid/Parser/` | Installa con `npm ci` il parser Mermaid fissato dal lockfile e ricava, per ogni diagramma, il tipo (con partecipanti e chiamate di un diagramma di sequenza, classi di un diagramma delle classi) o l'errore con la riga |
+| `CI/Scripts/ScenarioCoverage/ScenarioCoverage.cs` | File-based app .NET 10: verifica che ogni scenario dei `.feature` sia stato eseguito e superato, leggendo i Cucumber Messages del runner BDD |
 
 ---
 
