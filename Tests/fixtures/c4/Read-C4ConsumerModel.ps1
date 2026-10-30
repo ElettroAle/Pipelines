@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# Lettore finto scritto nel repository di un consumer (c4-read-script.yaml): ogni file *.tf dichiara
+# Lettore finto scritto nel repository di un consumer (c4-read.yaml): ogni file *.tf dichiara
 # un servizio di dati, che diventa un container con il nome del file.
 
 . "$env:C4_SCRIPTS_DIRECTORY/VerificationGate.ps1"

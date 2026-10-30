@@ -1,29 +1,43 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# Lettore Angular del modello C4 generato (contratto in C4CodeModel.ps1). L'applicazione di un
+# Lettore Angular 18 del modello C4 generato (contratto in Common/C4CodeModel.ps1). L'applicazione di un
 # workspace Angular e' un container che prende il nome del repository senza il prefisso comune ai
 # repository sorgente (SOURCE_REPOSITORIES); le cartelle di funzionalita' e i moduli di base con un
 # file *.providers.ts sono i suoi componenti, legati dagli import fra cartelle. Un workspace con un
-# progetto che non e' l'unica applicazione, o un secondo workspace, ferma la lettura.
+# progetto che non e' l'unica applicazione, o un secondo workspace, ferma la lettura. Le regole sono
+# provate solo su Angular 18: un workspace che dipende da un'altra versione di @angular/core ferma la
+# lettura invece di essere letto con regole non sue.
 
-. "$PSScriptRoot/VerificationGate.ps1"
-. "$PSScriptRoot/DocumentLanguage.ps1"
-. "$PSScriptRoot/C4CodeModel.ps1"
+. "$PSScriptRoot/Common/VerificationGate.ps1"
+. "$PSScriptRoot/Common/DocumentLanguage.ps1"
+. "$PSScriptRoot/Common/C4CodeModel.ps1"
 
 $SourceRepositories = @("$env:SOURCE_REPOSITORIES" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $FeatureDirectories = @(if ($env:ANGULAR_FEATURE_DIRECTORIES) { $env:ANGULAR_FEATURE_DIRECTORIES -split ',' } else { 'app/features' })
 $ModuleDirectories = @(if ($env:ANGULAR_MODULE_DIRECTORIES) { $env:ANGULAR_MODULE_DIRECTORIES -split ',' } else { 'app/core' })
+$SupportedAngularMajor = 18
 $ApplicationTag = $DocumentLanguage.ApplicationTag
 
 function Get-RepositoryShortName {
     return Remove-CommonPrefix $Repository @($SourceRepositories + $Repository | Select-Object -Unique)
 }
 
+function Read-AngularVersion($File) {
+    $package = Join-Path $File.DirectoryName 'package.json'
+    if (-not (Test-Path $package -PathType Leaf)) { return '' }
+    return "$((Get-Content -Raw $package | ConvertFrom-Json).dependencies.'@angular/core')".Trim()
+}
+
 function Read-Workspace($File) {
     return [pscustomobject]@{
         File     = $File
         Projects = @((Get-Content -Raw $File.FullName | ConvertFrom-Json).projects.PSObject.Properties)
+        Version  = Read-AngularVersion $File
     }
+}
+
+function Get-MajorVersion([string]$Range) {
+    if ($Range -match '^[\^~=v]*(\d+)(\.\d+){0,2}$') { return [int]$Matches[1] }
 }
 
 function Get-AngularModules([string]$SourceRoot) {
@@ -97,6 +111,16 @@ function Get-Manifests($Workspace) {
     return @($Workspace.File, (Join-Path $Workspace.File.DirectoryName 'package.json') | Where-Object { Test-Path $_ -PathType Leaf } | ForEach-Object { Get-RelativePath "$_" })
 }
 
+function Get-UnsupportedVersionIssues($Workspaces) {
+    foreach ($workspace in $Workspaces) {
+        $workspacePath = Get-RelativePath $workspace.File.FullName
+        if (-not $workspace.Version) { New-Issue $Repository 'workspace Angular senza versione di @angular/core in package.json' $workspacePath; continue }
+        if ((Get-MajorVersion $workspace.Version) -ne $SupportedAngularMajor) {
+            New-Issue $Repository 'workspace Angular di una versione che il lettore Angular 18 non legge' "$workspacePath ($($workspace.Version))"
+        }
+    }
+}
+
 function Get-UnrecognizedIssues($Workspaces) {
     $Workspaces | ForEach-Object { $_.Projects | Where-Object { $_.Value.projectType -ne 'application' } } |
         ForEach-Object { New-Issue $Repository 'progetto Angular di un tipo non riconosciuto' $_.Name }
@@ -111,12 +135,12 @@ function Get-ReadIssues {
     if ($sourceIssues) { return $sourceIssues }
 
     $workspaces = @(Get-SourceFiles 'angular.json' | ForEach-Object { Read-Workspace $_ })
-    $unrecognized = @(Get-UnrecognizedIssues $workspaces)
+    $unrecognized = @(Get-UnsupportedVersionIssues $workspaces) + @(Get-UnrecognizedIssues $workspaces)
     if ($unrecognized) { return $unrecognized }
 
     $containers = $workspaces | ForEach-Object { New-ApplicationContainer $_ }
     $relationships = $workspaces | ForEach-Object { Get-ApplicationRelationships $_ }
-    Write-C4Fragment 'angular' @($workspaces | ForEach-Object { Get-Manifests $_ }) $containers $relationships
+    Write-C4Fragment 'angular18' @($workspaces | ForEach-Object { Get-Manifests $_ }) $containers $relationships
 }
 
-Invoke-Verification { Get-ReadIssues } "Applicazioni Angular di $Repository lette" 'Lettura delle applicazioni Angular disattivata'
+Invoke-Verification { Get-ReadIssues } "Applicazioni Angular 18 di $Repository lette" 'Lettura delle applicazioni Angular 18 disattivata'

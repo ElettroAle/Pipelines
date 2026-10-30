@@ -13,12 +13,12 @@
 
 BeforeAll {
     . "$PSScriptRoot/../fixtures/c4/C4CodeFixture.ps1"
-    . "$PSScriptRoot/../../V3/CI/Scripts/Structurizr.ps1"
+    . "$PSScriptRoot/../../V3/CI/Scripts/Common/Structurizr.ps1"
     $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-code-$(New-Guid)"
 
     function Invoke-Generation([System.Collections.IDictionary]$Files, [string]$Repository, [string]$Mode = 'write') {
-        $readers = @{ 'Aidea.Dxp.AI' = 'dotnet'; 'Aidea.Dxp.Bff.Web' = 'dotnet'; 'Aidea.Dxp.Client.Web' = 'angular' }
+        $readers = @{ 'Aidea.Dxp.AI' = 'dotnet10'; 'Aidea.Dxp.Bff.Web' = 'dotnet10'; 'Aidea.Dxp.Client.Web' = 'angular18' }
         return Invoke-C4Generation $Files $Repository @($readers[$Repository]) $Mode
     }
 }
@@ -64,31 +64,6 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
 
         It "E un'applicazione e' componente di se stessa" {
             Get-ContainerBlock $dsl 'Api' | Should -Match 'component\s+"Api"'
-        }
-    }
-
-    Context "Schema dello scenario: servizi Azure delle librerie di un componente — <progetto>" -ForEach @(
-        @{ progetto = 'Aidea.Dxp.AI.DataAccess.AzureServiceBus'; nome = 'DataAccess.AzureServiceBus'; servizi = 'Service Bus' }
-        @{ progetto = 'Aidea.Dxp.AI.DataAccess.AzureStorageAccount'; nome = 'DataAccess.AzureStorageAccount'; servizi = 'Storage' }
-    ) {
-        BeforeAll {
-            $res = Invoke-Generation (New-EngineRepository) 'Aidea.Dxp.AI'
-            $component = Get-Block (Get-ContainerBlock $res.Generated['aidea.dxp.ai.dsl'] 'Api') "=\s*component\s+`"$([regex]::Escape($nome))`""
-        }
-
-        It "Allora il componente <nome> dichiara i servizi <servizi>" {
-            $component | Should -Match "`"servizi`"\s+`"$([regex]::Escape($servizi))`""
-        }
-    }
-
-    Context "Scenario: un componente senza librerie di servizi Azure" {
-        BeforeAll {
-            $res = Invoke-Generation (New-EngineRepository) 'Aidea.Dxp.AI'
-            $component = Get-Block (Get-ContainerBlock $res.Generated['aidea.dxp.ai.dsl'] 'Api') '=\s*component\s+"Utils"'
-        }
-
-        It "Allora il componente non dichiara servizi" {
-            $component | Should -Not -Match '"servizi"'
         }
     }
 
@@ -210,8 +185,8 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
             Build      = { $f = New-EngineRepository; Add-Project $f 'Aidea.Dxp.AI.Console' (New-Project 'Microsoft.NET.Sdk.BlazorWebAssembly'); $f }
         }
         @{
-            repository = 'Aidea.Dxp.AI'; elemento = 'Azure.Mystery.Things'
-            Build      = { $f = New-EngineRepository; Add-Project $f 'Aidea.Dxp.AI.Utils' (New-Project 'Microsoft.NET.Sdk' @() '' '    <PackageReference Include="Azure.Mystery.Things" />'); $f }
+            repository = 'Aidea.Dxp.AI'; elemento = 'Aidea.Dxp.AI.Utils (net8.0)'
+            Build      = { $f = New-EngineRepository; Add-Project $f 'Aidea.Dxp.AI.Utils' ((New-Project) -replace 'net10\.0', 'net8.0'); $f }
         }
         @{
             repository = 'Aidea.Dxp.Client.Web'; elemento = 'ui-kit'
@@ -296,7 +271,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         BeforeAll {
             $files = New-EngineRepository
             $files['docs/architecture/model/generated/aidea.dxp.ai.dsl'] = "# parte precedente`n"
-            $res = Invoke-C4Generation $files 'Aidea.Dxp.AI' @('angular')
+            $res = Invoke-C4Generation $files 'Aidea.Dxp.AI' @('angular18')
         }
 
         It "Allora la generazione fallisce" {
@@ -314,7 +289,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
 
     Context "Scenario: un frammento che non si legge" {
         BeforeAll {
-            $res = Invoke-C4Generation (New-BffRepository) 'Aidea.Dxp.Bff.Web' @('dotnet') -Fragments @{ 'aidea.dxp.bff.web.terraform.json' = '{ non e'' json' }
+            $res = Invoke-C4Generation (New-BffRepository) 'Aidea.Dxp.Bff.Web' @('dotnet10') -Fragments @{ 'aidea.dxp.bff.web.terraform.json' = '{ non e'' json' }
         }
 
         It "Allora la generazione fallisce" {
@@ -329,7 +304,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
     Context "Scenario: i frammenti di un altro repository non entrano nella parte generata" {
         BeforeAll {
             $other = '{ "manifests": [], "containers": [ { "id": "aidea_dxp_ai_tools_x", "name": "X", "codeName": "Aidea.Dxp.AI.Tools.X", "technology": ".NET", "tags": [], "properties": {}, "components": [] } ], "relationships": [] }'
-            $res = Invoke-C4Generation (New-EngineRepository) 'Aidea.Dxp.AI' @('dotnet') -Fragments @{ 'aidea.dxp.ai.tools.dotnet.json' = $other }
+            $res = Invoke-C4Generation (New-EngineRepository) 'Aidea.Dxp.AI' @('dotnet10') -Fragments @{ 'aidea.dxp.ai.tools.dotnet10.json' = $other }
         }
 
         It "Allora la generazione riesce" {
@@ -343,7 +318,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
 
     Context "Scenario: un repository senza applicazioni" {
         BeforeAll {
-            $res = Invoke-C4Generation ([ordered]@{ 'source/README.md' = "# Strumenti`n" }) 'Aidea.Dxp.Client.Web' @('angular')
+            $res = Invoke-C4Generation ([ordered]@{ 'source/README.md' = "# Strumenti`n" }) 'Aidea.Dxp.Client.Web' @('angular18')
         }
 
         It "Allora la generazione fallisce" {
@@ -363,7 +338,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         BeforeAll {
             $files = New-BffRepository
             $files['source/infra/storage.tf'] = "resource `"azurerm_storage_account`" `"x`" {}`n"
-            $res = Invoke-C4Generation $files 'Aidea.Dxp.Bff.Web' @('dotnet', 'consumer')
+            $res = Invoke-C4Generation $files 'Aidea.Dxp.Bff.Web' @('dotnet10', 'consumer')
             $dsl = $res.Generated['aidea.dxp.bff.web.dsl']
         }
 

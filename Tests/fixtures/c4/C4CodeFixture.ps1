@@ -6,7 +6,7 @@
 . "$PSScriptRoot/../documentation/DocumentationFixture.ps1"
 
 $C4ScriptsDirectory = Resolve-Path "$PSScriptRoot/../../../V3/CI/Scripts"
-$C4Readers = @{ dotnet = 'Read-C4DotNetModel.ps1'; angular = 'Read-C4AngularModel.ps1'; consumer = "$PSScriptRoot/Read-C4ConsumerModel.ps1" }
+$C4Readers = @{ dotnet10 = 'Read-C4DotNet10Model.ps1'; angular18 = 'Read-C4Angular18Model.ps1'; consumer = "$PSScriptRoot/Read-C4ConsumerModel.ps1" }
 $C4SourceRepositories = 'Aidea.Dxp.AI,Aidea.Dxp.Bff.Web,Aidea.Dxp.Client.Web'
 
 function New-Project([string]$Sdk = 'Microsoft.NET.Sdk', [string[]]$References = @(), [string]$Properties = '', [string]$Items = '') {
@@ -90,7 +90,7 @@ function Invoke-C4Steps([System.Collections.IDictionary]$Files, [string]$Reposit
     Write-SourceFiles $root $fragmentFiles
     $variables = @{
         SOURCE_DIRECTORY = 'source'; SOURCE_REPOSITORY = $Repository; SOURCE_REPOSITORIES = $C4SourceRepositories
-        FRAGMENT_DIRECTORY = 'fragments'; C4_SCRIPTS_DIRECTORY = "$C4ScriptsDirectory"; GENERATED_DIRECTORY = 'docs/architecture/model/generated'; GENERATION_MODE = $Mode; DOCUMENT_LANGUAGE = ''
+        FRAGMENT_DIRECTORY = 'fragments'; C4_SCRIPTS_DIRECTORY = (Join-Path $C4ScriptsDirectory 'Common'); GENERATED_DIRECTORY = 'docs/architecture/model/generated'; GENERATION_MODE = $Mode; DOCUMENT_LANGUAGE = ''
     }
     Push-Location $root
     try {

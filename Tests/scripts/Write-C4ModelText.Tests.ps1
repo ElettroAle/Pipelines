@@ -16,7 +16,7 @@
 
 BeforeAll {
     . "$PSScriptRoot/../fixtures/c4/C4CodeFixture.ps1"
-    . "$PSScriptRoot/../../V3/CI/Scripts/Structurizr.ps1"
+    . "$PSScriptRoot/../../V3/CI/Scripts/Common/Structurizr.ps1"
     $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-text-tools-$(New-Guid)"
 
@@ -73,7 +73,7 @@ BeforeAll {
         return $root
     }
 
-    function Invoke-Text([string]$Root, [string]$Repository, [string[]]$Readers = @('dotnet'), [hashtable]$Environment = @{}) {
+    function Invoke-Text([string]$Root, [string]$Repository, [string[]]$Readers = @('dotnet10'), [hashtable]$Environment = @{}) {
         $variables = @{
             SOURCE_DIRECTORY = 'source'; SOURCE_REPOSITORY = $Repository; SOURCE_REPOSITORIES = $C4SourceRepositories
             FRAGMENT_DIRECTORY = 'fragments'; GENERATED_DIRECTORY = 'docs/architecture/model/generated'; GENERATION_MODE = 'write'; DOCUMENT_LANGUAGE = ''

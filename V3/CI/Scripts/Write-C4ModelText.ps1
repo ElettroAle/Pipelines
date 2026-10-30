@@ -10,10 +10,10 @@
 # cosi' una pipeline fallita e rilanciata riparte dai container senza testo accettato. Il testo di un
 # container la cui struttura non cambia resta quello accettato.
 
-. "$PSScriptRoot/VerificationGate.ps1"
-. "$PSScriptRoot/DocumentLanguage.ps1"
-. "$PSScriptRoot/MarkdownText.ps1"
-. "$PSScriptRoot/C4CodeModel.ps1"
+. "$PSScriptRoot/Common/VerificationGate.ps1"
+. "$PSScriptRoot/Common/DocumentLanguage.ps1"
+. "$PSScriptRoot/Common/MarkdownText.ps1"
+. "$PSScriptRoot/Common/C4CodeModel.ps1"
 
 $GeneratedDirectory = if ($env:GENERATED_DIRECTORY) { $env:GENERATED_DIRECTORY } else { 'docs/architecture/model/generated' }
 $GuidePath = $env:STYLE_GUIDE

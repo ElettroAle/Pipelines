@@ -12,9 +12,9 @@
 # includere nel modello prima del sistema.
 # GENERATION_MODE=check confronta il file del repository con quello che la generazione produce.
 
-. "$PSScriptRoot/VerificationGate.ps1"
-. "$PSScriptRoot/DocumentLanguage.ps1"
-. "$PSScriptRoot/C4CodeModel.ps1"
+. "$PSScriptRoot/Common/VerificationGate.ps1"
+. "$PSScriptRoot/Common/DocumentLanguage.ps1"
+. "$PSScriptRoot/Common/C4CodeModel.ps1"
 
 $SourceRepositories = @("$env:SOURCE_REPOSITORIES" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $GeneratedDirectory = if ($env:GENERATED_DIRECTORY) { $env:GENERATED_DIRECTORY } else { 'docs/architecture/model/generated' }

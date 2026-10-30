@@ -6,7 +6,6 @@
     TechnicalTag   = 'Tecnico'
     GeneratedTag   = 'Generato'
     CodeNameProperty = 'codice'
-    ServicesProperty = 'servizi'
     ExternalTag    = 'Esterno'
     TextLanguage   = 'italiano'
     AdrSections    = @('Contesto e problema', 'Opzioni considerate', 'Esito della decisione')

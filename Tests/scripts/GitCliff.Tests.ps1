@@ -2,7 +2,7 @@
 
 <#
 .SYNOPSIS
-    Test Pester per V3/CI/Scripts/GitCliff.ps1
+    Test Pester per V3/CI/Scripts/Common/GitCliff.ps1
 
 .DESCRIPTION
     I runner GitHub hanno runtime che un agent qualunque puo' non avere (Visual C++
@@ -15,7 +15,7 @@ BeforeDiscovery {
 }
 
 BeforeAll {
-    . "$PSScriptRoot/../../V3/CI/Scripts/GitCliff.ps1"
+    . "$PSScriptRoot/../../V3/CI/Scripts/Common/GitCliff.ps1"
     $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-gitcliff-$(New-Guid)"
     $GitCliffExe = Get-GitCliffPath

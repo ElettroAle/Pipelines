@@ -2,7 +2,7 @@
 
 <#
 .SYNOPSIS
-    Test Pester per V3/CI/Scripts/Read-C4DotNetModel.ps1
+    Test Pester per V3/CI/Scripts/Read-C4DotNet10Model.ps1
 
 .DESCRIPTION
     Ogni scenario costruisce un repository .NET finto, esegue il solo lettore .NET e legge il
@@ -32,9 +32,9 @@ BeforeAll {
     }
 }
 
-Describe "Lettore .NET del modello C4" {
+Describe "Lettore .NET 10 del modello C4" {
 
-    Context "Schema dello scenario: tipo del progetto dalla tabella delle regole — <caso>" -ForEach @(
+    Context "Schema dello scenario: tipo del progetto dalle regole di .NET 10 — <caso>" -ForEach @(
         @{ caso = 'SDK Web'; Subject = (New-Project 'Microsoft.NET.Sdk.Web'); container = 'ASP.NET Core'; componente = $true }
         @{ caso = 'SDK Functions'; Subject = (New-Project 'Microsoft.NET.Sdk.Functions'); container = 'Azure Functions'; componente = $true }
         @{ caso = 'Function App isolata'; Subject = (New-Project 'Microsoft.NET.Sdk' @() "    <OutputType>Exe</OutputType>`n    <AzureFunctionsVersion>v4</AzureFunctionsVersion>"); container = 'Azure Functions'; componente = $true }
@@ -46,7 +46,7 @@ Describe "Lettore .NET del modello C4" {
         @{ caso = 'libreria di test'; Subject = (New-Project 'Microsoft.NET.Sdk' @() '' '    <PackageReference Include="Microsoft.NET.Test.Sdk" />'); container = $null; componente = $false }
     ) {
         BeforeAll {
-            $res = Invoke-C4Reader (New-HostedRepository $Subject) 'Contoso.Shop' 'dotnet'
+            $res = Invoke-C4Reader (New-HostedRepository $Subject) 'Contoso.Shop' 'dotnet10'
         }
 
         It "Allora la lettura riesce" {
@@ -66,24 +66,43 @@ Describe "Lettore .NET del modello C4" {
         }
     }
 
-    Context "Scenario: una libreria Azure in un progetto di test" {
+    Context "Scenario: una libreria Azure in un progetto" {
         BeforeAll {
-            $files = New-EngineRepository
-            Add-Project $files 'Aidea.Dxp.AI.UnitTest.Engine' (New-Project 'Microsoft.NET.Sdk' @() '' "    <PackageReference Include=`"Microsoft.NET.Test.Sdk`" />`n    <PackageReference Include=`"Azure.Mystery.Things`" />")
-            $res = Invoke-C4Reader $files 'Aidea.Dxp.AI' 'dotnet'
+            $res = Invoke-C4Reader (New-HostedRepository (New-Project 'Microsoft.NET.Sdk' @() '' '    <PackageReference Include="Azure.Mystery.Things" />')) 'Contoso.Shop' 'dotnet10'
         }
 
         It "Allora la lettura riesce" {
             $res.ExitCode | Should -Be 0 -Because ($res.Output)
         }
+
+        It "E il componente non dichiara servizi" {
+            (Get-FragmentComponents $res.Fragment 'Contoso.Shop.Subject').properties.PSObject.Properties | Should -BeNullOrEmpty
+        }
     }
 
-    Context "Schema dello scenario: caso .NET non riconosciuto — <elemento>" -ForEach @(
-        @{ elemento = 'Contoso.Shop.Subject'; Subject = (New-Project 'Microsoft.NET.Sdk.BlazorWebAssembly') }
-        @{ elemento = 'Azure.Mystery.Things in Contoso.Shop.Subject'; Subject = (New-Project 'Microsoft.NET.Sdk' @() '' '    <PackageReference Include="Azure.Mystery.Things" />') }
+    Context "Schema dello scenario: versione ereditata da Directory.Build.props — <caso>" -ForEach @(
+        @{ caso = 'net10.0'; versione = 'net10.0'; uscita = 0 }
+        @{ caso = 'net8.0'; versione = 'net8.0'; uscita = 1 }
     ) {
         BeforeAll {
-            $res = Invoke-C4Reader (New-HostedRepository $Subject) 'Contoso.Shop' 'dotnet'
+            $files = New-HostedRepository ((New-Project) -replace '\s*<TargetFramework>net10\.0</TargetFramework>', '')
+            $files['source/Directory.Build.props'] = "<Project>`n  <PropertyGroup>`n    <TargetFramework>$versione</TargetFramework>`n  </PropertyGroup>`n</Project>`n"
+            $res = Invoke-C4Reader $files 'Contoso.Shop' 'dotnet10'
+        }
+
+        It "Allora la lettura termina con il codice <uscita>" {
+            $res.ExitCode | Should -Be $uscita -Because ($res.Output)
+        }
+    }
+
+    Context "Schema dello scenario: caso .NET che il lettore .NET 10 non legge — <elemento>" -ForEach @(
+        @{ elemento = 'Contoso.Shop.Subject'; Subject = (New-Project 'Microsoft.NET.Sdk.BlazorWebAssembly') }
+        @{ elemento = 'Contoso.Shop.Subject (net8.0)'; Subject = ((New-Project) -replace 'net10\.0', 'net8.0') }
+        @{ elemento = 'Contoso.Shop.Subject (net9.0)'; Subject = ((New-Project) -replace '<TargetFramework>net10\.0</TargetFramework>', '<TargetFrameworks>net10.0;net9.0</TargetFrameworks>') }
+        @{ elemento = 'Contoso.Shop.Subject'; Subject = ((New-Project) -replace '\s*<TargetFramework>net10\.0</TargetFramework>', '') }
+    ) {
+        BeforeAll {
+            $res = Invoke-C4Reader (New-HostedRepository $Subject) 'Contoso.Shop' 'dotnet10'
         }
 
         It "Allora la lettura fallisce" {
