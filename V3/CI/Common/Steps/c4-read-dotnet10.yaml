@@ -2,7 +2,7 @@
 
 # ── CI Step: C4 read .NET 10 ──────────────────────────────────────────────────
 #
-# Lettore .NET 10 del modello C4 generato (V3/CI/Scripts/Read-C4DotNet10Model.ps1), eseguito da
+# Lettore .NET 10 del modello C4 generato (V3/CI/Scripts/C4/Read-C4DotNet10Model.ps1), eseguito da
 # c4-read.yaml: legge i progetti del checkout del repository sorgente e scrive in fragmentDirectory
 # il frammento che c4-generate.yaml unisce. Le applicazioni web e le Function App sono container, i
 # progetti di produzione che raggiungono sono componenti; un progetto di un'altra versione di .NET o
@@ -48,7 +48,7 @@ parameters:
 steps:
   - template: c4-read.yaml
     parameters:
-      scriptPath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Read-C4DotNet10Model.ps1'
+      scriptPath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/C4/Read-C4DotNet10Model.ps1'
       displayName: 'C4 .NET 10 projects'
       mode: ${{ parameters.mode }}
       sourceRepository: ${{ parameters.sourceRepository }}

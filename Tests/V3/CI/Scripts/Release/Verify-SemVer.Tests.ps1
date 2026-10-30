@@ -1,0 +1,603 @@
+#Requires -Modules Pester
+
+<#
+.SYNOPSIS
+    Test Pester per V3/CI/Scripts/Release/Verify-SemVer.ps1
+
+.DESCRIPTION
+    Strategia: ogni Context crea un repository git temporaneo reale, imposta
+    le variabili d'ambiente che lo script si aspetta, esegue lo script e verifica
+    l'exit code e i messaggi di output.
+
+    Lo script delega il riconoscimento a git-cliff (GitCliff.ps1), che scarica
+    alla prima esecuzione se GIT_CLIFF_PATH non e' impostata.
+#>
+
+BeforeAll {
+    $ScriptPath = Resolve-Path "$PSScriptRoot/../../../../../V3/CI/Scripts/Release/Verify-SemVer.ps1"
+
+    # Helper: crea un repo git temporaneo con un commit avente il messaggio indicato
+    function New-TempGitRepo {
+        param(
+            [string]$CommitMessage,
+            [switch]$WithMergeCommit  # Se true, aggiunge un merge commit sopra il commit reale
+        )
+
+        $repoDir = Join-Path ([System.IO.Path]::GetTempPath()) "pester-verify-$(New-Guid)"
+        New-Item -ItemType Directory -Path $repoDir | Out-Null
+
+        Push-Location $repoDir
+        git init -q
+        git config user.email "test@pester.local"
+        git config user.name "Pester Test"
+
+        # Commit iniziale (necessario per poter fare merge)
+        # Nel path WithMergeCommit imposta data fissa nel passato per garantire
+        # ordinamento deterministico in git log (evita race condition same-second)
+        if ($WithMergeCommit) {
+            $env:GIT_COMMITTER_DATE = "@1000000000 +0000"   # 2001-09-09
+            $env:GIT_AUTHOR_DATE    = "@1000000000 +0000"
+        }
+        "init" | Set-Content "init.txt"
+        git add . | Out-Null
+        git commit -m "chore: initial commit" -q | Out-Null
+        Remove-Item Env:\GIT_COMMITTER_DATE -ErrorAction SilentlyContinue
+        Remove-Item Env:\GIT_AUTHOR_DATE    -ErrorAction SilentlyContinue
+
+        if ($WithMergeCommit) {
+            # Simula un merge: crea branch secondario, poi merge
+            git checkout -b feature-branch -q | Out-Null
+            "feature" | Set-Content "feature.txt"
+            git add . | Out-Null
+            # Data un giorno dopo il commit iniziale: git log --no-merges -n 1
+            # restituirà sempre questo commit (più recente) in modo deterministico
+            $env:GIT_COMMITTER_DATE = "@1000086400 +0000"   # 2001-09-10
+            $env:GIT_AUTHOR_DATE    = "@1000086400 +0000"
+            git commit -m $CommitMessage -q | Out-Null   # <-- il commit reale è qui
+            Remove-Item Env:\GIT_COMMITTER_DATE -ErrorAction SilentlyContinue
+            Remove-Item Env:\GIT_AUTHOR_DATE    -ErrorAction SilentlyContinue
+
+            git checkout main -q 2>$null
+            if ($LASTEXITCODE -ne 0) { git checkout master -q 2>$null }
+
+            # Merge senza fast-forward per creare un merge commit
+            git merge feature-branch --no-ff -m "Merge branch 'feature-branch'" -q | Out-Null
+        }
+        else {
+            # Commit normale con il messaggio di test
+            "change" | Set-Content "change.txt"
+            git add . | Out-Null
+            git commit -m $CommitMessage -q | Out-Null
+        }
+
+        Pop-Location
+        return $repoDir
+    }
+
+    # Il merge ref di una PR in ADO: HEAD e' un merge con il ramo di destinazione come
+    # primo parent e il ramo sorgente della PR come secondo.
+    function New-PullRequestMergeRepo {
+        param([string[]]$Commits)
+
+        $repoDir = Join-Path ([System.IO.Path]::GetTempPath()) "pester-verify-pr-$(New-Guid)"
+        New-Item -ItemType Directory -Path $repoDir | Out-Null
+        Push-Location $repoDir
+        git init -q -b dev
+        git config user.email "test@pester.local"
+        git config user.name "Pester Test"
+        git commit -q --allow-empty -m "chore: initial commit" | Out-Null
+        git checkout -q -b pr-source
+        foreach ($message in $Commits) { git commit -q --allow-empty -m $message | Out-Null }
+        git checkout -q --detach dev
+        git merge -q --no-ff pr-source -m "Merge pull request into dev" | Out-Null
+        Pop-Location
+        return $repoDir
+    }
+
+    # Helper: esegue lo script nel repo indicato e restituisce exit code + output
+    function Invoke-VerifySemVer {
+        param(
+            [string]$RepoDir,
+            [string]$TargetBranch,
+            [string]$AdditionalBranches = "",
+            [string]$GatedBranches = "",
+            [string]$Mode = "",
+            [string]$PrTitle = "",
+            [string]$PrId = ""
+        )
+
+        Push-Location $RepoDir
+        try {
+            $env:TARGET_BRANCH = $TargetBranch
+            $env:ADDITIONAL_TAG_BRANCHES = $AdditionalBranches
+            $env:GATED_BRANCHES = $GatedBranches
+            $env:GATE_MODE = $Mode
+            $env:PR_TITLE = $PrTitle
+            $env:PR_ID = $PrId
+
+            $output = & pwsh -NoProfile -NonInteractive -File $ScriptPath 2>&1
+            $exitCode = $LASTEXITCODE
+
+            return @{ ExitCode = $exitCode; Output = $output -join "`n" }
+        }
+        finally {
+            Pop-Location
+            $env:TARGET_BRANCH = $null
+            $env:ADDITIONAL_TAG_BRANCHES = $null
+            $env:GATED_BRANCHES = $env:GATE_MODE = $env:PR_TITLE = $env:PR_ID = $null
+        }
+    }
+
+    # Helper: pulizia repo temporanei
+    function Remove-TempRepo([string]$Path) {
+        if (Test-Path $Path) {
+            Remove-Item -Recurse -Force $Path -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SUITE 1: Branch protetti core (main, staging)
+# ─────────────────────────────────────────────────────────────────────────────
+
+Describe "Verify-SemVer — Branch protetti (main, staging)" {
+
+    Context "Commit validi su 'main'" {
+
+        It "Accetta 'fix: ...' su main" {
+            $repo = New-TempGitRepo -CommitMessage "fix: corregge calcolo patch"
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+            Remove-TempRepo $repo
+
+            $result.ExitCode | Should -Be 0
+            $result.Output | Should -Match "Validation successful"
+        }
+
+        It "Accetta 'feat: ...' su main" {
+            $repo = New-TempGitRepo -CommitMessage "feat: aggiunge nuova feature"
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+            Remove-TempRepo $repo
+
+            $result.ExitCode | Should -Be 0
+        }
+
+        It "Accetta 'feat!: ...' (breaking change) su main" {
+            $repo = New-TempGitRepo -CommitMessage "feat!: breaking change nel contratto API"
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+            Remove-TempRepo $repo
+
+            $result.ExitCode | Should -Be 0
+        }
+
+        It "Accetta 'BREAKING CHANGE: ...' su main" {
+            $repo = New-TempGitRepo -CommitMessage "BREAKING CHANGE: rimozione parametro deprecato"
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+            Remove-TempRepo $repo
+
+            $result.ExitCode | Should -Be 0
+        }
+    }
+
+    Context "Commit validi su 'staging'" {
+
+        It "Accetta 'fix: ...' su staging" {
+            $repo = New-TempGitRepo -CommitMessage "fix: hotfix staging"
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "staging"
+            Remove-TempRepo $repo
+
+            $result.ExitCode | Should -Be 0
+        }
+
+        It "Accetta 'feat: ...' su staging" {
+            $repo = New-TempGitRepo -CommitMessage "feat: feature su staging"
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "staging"
+            Remove-TempRepo $repo
+
+            $result.ExitCode | Should -Be 0
+        }
+    }
+
+    Context "Commit NON validi su 'main'" {
+
+        It "Rifiuta un tipo non ammesso da cliff.toml: 'update: ...'" {
+            $repo = New-TempGitRepo -CommitMessage "update: aggiorna dipendenze"
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+            Remove-TempRepo $repo
+
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match "MISSING CONVENTIONAL COMMIT"
+        }
+
+        It "Rifiuta messaggio senza prefisso" {
+            $repo = New-TempGitRepo -CommitMessage "aggiornamento generico"
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+            Remove-TempRepo $repo
+
+            $result.ExitCode | Should -Be 1
+        }
+
+        It "Rifiuta 'WIP: ...': sintassi Conventional ma tipo non ammesso" {
+            $repo = New-TempGitRepo -CommitMessage "WIP: lavori in corso"
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+            Remove-TempRepo $repo
+
+            $result.ExitCode | Should -Be 1
+        }
+
+        It "Accetta 'FEAT: ...' (uppercase) su main — match è case-insensitive" {
+            $repo = New-TempGitRepo -CommitMessage "FEAT: nuova funzionalita maiuscolo"
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+            Remove-TempRepo $repo
+
+            $result.ExitCode | Should -Be 0
+        }
+
+        It "Accetta i tipi di manutenzione: '<Msg>'" -TestCases @(
+            @{ Msg = "chore: aggiorna dipendenze" }
+            @{ Msg = "docs: aggiorna README" }
+            @{ Msg = "refactor(core): rinomina variabile" }
+        ) {
+            param([string]$Msg)
+            $repo = New-TempGitRepo -CommitMessage $Msg
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+            Remove-TempRepo $repo
+
+            $result.ExitCode | Should -Be 0
+        }
+
+        It "Mostra il messaggio del commit nel testo dell'errore" {
+            $msg = "update: messaggio non convenzionale"
+            $repo = New-TempGitRepo -CommitMessage $msg
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+            Remove-TempRepo $repo
+
+            $result.ExitCode | Should -Be 1
+            $result.Output   | Should -Match "update: messaggio non convenzionale"
+        }
+    }
+
+    Context "Merge commit — lo script guarda il commit reale (--no-merges)" {
+
+        It "Vede il commit non-merge sottostante: 'fix:' → PASS" {
+            # Il commit reale è 'fix:', sopra c'è un merge commit
+            $repo = New-TempGitRepo -CommitMessage "fix: bugfix sotto il merge" -WithMergeCommit
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+            Remove-TempRepo $repo
+
+            $result.ExitCode | Should -Be 0
+        }
+
+        It "Vede il commit non-merge sottostante: messaggio libero → FAIL" {
+            $repo = New-TempGitRepo -CommitMessage "manutenzione sotto il merge" -WithMergeCommit
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+            Remove-TempRepo $repo
+
+            $result.ExitCode | Should -Be 1
+        }
+    }
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SUITE 2: Branch non protetti — il check viene skippato
+# ─────────────────────────────────────────────────────────────────────────────
+
+Describe "Verify-SemVer — Branch non protetti" {
+
+    It "Skip su 'dev' quando GATED_BRANCHES non lo include" {
+        $repo = New-TempGitRepo -CommitMessage "WIP: lavori in corso"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "staging,main"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "Skipping check"
+    }
+
+    It "Skip su 'feature/nuova-cosa' con qualsiasi messaggio" {
+        $repo = New-TempGitRepo -CommitMessage "aggiornamento senza prefisso"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "feature/nuova-cosa"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+    }
+
+    It "Skip su branch con prefisso 'refs/heads/' (ADO passa il ref completo)" {
+        $repo = New-TempGitRepo -CommitMessage "chore: test"
+        # ADO passa refs/heads/dev → lo script deve rimuovere il prefisso
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "refs/heads/dev"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+    }
+
+    It "Branch 'main' con prefisso 'refs/heads/' viene trattato come protetto" {
+        $repo = New-TempGitRepo -CommitMessage "messaggio non convenzionale"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "refs/heads/main"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 1
+    }
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SUITE 3: ADDITIONAL_TAG_BRANCHES
+# ─────────────────────────────────────────────────────────────────────────────
+
+Describe "Verify-SemVer — ADDITIONAL_TAG_BRANCHES" {
+
+    It "Branch 'release' aggiunto → commit 'fix:' accettato" {
+        $repo = New-TempGitRepo -CommitMessage "fix: fix su release"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "release" -AdditionalBranches "release"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+    }
+
+    It "Branch 'release' aggiunto → messaggio libero rifiutato" {
+        $repo = New-TempGitRepo -CommitMessage "pulizia su release"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "release" -AdditionalBranches "release"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 1
+    }
+
+    It "Branch 'release' NON aggiunto → messaggio libero accettato (non protetto)" {
+        $repo = New-TempGitRepo -CommitMessage "pulizia"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "release" -AdditionalBranches ""
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+    }
+
+    It "Lista multipla: 'hotfix,release' → entrambi protetti" {
+        $repo = New-TempGitRepo -CommitMessage "non valido"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "hotfix" -AdditionalBranches "hotfix,release"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 1
+    }
+
+    It "Lista multipla: branch non in lista → skip" {
+        $repo = New-TempGitRepo -CommitMessage "non valido"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "develop" -AdditionalBranches "hotfix,release"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+    }
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SUITE 4: Data-driven da Fixtures/valid-commits.txt e invalid-commits.txt
+# ─────────────────────────────────────────────────────────────────────────────
+
+Describe "Verify-SemVer — Fixture: commit validi su main" {
+
+    BeforeDiscovery {
+        $lines = Get-Content "$PSScriptRoot/Fixtures/valid-commits.txt" -ErrorAction Stop
+        $script:ValidCases = $lines |
+            Where-Object { $_ -match '\S' } |
+            ForEach-Object { @{ Msg = $_.Trim() } }
+    }
+
+    It "PASS su main: '<Msg>'" -TestCases $script:ValidCases {
+        param([string]$Msg)
+        $repo = New-TempGitRepo -CommitMessage $Msg
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+    }
+}
+
+Describe "Verify-SemVer — Fixture: commit non validi su main" {
+
+    BeforeDiscovery {
+        $lines = Get-Content "$PSScriptRoot/Fixtures/invalid-commits.txt" -ErrorAction Stop
+        $script:InvalidCases = $lines |
+            Where-Object { $_ -match '\S' } |
+            ForEach-Object { @{ Msg = $_.Trim() } }
+    }
+
+    It "FAIL su main: '<Msg>'" -TestCases $script:InvalidCases {
+        param([string]$Msg)
+        $repo = New-TempGitRepo -CommitMessage $Msg
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 1
+    }
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SUITE: Titolo della PR e modalita' del gate
+# ─────────────────────────────────────────────────────────────────────────────
+
+Describe "Verify-SemVer — Titolo della PR" {
+
+    It "Valida il titolo della PR, non l'ultimo commit del ramo" {
+        $repo = New-TempGitRepo -CommitMessage "wip non convenzionale"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "refs/heads/dev" -GatedBranches "dev" `
+            -PrTitle "feat(api): nuovo endpoint" -PrId "42"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "Merged PR 42: feat\(api\): nuovo endpoint"
+    }
+
+    It "Fuori dal merge ref di una PR vale il solo titolo, anche se l'ultimo commit e' convenzionale" {
+        $repo = New-TempGitRepo -CommitMessage "fix: commit corretto"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "dev" `
+            -PrTitle "Sistemato il login" -PrId "43"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "Sistemato il login"
+    }
+
+    It "La validazione non sposta HEAD e non crea commit sul ramo" {
+        $repo = New-TempGitRepo -CommitMessage "fix: commit corretto"
+        Push-Location $repo
+        $headBefore = git rev-parse HEAD
+        Pop-Location
+
+        $null = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "dev" -PrTitle "feat: titolo" -PrId "44"
+
+        Push-Location $repo
+        $headAfter = git rev-parse HEAD
+        $status = git status --porcelain
+        Pop-Location
+        Remove-TempRepo $repo
+
+        $headAfter | Should -Be $headBefore
+        $status | Should -BeNullOrEmpty
+    }
+
+    It "GATED_BRANCHES sostituisce main,staging: una PR verso main non viene validata" {
+        $repo = New-TempGitRepo -CommitMessage "fix: commit"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "main" -GatedBranches "dev" -PrTitle "Release 2.1"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "Skipping check"
+    }
+}
+
+Describe "Verify-SemVer — GATE_MODE" {
+
+    It "warn: titolo non valido → exit 0, warning e SucceededWithIssues" {
+        $repo = New-TempGitRepo -CommitMessage "fix: commit"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "dev" -Mode "warn" -PrTitle "titolo libero"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "##vso\[task\.logissue type=warning\]MISSING CONVENTIONAL COMMIT"
+        $result.Output | Should -Match "##vso\[task\.complete result=SucceededWithIssues;\]"
+    }
+
+    It "warn: titolo valido → nessun warning" {
+        $repo = New-TempGitRepo -CommitMessage "fix: commit"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "dev" -Mode "warn" -PrTitle "fix: titolo"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Not -Match "SucceededWithIssues"
+    }
+
+    It "off: nessuna validazione" {
+        $repo = New-TempGitRepo -CommitMessage "fix: commit"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "dev" -Mode "off" -PrTitle "titolo libero"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "Gate disabled"
+    }
+
+    It "enforce e' il default quando GATE_MODE non e' impostata" {
+        $repo = New-TempGitRepo -CommitMessage "fix: commit"
+        $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "dev" -PrTitle "titolo libero"
+        Remove-TempRepo $repo
+
+        $result.ExitCode | Should -Be 1
+    }
+}
+
+Describe "Funzionalità: Avviso sui Conventional Commits di una PR" {
+
+    Context "Schema dello scenario: PR verso dev con titolo '<Title>' e commit <Commits>" -ForEach @(
+        @{ Title = 'feat: nuova capacità'; Commits = @('wip'); Warns = $false }
+        @{ Title = 'Staging'; Commits = @('fix: correzione', 'wip'); Warns = $false }
+        @{ Title = 'Staging'; Commits = @('Merged PR 12: feat(api): nuovo endpoint'); Warns = $false }
+        @{ Title = 'Aggiornamenti'; Commits = @('wip', 'aggiornamento'); Warns = $true }
+    ) {
+        BeforeAll {
+            $repo = New-PullRequestMergeRepo -Commits $Commits
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "refs/heads/dev" -GatedBranches "dev" -Mode "warn" -PrTitle $Title -PrId "1208"
+            Remove-TempRepo $repo
+        }
+
+        It "Allora l'avviso 'MISSING CONVENTIONAL COMMIT' compare solo se nessun messaggio e' convenzionale" {
+            if ($Warns) { $result.Output | Should -Match "MISSING CONVENTIONAL COMMIT" }
+            else { $result.Output | Should -Not -Match "MISSING CONVENTIONAL COMMIT" }
+        }
+    }
+
+    Context "Scenario: l'avviso elenca i messaggi valutati" {
+        BeforeAll {
+            $repo = New-PullRequestMergeRepo -Commits @('wip')
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "dev" -GatedBranches "dev" -Mode "warn" -PrTitle "Aggiornamenti" -PrId "1209"
+            Remove-TempRepo $repo
+        }
+
+        It "Allora l'avviso riporta il titolo 'Aggiornamenti'" {
+            $result.Output | Should -Match "(?m)^- Aggiornamenti \(PR 1209\)"
+        }
+
+        It "E l'avviso riporta il commit 'wip'" {
+            $result.Output | Should -Match "(?m)^- wip$"
+        }
+    }
+}
+
+Describe "Funzionalità: Gate sui Conventional Commits bloccante per default" {
+
+    BeforeAll {
+        # Il default che un consumer eredita quando non passa il parametro al template.
+        function Get-TemplateDefault([string]$Template, [string]$Parameter) {
+            $content = Get-Content -Raw (Join-Path "$PSScriptRoot/../../../../../V3/CI/GitFlow" $Template)
+            $block = [regex]::Match($content, "(?s)- name: $Parameter\s*\n(.*?)(?=\n\s*- name:|\n\S)")
+            return [regex]::Match($block.Groups[1].Value, "default:\s*'([^']*)'").Groups[1].Value
+        }
+
+        function Invoke-DefaultGate([string]$Template, [string]$TargetBranch, [string]$Mode) {
+            if (-not $Mode) { $Mode = Get-TemplateDefault $Template 'titleGateMode' }
+            $repo = New-PullRequestMergeRepo -Commits @('wip', 'aggiornamento')
+            $result = Invoke-VerifySemVer -RepoDir $repo -TargetBranch "refs/heads/$TargetBranch" `
+                -GatedBranches (Get-TemplateDefault $Template 'titleGateBranches') -Mode $Mode -PrTitle "Aggiornamenti" -PrId "7"
+            Remove-TempRepo $repo
+            return $result
+        }
+    }
+
+    Context "Schema dello scenario: PR senza messaggi convenzionali verso '<Branch>' (<Template>)" -ForEach @(
+        foreach ($template in 'Modules/quality.yaml', 'quality-dotNet.yaml', 'quality-angular.yaml') {
+            foreach ($branch in 'dev', 'staging', 'main') { @{ Template = $template; Branch = $branch } }
+        }
+    ) {
+        It "Allora la build validation della PR fallisce" {
+            (Invoke-DefaultGate $Template $Branch).ExitCode | Should -Be 1
+        }
+    }
+
+    Context "Scenario: PR verso un ramo non gated (<Template>)" -ForEach @(
+        @{ Template = 'Modules/quality.yaml' }, @{ Template = 'quality-dotNet.yaml' }, @{ Template = 'quality-angular.yaml' }
+    ) {
+        It "Allora la build validation della PR non fallisce" {
+            (Invoke-DefaultGate $Template 'feature/x').ExitCode | Should -Be 0
+        }
+    }
+
+    Context "Scenario: consumer che sceglie l'avviso" {
+        BeforeAll { $result = Invoke-DefaultGate 'Modules/quality.yaml' 'dev' 'warn' }
+
+        It "Allora la build validation della PR non fallisce" {
+            $result.ExitCode | Should -Be 0
+        }
+
+        It "E la PR riceve l'avviso 'MISSING CONVENTIONAL COMMIT'" {
+            $result.Output | Should -Match "##vso\[task\.logissue type=warning\]MISSING CONVENTIONAL COMMIT"
+        }
+    }
+
+    It "Senza GATED_BRANCHES lo script protegge gli stessi rami dei template" {
+        $repo = New-PullRequestMergeRepo -Commits @('wip')
+        $results = foreach ($branch in 'dev', 'staging', 'main') {
+            (Invoke-VerifySemVer -RepoDir $repo -TargetBranch $branch -PrTitle "Aggiornamenti" -PrId "8").ExitCode
+        }
+        Remove-TempRepo $repo
+        $results | Should -Be @(1, 1, 1)
+    }
+}

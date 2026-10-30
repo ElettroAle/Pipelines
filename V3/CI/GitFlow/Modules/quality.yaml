@@ -95,7 +95,7 @@ stages:
           - task: PowerShell@2
             displayName: 'Verify Conventional PR Title'
             inputs:
-              filePath: '$(Build.SourcesDirectory)/infrastructure/V3/CI/Scripts/Verify-SemVer.ps1'
+              filePath: '$(Build.SourcesDirectory)/infrastructure/V3/CI/Scripts/Release/Verify-SemVer.ps1'
               workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.projectName }}'
             env:
               TARGET_BRANCH: $(System.PullRequest.TargetBranch)

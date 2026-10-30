@@ -42,13 +42,16 @@ V3/
 │   │   │   └── publish.yaml    # Aggiunge Set-Versioning con REQUIRE_TAG=false fisso
 │   │   └── publish-dotNet.yaml
 │   │
-│   └── Scripts/
-│       ├── Common/             # Script inclusi da altri script, con i loro dati
-│       │   ├── cliff.toml      # Regole Conventional Commits condivise
-│       │   └── GitCliff.ps1
-│       ├── New-ReleaseNotes.ps1
-│       ├── Set-Versioning.ps1
-│       └── Verify-SemVer.ps1
+│   └── Scripts/                # Una cartella per strumento o standard
+│       ├── Common/             # Usati da più cartelle (verifiche, lingua, Markdown)
+│       ├── Adr/  Arc42/  C4/  Mermaid/  Documentation/  ScenarioCoverage/
+│       └── Release/
+│           ├── cliff.toml      # Regole Conventional Commits condivise
+│           ├── GitCliff.ps1
+│           ├── New-ReleaseNotes.ps1
+│           ├── Set-Versioning.ps1
+│           ├── Test-PublishedArtifact.ps1
+│           └── Verify-SemVer.ps1
 │
 └── CD/
     ├── Common/

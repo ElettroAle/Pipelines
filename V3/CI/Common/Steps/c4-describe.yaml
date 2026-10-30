@@ -2,7 +2,7 @@
 
 # ── CI Step: C4 model text ────────────────────────────────────────────────────
 #
-# Testo della parte del modello C4 che nasce da un repository sorgente (V3/CI/Scripts/Write-C4ModelText.ps1):
+# Testo della parte del modello C4 che nasce da un repository sorgente (V3/CI/Scripts/C4/Write-C4ModelText.ps1):
 # la descrizione di ogni elemento, cio' che passa su ogni relazione, le persone e i sistemi esterni con
 # le loro relazioni, scritti da un modello Azure OpenAI leggendo i frammenti dei lettori (c4-read-*.yaml),
 # il codice degli elementi, la guida di stile e i documenti di contesto. Ogni stesura passa controlli
@@ -122,7 +122,7 @@ steps:
         azureSubscription: ${{ parameters.serviceConnection }}
         scriptType: pscore
         scriptLocation: scriptPath
-        scriptPath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Write-C4ModelText.ps1'
+        scriptPath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/C4/Write-C4ModelText.ps1'
         workingDirectory: '${{ parameters.workingDirectory }}'
       env:
         GATE_MODE: ${{ parameters.mode }}

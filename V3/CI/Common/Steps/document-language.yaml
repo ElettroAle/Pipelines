@@ -3,7 +3,7 @@
 # ── CI Step: Document language ────────────────────────────────────────────────
 #
 # Dichiara la lingua del documento per gli step che seguono nel job: DOCUMENT_LANGUAGE sceglie
-# V3/CI/Scripts/Common/Documentation/Languages/<lingua>.psd1, con le convenzioni che dipendono dalla lingua (marcatore
+# V3/CI/Scripts/Common/Languages/<lingua>.psd1, con le convenzioni che dipendono dalla lingua (marcatore
 # di vista, tag dei container, sezioni degli ADR). Vale anche per gli step che il consumer
 # inietta, come c4-verify.yaml, che cosi' non chiedono la lingua una seconda volta.
 #
