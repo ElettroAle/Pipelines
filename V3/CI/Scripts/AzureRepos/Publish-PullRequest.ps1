@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Porta su un ramo del repository della cartella di lavoro le cartelle o i file di PULL_REQUEST_PATHS,
-# come la pipeline li ha scritti, e apre una PR verso PULL_REQUEST_TARGET con il completamento
-# automatico. Il ramo puo' gia' esistere con i commit di un passo precedente, come il testo salvato da
-# Write-C4ModelText.ps1: si riparte da li'. Se le cartelle sul ramo non differiscono dal ramo di
-# destinazione non si apre nessuna PR, e un ramo rimasto senza PR si cancella. Una PR gia' attiva sullo
-# stesso ramo si aggiorna. Il repository e' quello di origin, nel progetto della pipeline.
+# come la pipeline li ha scritti, e apre una PR verso PULL_REQUEST_TARGET. Il ramo puo' gia' esistere
+# con i commit di un passo precedente: si riparte da li'. Se le cartelle sul ramo non differiscono dal
+# ramo di destinazione non si apre nessuna PR, e un ramo rimasto senza PR si cancella. Una PR gia'
+# attiva sullo stesso ramo si aggiorna. Il repository e' quello di origin, nel progetto della pipeline.
 
 $ErrorActionPreference = 'Stop'
 
@@ -16,6 +15,10 @@ $Title = "$env:PULL_REQUEST_TITLE"
 $Description = "$env:PULL_REQUEST_DESCRIPTION"
 $OriginDirectory = "$env:PULL_REQUEST_ORIGIN_DIRECTORY"
 $MergeStrategy = if ($env:PULL_REQUEST_MERGE_STRATEGY) { $env:PULL_REQUEST_MERGE_STRATEGY } else { 'noFastForward' }
+$OriginLabel = if ($env:PULL_REQUEST_ORIGIN_LABEL) { $env:PULL_REQUEST_ORIGIN_LABEL } else { 'Origin' }
+$AutoComplete = "$env:PULL_REQUEST_AUTO_COMPLETE" -ne 'false'
+$DeleteSourceBranch = "$env:PULL_REQUEST_DELETE_SOURCE_BRANCH" -ne 'false'
+$Draft = "$env:PULL_REQUEST_DRAFT" -eq 'true'
 $ApiVersion = '7.1'
 # Il limite della descrizione di una PR di Azure Repos.
 $MaxDescriptionLength = 4000
@@ -63,7 +66,7 @@ function Get-OriginLine {
     $subject = "$(git -C $OriginDirectory log -1 --format=%s)".Trim()
     $commit = "$(git -C $OriginDirectory rev-parse --short=8 HEAD)".Trim()
     $repository = Split-Path -Leaf "$(git -C $OriginDirectory remote get-url origin)".Trim().TrimEnd('/')
-    return "Origine: $subject ($repository@$commit)"
+    return "${OriginLabel}: $subject ($repository@$commit)"
 }
 
 function Get-PullRequestDescription {
@@ -122,12 +125,11 @@ function Get-ActivePullRequest([string]$Api) {
 function New-PullRequest([string]$Api) {
     $created = Invoke-Api 'POST' "$Api/pullrequests" @{
         sourceRefName = "refs/heads/$Branch"; targetRefName = "refs/heads/$Target"
-        title = $Title; description = Get-PullRequestDescription
+        title = $Title; description = Get-PullRequestDescription; isDraft = $Draft
     }
-    Invoke-Api 'PATCH' "$Api/pullrequests/$($created.pullRequestId)" @{
-        autoCompleteSetBy = @{ id = $created.createdBy.id }
-        completionOptions = @{ mergeStrategy = $MergeStrategy; deleteSourceBranch = $true; transitionWorkItems = $false }
-    } | Out-Null
+    $completion = @{ completionOptions = @{ mergeStrategy = $MergeStrategy; deleteSourceBranch = $DeleteSourceBranch; transitionWorkItems = $false } }
+    if ($AutoComplete) { $completion.autoCompleteSetBy = @{ id = $created.createdBy.id } }
+    Invoke-Api 'PATCH' "$Api/pullrequests/$($created.pullRequestId)" $completion | Out-Null
     return $created
 }
 
@@ -157,7 +159,7 @@ function Publish-PullRequest {
         }
         $active = Get-ActivePullRequest $api
         $pullRequest = if ($active) { Update-PullRequest $api $active } else { New-PullRequest $api }
-        Write-Host "PR $($pullRequest.pullRequestId) da $Branch verso $Target con il completamento automatico"
+        Write-Host "PR $($pullRequest.pullRequestId) da $Branch verso $Target"
     }
     finally {
         git worktree remove --force $worktree 2>&1 | Out-Null

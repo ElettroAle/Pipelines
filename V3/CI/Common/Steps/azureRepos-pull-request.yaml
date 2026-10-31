@@ -3,16 +3,15 @@
 # ── CI Step: Azure Repos pull request ─────────────────────────────────────────
 #
 # Porta su un ramo le cartelle o i file che la pipeline ha scritto nel checkout di un repository Azure
-# Repos e apre una PR verso targetBranch con il completamento automatico, che cancella il ramo a fine
-# integrazione (V3/CI/Scripts/AzureRepos/Publish-PullRequest.ps1). Il ramo puo' gia' portare i commit
-# di un passo precedente, come il testo di c4-describe.yaml con progressBranch: si riparte da li'. Se il
-# contenuto non differisce da targetBranch non si apre nessuna PR; una PR attiva sullo stesso ramo si
-# aggiorna. L'identita' della build deve poter contribuire al repository, creare rami e contribuire
-# alle PR; il repository e' quello di origin del checkout, nel progetto della pipeline.
+# Repos e apre una PR verso targetBranch (V3/CI/Scripts/AzureRepos/Publish-PullRequest.ps1). Le cartelle
+# indicate si sostituiscono per intero con quelle scritte dalla pipeline. Il ramo puo' gia' portare i
+# commit di un passo precedente: si riparte da li'. Se il contenuto non differisce da targetBranch non si
+# apre nessuna PR; una PR attiva sullo stesso ramo si aggiorna. L'identita' della build deve poter
+# contribuire al repository, creare rami e contribuire alle PR; il repository e' quello di origin del
+# checkout, nel progetto della pipeline.
 #
 # Riusato da:
-#   il consumer, dopo i passi che scrivono i file da proporre, es. c4-generate.yaml nella pipeline
-#   della documentazione che rigenera la parte di un repository sorgente dopo la sua integrazione
+#   il consumer, dopo i passi che scrivono i file da proporre
 #
 # Parametri
 # ─────────
@@ -22,8 +21,12 @@
 #   description        → descrizione della PR (default: nessuna)
 #   originDirectory    → checkout del repository che ha causato la modifica: la descrizione ne cita
 #                        l'ultimo commit, es. "Merged PR 12: ..." (default: nessuno)
+#   originLabel        → etichetta della riga che cita quel commit (default: Origin)
 #   targetBranch       → ramo di destinazione (default: main)
 #   mergeStrategy      → noFastForward (default) | squash | rebase | rebaseMerge
+#   autoComplete       → completamento automatico a nome dell'identita' della build (default: true)
+#   deleteSourceBranch → cancella il ramo al completamento (default: true)
+#   draft              → apre la PR come bozza (default: false)
 #   workingDirectory   → checkout del repository della PR (default: $(Build.SourcesDirectory))
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #
@@ -47,6 +50,10 @@ parameters:
     type: string
     default: ''
 
+  - name: originLabel
+    type: string
+    default: 'Origin'
+
   - name: targetBranch
     type: string
     default: 'main'
@@ -55,6 +62,18 @@ parameters:
     type: string
     default: 'noFastForward'
     values: ['noFastForward', 'squash', 'rebase', 'rebaseMerge']
+
+  - name: autoComplete
+    type: boolean
+    default: true
+
+  - name: deleteSourceBranch
+    type: boolean
+    default: true
+
+  - name: draft
+    type: boolean
+    default: false
 
   - name: workingDirectory
     type: string
@@ -79,6 +98,10 @@ steps:
       PULL_REQUEST_TITLE: ${{ parameters.title }}
       PULL_REQUEST_DESCRIPTION: ${{ parameters.description }}
       PULL_REQUEST_ORIGIN_DIRECTORY: ${{ parameters.originDirectory }}
+      PULL_REQUEST_ORIGIN_LABEL: ${{ parameters.originLabel }}
       PULL_REQUEST_TARGET: ${{ parameters.targetBranch }}
       PULL_REQUEST_MERGE_STRATEGY: ${{ parameters.mergeStrategy }}
+      PULL_REQUEST_AUTO_COMPLETE: ${{ parameters.autoComplete }}
+      PULL_REQUEST_DELETE_SOURCE_BRANCH: ${{ parameters.deleteSourceBranch }}
+      PULL_REQUEST_DRAFT: ${{ parameters.draft }}
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)

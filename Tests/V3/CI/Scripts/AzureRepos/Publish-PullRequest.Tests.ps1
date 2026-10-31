@@ -97,7 +97,8 @@ BeforeAll {
         $variables = @{
             PULL_REQUEST_PATHS = $Generated; PULL_REQUEST_BRANCH = $Branch; PULL_REQUEST_TARGET = 'main'
             PULL_REQUEST_TITLE = 'docs: C4 model of Aidea.Dxp.AI'; PULL_REQUEST_DESCRIPTION = 'Parte rigenerata.'
-            PULL_REQUEST_ORIGIN_DIRECTORY = ''; PULL_REQUEST_MERGE_STRATEGY = ''
+            PULL_REQUEST_ORIGIN_DIRECTORY = ''; PULL_REQUEST_ORIGIN_LABEL = ''; PULL_REQUEST_MERGE_STRATEGY = ''
+            PULL_REQUEST_AUTO_COMPLETE = ''; PULL_REQUEST_DELETE_SOURCE_BRANCH = ''; PULL_REQUEST_DRAFT = ''
             SYSTEM_COLLECTIONURI = "$StubEndpoint/org/"; SYSTEM_TEAMPROJECT = 'Aidea Dxp'; SYSTEM_ACCESSTOKEN = ''
             BUILD_REQUESTEDFOR = ''; BUILD_REQUESTEDFOREMAIL = ''
         }
@@ -177,7 +178,7 @@ Describe 'Publish-PullRequest' {
         It 'da'' alla PR il titolo indicato' { $created.body.title | Should -Be 'docs: C4 model of Aidea.Dxp.AI' }
 
         It 'cita nella descrizione l''ultimo commit del repository d''origine' {
-            $created.body.description | Should -Match '^Parte rigenerata\.\n\nOrigine: Merged PR 42: nuovo endpoint delle conversazioni \(Aidea\.Dxp\.AI@[0-9a-f]{8}\)$'
+            $created.body.description | Should -Match '^Parte rigenerata\.\n\nOrigin: Merged PR 42: nuovo endpoint delle conversazioni \(Aidea\.Dxp\.AI@[0-9a-f]{8}\)$'
         }
 
         It 'attiva il completamento automatico a nome dell''identita'' che ha creato la PR' {
@@ -189,6 +190,8 @@ Describe 'Publish-PullRequest' {
             $completion.body.completionOptions.mergeStrategy | Should -Be 'noFastForward'
             $completion.body.completionOptions.deleteSourceBranch | Should -BeTrue
         }
+
+        It 'non apre la PR come bozza' { $created.body.isDraft | Should -BeFalse }
     }
 
     Context 'con la parte uguale a quella della destinazione' {
@@ -284,6 +287,35 @@ Describe 'Publish-PullRequest' {
         Write-Files $checkout.Clone @{ "$Generated/aidea.dxp.ai.dsl" = 'nuova' }
         Invoke-PullRequest $checkout @{ PULL_REQUEST_DESCRIPTION = 'x' * 5000 } | Out-Null
         (Get-StubRequests | Where-Object method -EQ 'POST').body.description.Length | Should -Be 4000
+    }
+
+    It 'cita il commit d''origine con l''etichetta indicata' {
+        Reset-Stub
+        $checkout = New-Checkout @{ "$Generated/aidea.dxp.ai.dsl" = 'vecchia' }
+        Write-Files $checkout.Clone @{ "$Generated/aidea.dxp.ai.dsl" = 'nuova' }
+        $origin = New-OriginRepository 'Aidea.Dxp.AI'
+        Invoke-PullRequest $checkout @{ PULL_REQUEST_ORIGIN_DIRECTORY = $origin; PULL_REQUEST_ORIGIN_LABEL = 'Origine' } | Out-Null
+        (Get-StubRequests | Where-Object method -EQ 'POST').body.description | Should -Match '\n\nOrigine: Merged PR 42: '
+    }
+
+    Context 'senza completamento automatico, senza cancellare il ramo e come bozza' {
+        BeforeAll {
+            Reset-Stub
+            $checkout = New-Checkout @{ "$Generated/aidea.dxp.ai.dsl" = 'vecchia' }
+            Write-Files $checkout.Clone @{ "$Generated/aidea.dxp.ai.dsl" = 'nuova' }
+            $result = Invoke-PullRequest $checkout @{ PULL_REQUEST_AUTO_COMPLETE = 'False'; PULL_REQUEST_DELETE_SOURCE_BRANCH = 'False'; PULL_REQUEST_DRAFT = 'True' }
+            $requests = Get-StubRequests
+            $created = $requests | Where-Object method -EQ 'POST'
+            $completion = $requests | Where-Object method -EQ 'PATCH'
+        }
+
+        It 'termina senza errori' { $result.ExitCode | Should -Be 0 -Because $result.Output }
+
+        It 'apre la PR come bozza' { $created.body.isDraft | Should -BeTrue }
+
+        It 'non attiva il completamento automatico' { $completion.body.autoCompleteSetBy | Should -BeNullOrEmpty }
+
+        It 'non cancella il ramo al completamento' { $completion.body.completionOptions.deleteSourceBranch | Should -BeFalse }
     }
 
     It 'usa la strategia di completamento indicata' {
