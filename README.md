@@ -395,6 +395,13 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   file di progetto del repository (`*.csproj`, `package.json`, `angular.json`, `*.tf`, `pom.xml` e gli
   altri della sua lista) che nessun frammento dichiara letto ferma la generazione nominando il file, e
   così un frammento che non si legge. Il file generato non si scrive a mano.
+- **La PR della parte** (`azureRepos-pull-request.yaml`, `CI/Scripts/AzureRepos/Publish-PullRequest.ps1`).
+  Dopo lo scrittore, porta la cartella delle parti generate sul ramo di `progressBranch` e apre una PR
+  verso `targetBranch` con il completamento automatico, che cancella il ramo a fine integrazione. Se la
+  cartella non cambia non si apre nessuna PR, e un ramo rimasto senza PR si cancella; una PR attiva sullo
+  stesso ramo si aggiorna. Con `originDirectory` la descrizione cita l'ultimo commit del repository
+  sorgente, cioè la PR che lo ha integrato. L'identità della build deve poter contribuire al repository
+  della documentazione, creare rami e contribuire alle PR.
 - **.NET 10** (`c4-read-dotnet10.yaml`). Ogni progetto dichiara `net10.0` in `TargetFramework` o
   `TargetFrameworks`, o lo eredita dal `Directory.Build.props` più vicino; un'altra versione, o nessuna,
   ferma la lettura. Il tipo di un progetto viene dalla prima regola di .NET 10 del lettore che gli
@@ -596,7 +603,7 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 
 Gli script stanno in `CI/Scripts/`, una cartella per strumento o standard, con le librerie e i dati
 che usano solo loro: `Adr/`, `Arc42/` (con PlantUML), `C4/` (con Structurizr e il contratto del
-frammento), `Mermaid/` (con il parser in `Parser/`), `Documentation/`, `Release/` (con git-cliff e
+frammento), `Mermaid/` (con il parser in `Parser/`), `Documentation/`, `AzureRepos/`, `Release/` (con git-cliff e
 `cliff.toml`), `ScenarioCoverage/`. `Common/` contiene solo ciò che usano più cartelle: modalità delle
 verifiche, lingua del documento con `Languages/`, lettura del Markdown. I test ricalcano lo stesso
 albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
@@ -617,6 +624,7 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/C4/Read-C4Angular18Model.ps1` | Lettore Angular 18 (`c4-read-angular18.yaml`): l'applicazione come container, cartelle di funzionalità e moduli di base come componenti; un workspace di un'altra versione ferma la lettura |
 | `CI/Scripts/C4/Write-C4ModelText.ps1` | Testo del modello C4 di un repository sorgente (`c4-describe.yaml`): stesure di un modello Azure OpenAI verificate in modo deterministico, testo accettato salvato un container alla volta e ripreso al rilancio |
 | `CI/Scripts/C4/Export-C4CodeModel.ps1` | Parte del modello C4 generata dai frammenti e dal testo di un repository sorgente (`c4-generate.yaml`), più `context.dsl` con persone e sistemi esterni: errore sui file di progetto che nessun lettore legge, confronto in modalità `check` |
+| `CI/Scripts/AzureRepos/Publish-PullRequest.ps1` | Porta su un ramo le cartelle che la pipeline ha scritto e apre una PR Azure Repos (`azureRepos-pull-request.yaml`), con completamento automatico, cancellazione del ramo e bozza a scelta: riparte dai commit già sul ramo, nessuna PR senza differenze, una PR attiva si aggiorna |
 | `CI/Scripts/Arc42/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |
 | `CI/Scripts/Mermaid/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni e delle decisioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
 | `CI/Scripts/Mermaid/Test-DiagramFlows.ps1` | Flussi coerenti con la struttura (`flows-verify.yaml`): partecipanti e chiamate dei diagrammi di sequenza contro il modello C4, flusso delle decisioni contro le classi della loro struttura |
