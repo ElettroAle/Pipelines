@@ -68,7 +68,10 @@ function Invoke-C4Script([string]$Script, [hashtable]$Variables) {
     }
     try {
         $path = if ([IO.Path]::IsPathRooted($Script)) { $Script } else { Join-Path $C4ScriptsDirectory $Script }
-        $output = & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -File $path 2>&1
+        # PowerShell@2 e AzureCLI@2 eseguono gli script con ErrorActionPreference Stop: un errore che in
+        # Continue scorrerebbe su stderr, in pipeline ferma il passo.
+        $command = "`$ErrorActionPreference = 'Stop'; & '$($path -replace "'", "''")'; exit `$LASTEXITCODE"
+        $output = & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -Command $command 2>&1
         return @{ ExitCode = $LASTEXITCODE; Output = ($output -join "`n") }
     }
     finally {
