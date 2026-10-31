@@ -18,6 +18,7 @@
 #   sourceDirectory    → checkout del repository sorgente (default: $(Build.SourcesDirectory))
 #   fragmentDirectory  → cartella dei frammenti (default: $(Agent.TempDirectory)/c4-fragments)
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#   condition          → condizione del passo, es. per saltarlo quando manca un file (default: succeeded())
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,10 @@ parameters:
     type: string
     default: '$(Pipeline.Workspace)/pipeline-templates'
 
+  - name: condition
+    type: string
+    default: 'succeeded()'
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
@@ -55,3 +60,4 @@ steps:
       sourceDirectory: ${{ parameters.sourceDirectory }}
       fragmentDirectory: ${{ parameters.fragmentDirectory }}
       templatesDirectory: ${{ parameters.templatesDirectory }}
+      condition: ${{ parameters.condition }}

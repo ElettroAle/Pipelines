@@ -27,6 +27,7 @@
 #   generatedDirectory → cartella delle parti generate (default: docs/architecture/model/generated)
 #   workingDirectory   → checkout del repository del documento (default: $(Build.SourcesDirectory))
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#   condition          → condizione del passo, es. per saltarlo quando manca un file (default: succeeded())
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -69,6 +70,10 @@ parameters:
     type: string
     default: '$(Pipeline.Workspace)/pipeline-templates'
 
+  - name: condition
+    type: string
+    default: 'succeeded()'
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
@@ -78,6 +83,7 @@ steps:
       filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/C4/Export-C4CodeModel.ps1'
       workingDirectory: '${{ parameters.workingDirectory }}'
       pwsh: true
+    condition: ${{ parameters.condition }}
     env:
       GATE_MODE: ${{ parameters.mode }}
       GENERATION_MODE: ${{ parameters.generationMode }}

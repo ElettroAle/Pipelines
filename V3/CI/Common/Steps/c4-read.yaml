@@ -23,6 +23,7 @@
 #   workingDirectory   → cartella in cui gira lo script (default: $(Build.SourcesDirectory))
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #   environment        → variabili d'ambiente proprie del lettore (default: nessuna)
+#   condition          → condizione del passo, es. per saltarlo quando manca un file (default: succeeded())
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,10 @@ parameters:
     type: object
     default: {}
 
+  - name: condition
+    type: string
+    default: 'succeeded()'
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
@@ -72,6 +77,7 @@ steps:
       filePath: '${{ parameters.scriptPath }}'
       workingDirectory: '${{ parameters.workingDirectory }}'
       pwsh: true
+    condition: ${{ parameters.condition }}
     env:
       GATE_MODE: ${{ parameters.mode }}
       SOURCE_REPOSITORY: ${{ parameters.sourceRepository }}
