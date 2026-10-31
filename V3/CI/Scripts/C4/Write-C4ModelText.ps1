@@ -415,12 +415,12 @@ function Add-Actors($Text, $Draft) {
 # finche' una relazione di un repository lo usa.
 function Remove-StaleText($Text, $Units) {
     $ids = @($Units | ForEach-Object Id)
-    $Text.units.PSObject.Properties.Name | Where-Object { $ids -notcontains $_ } | ForEach-Object { $Text.units.PSObject.Properties.Remove($_) }
+    @($Text.units.PSObject.Properties | ForEach-Object Name) | Where-Object { $ids -notcontains $_ } | ForEach-Object { $Text.units.PSObject.Properties.Remove($_) }
     $linked = @($Text.units.PSObject.Properties.Value | ForEach-Object { @($_.links) } | ForEach-Object { $_.source; $_.target })
     $linked += @(Get-ChildItem -Path $GeneratedDirectory -Filter '*.text.json' -File -ErrorAction SilentlyContinue | Where-Object Name -NE (Get-TextFileName) |
             ForEach-Object { (ConvertFrom-TextJson (Get-Content -Raw $_.FullName)).units.PSObject.Properties.Value } | ForEach-Object { @($_.links) } | ForEach-Object { $_.source; $_.target })
     foreach ($part in 'people', 'externalSystems') {
-        $Text.$part.PSObject.Properties.Name | Where-Object { $linked -notcontains $_ } | ForEach-Object { $Text.$part.PSObject.Properties.Remove($_) }
+        @($Text.$part.PSObject.Properties | ForEach-Object Name) | Where-Object { $linked -notcontains $_ } | ForEach-Object { $Text.$part.PSObject.Properties.Remove($_) }
     }
 }
 
