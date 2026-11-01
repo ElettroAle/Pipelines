@@ -447,8 +447,12 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             Get-UserMessage $bffRequests[0] | Should -Match '- cittadino = Cittadino'
         }
 
-        It "E una stesura che la dichiara di nuovo e' respinta" {
-            Get-UserMessage $bffRequests[1] | Should -Match "persona o sistema esterno gia' nel catalogo: cittadino"
+        It "E una stesura che la dichiara di nuovo si accetta senza un'altra richiesta" {
+            $bffRequests.Count | Should -Be 1
+        }
+
+        It "E il testo dell'altro repository non la dichiara" {
+            @($bffResult.Text.people.PSObject.Properties.Name) | Should -BeNullOrEmpty
         }
 
         It "E l'altro repository la collega senza dichiararla" {
@@ -467,19 +471,22 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             Invoke-Text $root 'Aidea.Dxp.AI' | Out-Null
 
             $renamed = @{ id = 'citizen'; name = ' cittadino '; description = 'Apre la chat.'; technical = $false }
-            $bffLink = @{ source = 'cittadino'; target = 'aidea_dxp_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' }
-            Reset-Stub @{ aidea_dxp_bff_web = @(@{ people = @($renamed); links = @(@{ source = 'citizen'; target = 'aidea_dxp_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' }) }, @{ links = @($bffLink) }) }
+            Reset-Stub @{ aidea_dxp_bff_web = @(@{ people = @($renamed); links = @(@{ source = 'citizen'; target = 'aidea_dxp_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' }) }) }
             $res = Invoke-Text $root 'Aidea.Dxp.Bff.Web' -Environment @{ SOURCE_DIRECTORY = 'bff' }
             $requests = @(Get-StubRequests)
             Remove-Workspace $root
         }
 
-        It "Allora la stesura e' respinta nominando l'identificativo del catalogo" {
-            Get-UserMessage $requests[1] | Should -Match "persona o sistema esterno gia' nel catalogo come cittadino: citizen"
+        It "Allora la stesura si accetta senza un'altra richiesta" {
+            $requests.Count | Should -Be 1
         }
 
-        It "E il testo accettato collega la persona del catalogo senza dichiararla" {
+        It "E il testo non dichiara la persona" {
             @($res.Text.people.PSObject.Properties.Name) | Should -BeNullOrEmpty
+        }
+
+        It "E la parte collega l'identificativo del catalogo" {
+            $res.Generated['aidea.dxp.bff.web.dsl'] | Should -Match 'cittadino -> aidea_dxp_bff_web "Apre la chat" "HTTPS"'
         }
     }
 

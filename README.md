@@ -370,9 +370,9 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   sue `sources`, la guida di stile (`guide`), i documenti di contesto (`context`) e il catalogo delle
   persone e dei sistemi esterni già dichiarati dagli altri repository. Ogni stesura passa controlli
   deterministici: ogni elemento e ogni relazione descritti una volta, nessuna relazione fra elementi del
-  codice che il codice non dichiara, persone e sistemi esterni nuovi con almeno una relazione e assenti
-  dal catalogo, né per identificativo né per nome, ogni relazione con una persona o un sistema esterno legata a un elemento del container,
-  frasi entro `maxWords` parole. Una stesura respinta torna al modello con i motivi; oltre `maxDrafts`
+  codice che il codice non dichiara, persone e sistemi esterni nuovi con almeno una relazione, ogni
+  relazione con una persona o un sistema esterno legata a un elemento del container, frasi entro
+  `maxWords` parole. Una stesura respinta torna al modello con i motivi; oltre `maxDrafts`
   stesure, o senza modello disponibile, la pipeline fallisce nominando il container. Il testo accettato
   si salva in `<repository in minuscolo>.text.json` nella cartella delle parti generate e, con
   `progressBranch`, sul ramo, un container alla volta: rilanciata, la pipeline riparte dai container
@@ -381,6 +381,9 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   e possono dichiarare la stessa persona o lo stesso sistema esterno: appartiene al testo che viene prima
   per nome, e la run successiva dell'altro repository toglie la propria dichiarazione e ne collega
   l'identificativo, senza chiedere al modello.
+  Allo stesso modo una stesura che dichiara una persona o un sistema esterno già nel catalogo, per
+  identificativo o per nome, non si respinge: la dichiarazione si scarta e le relazioni passano
+  all'identificativo del catalogo.
 - **Un lettore del consumer** (`c4-read.yaml`). Per una tecnologia o una convenzione che questo
   repository non conosce, ad esempio come l'infrastruttura di un progetto lega un'applicazione al suo
   progetto, il consumer scrive il lettore nel proprio repository e lo passa con `scriptPath`, con le sue
