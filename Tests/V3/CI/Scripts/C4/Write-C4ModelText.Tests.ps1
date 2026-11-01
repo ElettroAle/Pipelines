@@ -435,8 +435,8 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             $res.ExitCode | Should -Be 0 -Because ($res.Output)
         }
 
-        It "E il contesto dichiara la persona" {
-            $bffResult.Generated['context.dsl'] | Should -Match 'cittadino = person "Cittadino" "Scrive all''ente dal sito\." ""'
+        It "E la generazione non scrive il contesto, che e' di tutti i repository" {
+            @($bffResult.Generated.Keys) | Should -Not -Contain 'context.dsl'
         }
 
         It "E la parte generata contiene la relazione dalla persona all'applicazione" {
@@ -456,6 +456,80 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
     }
 
+    Context "Scenario: una stesura dichiara con un altro identificativo una persona del catalogo" {
+        BeforeAll {
+            $person = @{ id = 'cittadino'; name = 'Cittadino'; description = 'Scrive all''ente dal sito.'; technical = $false }
+            Reset-Stub @{ $Api = @(@{ people = @($person); links = @(@{ source = 'cittadino'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }) }) }
+            $files = New-DescribedEngine
+            $bff = New-BffRepository
+            $bff.Keys | ForEach-Object { $files["bff/$($_ -replace '^source/', '')"] = $bff[$_] }
+            $root = New-Workspace $files
+            Invoke-Text $root 'Aidea.Dxp.AI' | Out-Null
+
+            $renamed = @{ id = 'citizen'; name = ' cittadino '; description = 'Apre la chat.'; technical = $false }
+            $bffLink = @{ source = 'cittadino'; target = 'aidea_dxp_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' }
+            Reset-Stub @{ aidea_dxp_bff_web = @(@{ people = @($renamed); links = @(@{ source = 'citizen'; target = 'aidea_dxp_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' }) }, @{ links = @($bffLink) }) }
+            $res = Invoke-Text $root 'Aidea.Dxp.Bff.Web' -Environment @{ SOURCE_DIRECTORY = 'bff' }
+            $requests = @(Get-StubRequests)
+            Remove-Workspace $root
+        }
+
+        It "Allora la stesura e' respinta nominando l'identificativo del catalogo" {
+            Get-UserMessage $requests[1] | Should -Match "persona o sistema esterno gia' nel catalogo come cittadino: citizen"
+        }
+
+        It "E il testo accettato collega la persona del catalogo senza dichiararla" {
+            @($res.Text.people.PSObject.Properties.Name) | Should -BeNullOrEmpty
+        }
+    }
+
+    Context "Scenario: due repository dichiarano la stessa persona in run partite insieme" {
+        BeforeAll {
+            $files = New-DescribedEngine
+            $bff = New-BffRepository
+            $bff.Keys | ForEach-Object { $files["bff/$($_ -replace '^source/', '')"] = $bff[$_] }
+
+            $person = @{ id = 'cittadino'; name = 'Cittadino'; description = 'Scrive all''ente dal sito.'; technical = $false }
+            Reset-Stub @{ $Api = @(@{ people = @($person); links = @(@{ source = 'cittadino'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }) }) }
+            $engineRoot = New-Workspace $files
+            $engine = Invoke-Text $engineRoot 'Aidea.Dxp.AI'
+            $engineText = Get-Content -Raw (Join-Path $engineRoot 'docs/architecture/model/generated/aidea.dxp.ai.text.json')
+            Remove-Workspace $engineRoot
+
+            $citizen = @{ id = 'citizen'; name = 'Cittadino'; description = 'Apre la chat dal sito.'; technical = $false }
+            Reset-Stub @{ aidea_dxp_bff_web = @(@{ people = @($citizen); links = @(@{ source = 'citizen'; target = 'aidea_dxp_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' }) }) }
+            $bffRoot = New-Workspace $files
+            $first = Invoke-Text $bffRoot 'Aidea.Dxp.Bff.Web' -Environment @{ SOURCE_DIRECTORY = 'bff' }
+
+            [IO.File]::WriteAllText((Join-Path $bffRoot 'docs/architecture/model/generated/aidea.dxp.ai.text.json'), $engineText)
+            Reset-Stub
+            $res = Invoke-Text $bffRoot 'Aidea.Dxp.Bff.Web' -Environment @{ SOURCE_DIRECTORY = 'bff' }
+            $requests = @(Get-StubRequests)
+            Remove-Workspace $bffRoot
+        }
+
+        It "Allora le due run dichiarano la persona ognuna nel proprio testo" {
+            $engine.Text.people.cittadino.name | Should -Be 'Cittadino'
+            $first.Text.people.citizen.name | Should -Be 'Cittadino'
+        }
+
+        It "E la run successiva del repository che viene dopo per nome riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E toglie la propria dichiarazione" {
+            @($res.Text.people.PSObject.Properties.Name) | Should -BeNullOrEmpty
+        }
+
+        It "E collega l'identificativo del testo che viene prima" {
+            $res.Generated['aidea.dxp.bff.web.dsl'] | Should -Match 'cittadino -> aidea_dxp_bff_web "Apre la chat" "HTTPS"'
+        }
+
+        It "E non chiede nulla al modello" {
+            $requests | Should -BeNullOrEmpty
+        }
+    }
+
     Context "Scenario: il modello descritto e' un modello Structurizr valido" {
         BeforeAll {
             $person = @{ id = 'cittadino'; name = 'Cittadino'; description = 'Scrive all''ente dal sito.'; technical = $false }
@@ -468,13 +542,19 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             $dir = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-text-dsl-$(New-Guid)"
             New-Item -ItemType Directory -Force -Path (Join-Path $dir 'generated') | Out-Null
             $res.Generated.Keys | ForEach-Object { [IO.File]::WriteAllText((Join-Path $dir "generated/$_"), $res.Generated[$_]) }
-            [IO.File]::WriteAllText((Join-Path $dir 'workspace.dsl'), "workspace {`n    model {`n        !include generated/context.dsl`n        sistema = softwareSystem `"Aidea.Dxp`" {`n            !include generated/aidea.dxp.ai.dsl`n        }`n    }`n}`n")
+            [IO.File]::WriteAllText((Join-Path $dir 'generated/aidea.dxp.ai.text.json'), ($res.Text | ConvertTo-Json -Depth 20))
+            $context = Invoke-C4Script 'C4/Export-C4Context.ps1' @{ GENERATED_DIRECTORY = (Join-Path $dir 'generated'); CONTEXT_FILE = (Join-Path $dir 'context.dsl'); DOCUMENT_LANGUAGE = ''; GATE_MODE = '' }
+            [IO.File]::WriteAllText((Join-Path $dir 'workspace.dsl'), "workspace {`n    model {`n        !include context.dsl`n        sistema = softwareSystem `"Aidea.Dxp`" {`n            !include generated/aidea.dxp.ai.dsl`n        }`n    }`n}`n")
             $export = Export-StructurizrWorkspace (Join-Path $dir 'workspace.dsl')
             Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
             $model = $export.Workspace.model
         }
 
-        It "Allora il workspace che lo include si esporta senza errori" {
+        It "Allora il contesto si scrive" {
+            $context.ExitCode | Should -Be 0 -Because ($context.Output)
+        }
+
+        It "E il workspace che lo include si esporta senza errori" {
             $export.Error | Should -BeNullOrEmpty
         }
 

@@ -356,11 +356,18 @@ function Get-RelationshipRejections($Unit, $Draft) {
     }
 }
 
+function Get-ActorKey([string]$Name) {
+    return ($Name -replace '\s+', ' ').Trim().ToLowerInvariant()
+}
+
 function Get-ActorRejections($Draft, [hashtable]$Catalogue, [string[]]$GeneratedIds) {
     $actors = @($Draft.people) + @($Draft.externalSystems) | Where-Object { $_ }
+    $catalogueNames = @{}
+    $Catalogue.GetEnumerator() | ForEach-Object { $catalogueNames[(Get-ActorKey $_.Value.name)] = $_.Key }
     foreach ($actor in $actors) {
         if ($actor.id -notmatch $IdentifierPattern) { "identificativo non valido: $($actor.id)" }
         if ($Catalogue.ContainsKey($actor.id)) { "persona o sistema esterno gia' nel catalogo: $($actor.id)" }
+        elseif ($catalogueNames.ContainsKey((Get-ActorKey $actor.name))) { "persona o sistema esterno gia' nel catalogo come $($catalogueNames[(Get-ActorKey $actor.name)]): $($actor.id)" }
         if ($GeneratedIds -contains $actor.id) { "persona o sistema esterno con l'identificativo di un elemento del codice: $($actor.id)" }
         if (-not "$($actor.name)".Trim()) { "persona o sistema esterno senza nome: $($actor.id)" }
         if (-not "$($actor.description)".Trim()) { "persona o sistema esterno senza descrizione: $($actor.id)" }
@@ -407,6 +414,40 @@ function Add-Actors($Text, $Draft) {
             $Text.$part | Add-Member -Force -NotePropertyName $actor.id -NotePropertyValue ([pscustomobject][ordered]@{
                     name = $actor.name.Trim(); description = $actor.description.Trim(); technical = [bool]$actor.technical
                 })
+        }
+    }
+}
+
+# Due run partite insieme non vedono l'una il testo dell'altra e possono dichiarare la stessa persona o lo
+# stesso sistema esterno. Appartiene al testo che viene prima per nome: questo repository toglie la
+# propria dichiarazione e collega l'identificativo di quel testo, senza chiedere al modello.
+function Get-EarlierActors {
+    $own = Get-TextFileName
+    $earlier = Get-ChildItem -Path $GeneratedDirectory -Filter '*.text.json' -File -ErrorAction SilentlyContinue |
+        Where-Object { [string]::CompareOrdinal($_.Name, $own) -lt 0 }
+    foreach ($file in $earlier) {
+        $text = ConvertFrom-TextJson (Get-Content -Raw $file.FullName)
+        foreach ($part in 'people', 'externalSystems') {
+            $text.$part.PSObject.Properties | ForEach-Object { [pscustomobject]@{ Id = $_.Name; Key = Get-ActorKey $_.Value.name } }
+        }
+    }
+}
+
+function Rename-LinkedActor($Text, [string]$From, [string]$To) {
+    foreach ($link in @($Text.units.PSObject.Properties.Value | ForEach-Object { @($_.links) } | Where-Object { $_ })) {
+        if ($link.source -eq $From) { $link.source = $To }
+        if ($link.target -eq $From) { $link.target = $To }
+    }
+}
+
+function Merge-EarlierActors($Text) {
+    $owners = @(Get-EarlierActors)
+    foreach ($part in 'people', 'externalSystems') {
+        foreach ($actor in @($Text.$part.PSObject.Properties)) {
+            $owner = $owners | Where-Object { $_.Id -eq $actor.Name -or $_.Key -eq (Get-ActorKey $actor.Value.name) } | Select-Object -First 1
+            if (-not $owner) { continue }
+            $Text.$part.PSObject.Properties.Remove($actor.Name)
+            Rename-LinkedActor $Text $actor.Name $owner.Id
         }
     }
 }
@@ -459,6 +500,7 @@ function Get-TextIssues {
     $generatedIds = @($units | ForEach-Object { $_.ElementIds })
     $text = Read-ProgressText
     if (-not $text) { $text = Read-SavedText }
+    Merge-EarlierActors $text
     Remove-StaleText $text $units
     Save-Text $text
 
