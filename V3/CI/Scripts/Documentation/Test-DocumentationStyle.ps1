@@ -8,6 +8,7 @@
 
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
 . "$PSScriptRoot/../Common/MarkdownText.ps1"
+. "$PSScriptRoot/../Common/ModelRetry.ps1"
 
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
 $decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }
@@ -33,7 +34,6 @@ $SideBranchPrefix = 'style-judge'
 $SkipCi = '[skip ci]'
 $PendingTrailer = 'Style-Judge-Pending'
 $PendingTextLength = 80
-$MaxAttempts = 3
 $RequestTimeoutSeconds = 600
 $WrapWidth = 110
 $LockedKinds = @('code', 'marker', 'separator', 'frontmatter')
@@ -501,8 +501,8 @@ function Invoke-Judge($Context, [string]$User) {
                 continue
             }
             $transient = $status -eq 429 -or $status -ge 500
-            if (-not $transient -or $attempt -ge $MaxAttempts) { throw }
-            Start-Sleep -Seconds ([math]::Pow(2, $attempt))
+            if (-not $transient -or $attempt -ge $ModelMaxAttempts) { throw }
+            Start-Sleep -Seconds (Get-ModelRetryDelay $_.Exception.Response $attempt)
         }
     }
 

@@ -13,6 +13,7 @@
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
 . "$PSScriptRoot/../Common/DocumentLanguage.ps1"
 . "$PSScriptRoot/../Common/MarkdownText.ps1"
+. "$PSScriptRoot/../Common/ModelRetry.ps1"
 . "$PSScriptRoot/C4CodeModel.ps1"
 
 $GeneratedDirectory = if ($env:GENERATED_DIRECTORY) { $env:GENERATED_DIRECTORY } else { 'docs/architecture/model/generated' }
@@ -32,7 +33,6 @@ $TextScope = "testo del modello C4 di $Repository"
 $IdentifierPattern = '^[a-z][a-z0-9_]*$'
 $SourceExtensions = @('.cs', '.ts', '.html', '.json', '.csproj', '.tf', '.md', '.yaml', '.yml', '.sql')
 $TestFilePattern = '\.(spec|test)\.ts$|Tests?\.cs$'
-$MaxAttempts = 3
 $RequestTimeoutSeconds = 900
 
 $Instructions = @'
@@ -313,8 +313,8 @@ function Invoke-Writer([string]$System, [string]$User) {
         catch {
             $status = [int]$_.Exception.Response.StatusCode
             $transient = $status -eq 429 -or $status -ge 500
-            if (-not $transient -or $attempt -ge $MaxAttempts) { throw }
-            Start-Sleep -Seconds ([math]::Pow(2, $attempt))
+            if (-not $transient -or $attempt -ge $ModelMaxAttempts) { throw }
+            Start-Sleep -Seconds (Get-ModelRetryDelay $_.Exception.Response $attempt)
         }
     }
     $script:Usage.Requests++

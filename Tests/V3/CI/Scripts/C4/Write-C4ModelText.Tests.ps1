@@ -350,6 +350,27 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
     }
 
+    Context "Scenario: il limite di token al minuto rifiuta le prime richieste" {
+        BeforeAll {
+            Reset-Stub
+            [IO.File]::WriteAllText((Join-Path $StubState 'throttle'), '4')
+            $root = New-Workspace (New-DescribedEngine)
+            $started = Get-Date
+            $res = Invoke-Text $root 'Aidea.Dxp.AI'
+            $elapsed = (Get-Date) - $started
+            Remove-Workspace $root
+            Reset-Stub
+        }
+
+        It "Allora il testo si scrive" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E aspetta quanto chiede Retry-After, non il raddoppio" {
+            $elapsed.TotalSeconds | Should -BeLessThan 25
+        }
+    }
+
     Context "Scenario: generazione rilanciata" {
         BeforeAll {
             $branch = 'c4/aidea.dxp.ai'
