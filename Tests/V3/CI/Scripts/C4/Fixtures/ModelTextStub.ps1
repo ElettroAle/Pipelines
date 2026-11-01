@@ -5,7 +5,8 @@
 # descrive ogni elemento e ogni relazione. answers.json nella cartella di stato cambia la stesura di
 # una parte, una voce per stesura: omitElement toglie un elemento, extraRelationship aggiunge una
 # relazione, longDescription allunga la descrizione di un elemento, people, externalSystems e links si
-# aggiungono. status forza un codice HTTP. Le richieste ricevute restano in request-<n>.json.
+# aggiungono. status forza un codice HTTP; throttle rifiuta con 429 e Retry-After di un secondo quel
+# numero di richieste. Un rifiuto porta sempre Retry-After. Le richieste ricevute restano in request-<n>.json.
 
 param([string]$Endpoint, [string]$State)
 
@@ -52,6 +53,14 @@ while (-not (Test-Path $stopFile)) {
 
     $statusFile = Join-Path $State 'status'
     $status = if (Test-Path $statusFile) { [int](Get-Content -Raw $statusFile) } else { 200 }
+    $retryAfter = '0'
+    $throttleFile = Join-Path $State 'throttle'
+    $throttled = if (Test-Path $throttleFile) { [int](Get-Content -Raw $throttleFile) } else { 0 }
+    if ($throttled -gt 0) {
+        [IO.File]::WriteAllText($throttleFile, "$($throttled - 1)")
+        $status = 429
+        $retryAfter = '1'
+    }
     $payload = '{}'
     if ($status -eq 200) {
         $request = $body | ConvertFrom-Json
@@ -69,6 +78,7 @@ while (-not (Test-Path $stopFile)) {
     }
     $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
     $context.Response.StatusCode = $status
+    if ($status -ne 200) { $context.Response.AddHeader('Retry-After', $retryAfter) }
     $context.Response.ContentType = 'application/json'
     $context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
     $context.Response.Close()

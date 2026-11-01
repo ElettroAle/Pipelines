@@ -78,6 +78,14 @@ BeforeAll {
             $status = if (Test-Path $statusFile) { [int](Get-Content -Raw $statusFile) } else { 200 }
             $failOnFile = Join-Path $State 'fail-on'
             if ((Test-Path $failOnFile) -and $body.Contains((Get-Content -Raw $failOnFile))) { $status = 503 }
+            $retryAfter = '0'
+            $throttleFile = Join-Path $State 'throttle'
+            $throttled = if (Test-Path $throttleFile) { [int](Get-Content -Raw $throttleFile) } else { 0 }
+            if ($throttled -gt 0) {
+                [IO.File]::WriteAllText($throttleFile, "$($throttled - 1)")
+                $status = 429
+                $retryAfter = '1'
+            }
             $hangOnFile = Join-Path $State 'hang-on'
             if ((Test-Path $hangOnFile) -and $body.Contains((Get-Content -Raw $hangOnFile))) { continue }
             $request = $body | ConvertFrom-Json
@@ -94,6 +102,7 @@ BeforeAll {
             }
             $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
             $context.Response.StatusCode = $status
+            if ($status -ne 200) { $context.Response.AddHeader('Retry-After', $retryAfter) }
             $context.Response.ContentType = 'application/json'
             $context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
             $context.Response.Close()
@@ -427,7 +436,25 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
         }
 
         It "E riprova prima di arrendersi" {
-            @(Get-StubRequests).Count | Should -Be 3
+            @(Get-StubRequests).Count | Should -Be 10
+        }
+    }
+
+    Context "Scenario: il limite di token al minuto rifiuta le prime richieste" {
+        BeforeAll {
+            Reset-Stub
+            Set-Content (Join-Path $StubState 'throttle') '4'
+            $started = Get-Date
+            $res = Invoke-StyleCheck (New-Docs)
+            $elapsed = (Get-Date) - $started
+        }
+
+        It "Allora la verifica passa" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E aspetta quanto chiede Retry-After, non il raddoppio" {
+            $elapsed.TotalSeconds | Should -BeLessThan 25
         }
     }
 
