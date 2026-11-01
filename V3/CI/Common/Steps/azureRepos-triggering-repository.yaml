@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# ── CI Step: Azure Repos triggering repository ────────────────────────────────
+#
+# Legge l'id del repository Azure Repos che ha avviato la run con un trigger di repository
+# (V3/CI/Scripts/AzureRepos/Get-TriggeringRepository.ps1) e lo scrive nella variabile di output id dello
+# step triggeringRepository, vuota se la run non viene da un trigger di repository. Uno stage successivo
+# lo legge con dependencies.<stage>.outputs['<job>.triggeringRepository.id'] e lo confronta con l'id di
+# un repository resource: Build.Repository.Name nelle condizioni degli stage nomina sempre self.
+#
+# Riusato da:
+#   il consumer, nel job che decide quali stage eseguire
+#
+# Parametri
+# ─────────
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: PowerShell@2
+    name: triggeringRepository
+    displayName: 'Triggering repository'
+    inputs:
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/AzureRepos/Get-TriggeringRepository.ps1'
+      pwsh: true
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)

@@ -402,6 +402,13 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   stesso ramo si aggiorna. Con `originDirectory` la descrizione cita l'ultimo commit del repository
   sorgente, cioè la PR che lo ha integrato. L'identità della build deve poter contribuire al repository
   della documentazione, creare rami e contribuire alle PR.
+- **Il repository che ha avviato la run** (`azureRepos-triggering-repository.yaml`,
+  `CI/Scripts/AzureRepos/Get-TriggeringRepository.ps1`). Una pipeline che rigenera la parte di più
+  repository sorgente, avviata dai loro trigger di repository, esegue solo lo stage del repository che
+  l'ha avviata: nelle condizioni degli stage `Build.Repository.Name` nomina sempre `self`. Lo step legge
+  l'id del repository dal `triggerInfo` della run e lo scrive nella variabile di output `id` dello step
+  `triggeringRepository`, vuota per una run avviata a mano; lo stage della parte lo confronta con l'id
+  del proprio repository.
 - **.NET 10** (`c4-read-dotnet10.yaml`). Ogni progetto dichiara `net10.0` in `TargetFramework` o
   `TargetFrameworks`, o lo eredita dal `Directory.Build.props` più vicino; un'altra versione, o nessuna,
   ferma la lettura. Il tipo di un progetto viene dalla prima regola di .NET 10 del lettore che gli
@@ -625,6 +632,7 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/C4/Write-C4ModelText.ps1` | Testo del modello C4 di un repository sorgente (`c4-describe.yaml`): stesure di un modello Azure OpenAI verificate in modo deterministico, testo accettato salvato un container alla volta e ripreso al rilancio |
 | `CI/Scripts/C4/Export-C4CodeModel.ps1` | Parte del modello C4 generata dai frammenti e dal testo di un repository sorgente (`c4-generate.yaml`), più `context.dsl` con persone e sistemi esterni: errore sui file di progetto che nessun lettore legge, confronto in modalità `check` |
 | `CI/Scripts/AzureRepos/Publish-PullRequest.ps1` | Porta su un ramo le cartelle che la pipeline ha scritto e apre una PR Azure Repos (`azureRepos-pull-request.yaml`), con completamento automatico, cancellazione del ramo e bozza a scelta: riparte dai commit già sul ramo, nessuna PR senza differenze, una PR attiva si aggiorna |
+| `CI/Scripts/AzureRepos/Get-TriggeringRepository.ps1` | Scrive nella variabile di output `id` l'id del repository Azure Repos che ha avviato la run con un trigger di repository, letto dal `triggerInfo` della run (`azureRepos-triggering-repository.yaml`); vuota per una run avviata a mano |
 | `CI/Scripts/Arc42/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |
 | `CI/Scripts/Mermaid/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni e delle decisioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
 | `CI/Scripts/Mermaid/Test-DiagramFlows.ps1` | Flussi coerenti con la struttura (`flows-verify.yaml`): partecipanti e chiamate dei diagrammi di sequenza contro il modello C4, flusso delle decisioni contro le classi della loro struttura |
