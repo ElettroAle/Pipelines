@@ -6,10 +6,10 @@
 # (contratto in C4CodeModel.ps1) e non conosce le tecnologie: un file manifest del repository che
 # nessun frammento ha letto ferma la generazione. I container del repository stanno in un gruppo con
 # il nome del repository senza il prefisso comune ai repository sorgente (SOURCE_REPOSITORIES).
-# Il testo che Write-C4ModelText.ps1 ha scritto per il repository (<repository>.text.json) da' le
+# Il testo che Write-C4ModelText.ps1 ha scritto per tutto il sistema (model.text.json) da' le
 # descrizioni degli elementi, cio' che passa sulle relazioni e le relazioni con persone e sistemi
-# esterni. Persone e sistemi esterni non si scrivono qui: li dichiara Export-C4Context.ps1 quando il
-# documento si compone, cosi' le run di due repository non scrivono mai lo stesso file.
+# esterni. Persone e sistemi esterni stanno in context.dsl, da includere nel modello prima del sistema:
+# il testo e' uno solo, quindi ogni repository scrive lo stesso contesto.
 # Le viste dei componenti dei container della parte stanno in <repository>.views.dsl, da includere fra le
 # viste del documento: una per container con componenti, con l'identificativo del container come chiave.
 # GENERATION_MODE=check confronta i file del repository con quelli che la generazione produce. Un file
@@ -24,6 +24,9 @@ $SourceRepositories = @("$env:SOURCE_REPOSITORIES" -split ',' | ForEach-Object {
 $GeneratedDirectory = if ($env:GENERATED_DIRECTORY) { $env:GENERATED_DIRECTORY } else { 'docs/architecture/model/generated' }
 $Mode = if ($env:GENERATION_MODE) { $env:GENERATION_MODE.ToLower() } else { 'write' }
 $GeneratedTag = $DocumentLanguage.GeneratedTag
+$TechnicalTag = $DocumentLanguage.TechnicalTag
+$ExternalTag = $DocumentLanguage.ExternalTag
+$TextFileName = 'model.text.json'
 $CodeNameProperty = $DocumentLanguage.CodeNameProperty
 $Manifests = @('*.csproj', '*.fsproj', '*.vbproj', '*.sqlproj', '*.esproj', '*.njsproj', '*.shproj', 'package.json', 'angular.json',
     'pom.xml', 'build.gradle', 'go.mod', 'pyproject.toml', 'Cargo.toml', '*.tf')
@@ -47,30 +50,29 @@ function Get-UnreadManifestIssues($Fragments) {
         ForEach-Object { New-Issue $Repository 'file di progetto che nessun lettore riconosce' $_ }
 }
 
-function Read-TextFile($File) {
-    try { return Get-Content -Raw $File.FullName | ConvertFrom-Json -ErrorAction Stop }
-    catch { return $null }
+function Read-ModelText {
+    $path = Join-Path $GeneratedDirectory $TextFileName
+    if (-not (Test-Path $path -PathType Leaf)) { return [pscustomobject]@{ Readable = $true; Content = $null } }
+    try { return [pscustomobject]@{ Readable = $true; Content = Get-Content -Raw $path | ConvertFrom-Json -ErrorAction Stop } }
+    catch { return [pscustomobject]@{ Readable = $false; Content = $null } }
 }
 
-function Read-ModelTexts {
-    foreach ($file in (Get-ChildItem -Path $GeneratedDirectory -Filter '*.text.json' -File -ErrorAction SilentlyContinue | Sort-Object Name)) {
-        [pscustomobject]@{ File = $file.Name; Content = Read-TextFile $file }
+function Get-TextIssues($Text) {
+    if (-not $Text.Readable) { New-Issue $Repository 'testo del modello non leggibile' $TextFileName }
+}
+
+# Una relazione la descrive il container da cui parte, che puo' stare in un altro repository: il testo
+# delle relazioni si cerca in tutto il sistema, le relazioni con persone e sistemi esterni solo nei
+# container di questo repository.
+function Get-PartText($Text, $Fragments) {
+    $ownIds = @($Fragments.Content.containers | Where-Object { $_ } | ForEach-Object id)
+    $part = @{ Elements = @{}; Relationships = @{}; Links = @(); People = $Text.Content.people; ExternalSystems = $Text.Content.externalSystems }
+    foreach ($unit in @($Text.Content.units.PSObject.Properties | Where-Object { $_.Value })) {
+        $unit.Value.elements.PSObject.Properties | ForEach-Object { $part.Elements[$_.Name] = $_.Value }
+        $unit.Value.relationships.PSObject.Properties | ForEach-Object { $part.Relationships[$_.Name] = $_.Value }
+        if ($ownIds -contains $unit.Name) { $part.Links += @($unit.Value.links | Where-Object { $_ }) }
     }
-}
-
-function Get-TextIssues($Texts) {
-    $Texts | Where-Object { -not $_.Content } | ForEach-Object { New-Issue $Repository 'testo del modello non leggibile' $_.File }
-}
-
-function Get-OwnText($Texts) {
-    $own = $Texts | Where-Object File -EQ "$($Repository.ToLowerInvariant()).text.json" | Select-Object -First 1
-    $text = @{ Elements = @{}; Relationships = @{}; Links = @() }
-    foreach ($unit in @($own.Content.units.PSObject.Properties.Value | Where-Object { $_ })) {
-        $unit.elements.PSObject.Properties | ForEach-Object { $text.Elements[$_.Name] = $_.Value }
-        $unit.relationships.PSObject.Properties | ForEach-Object { $text.Relationships[$_.Name] = $_.Value }
-        $text.Links += @($unit.links | Where-Object { $_ })
-    }
-    return $text
+    return $part
 }
 
 function Format-Text([string]$Text) {
@@ -115,6 +117,18 @@ function Format-Model($Fragments) {
     return ($lines -join "`n") + "`n"
 }
 
+function Format-Actor([string]$Id, $Actor, [string]$Kind, [string[]]$Tags) {
+    $allTags = @($Tags) + @(if ($Actor.technical) { $TechnicalTag })
+    return "$Id = $Kind $(Format-Text $Actor.name) $(Format-Text $Actor.description) $(Format-Text ($allTags -join ','))"
+}
+
+function Format-Context {
+    $lines = @("// Persone e sistemi esterni del modello C4, dal testo di tutto il sistema: non si modifica a mano.")
+    $lines += @($script:ModelText.People.PSObject.Properties | Sort-Object Name | ForEach-Object { Format-Actor $_.Name $_.Value 'person' @() })
+    $lines += @($script:ModelText.ExternalSystems.PSObject.Properties | Sort-Object Name | ForEach-Object { Format-Actor $_.Name $_.Value 'softwareSystem' @($ExternalTag) })
+    return ($lines -join "`n") + "`n"
+}
+
 function Format-Views($Fragments) {
     $lines = @("// Viste dei componenti generate da $Repository con Export-C4CodeModel.ps1: non si modificano a mano.")
     foreach ($container in @($Fragments.Content.containers | Where-Object { @($_.components | Where-Object { $_ }).Count })) {
@@ -148,14 +162,14 @@ function Get-GenerationIssues {
     if ($sourceIssues) { return $sourceIssues }
 
     $fragments = @(Read-Fragments)
-    $texts = @(Read-ModelTexts)
-    $issues = @(Get-FragmentIssues $fragments) + @(Get-UnreadManifestIssues $fragments) + @(Get-TextIssues $texts)
+    $text = Read-ModelText
+    $issues = @(Get-FragmentIssues $fragments) + @(Get-UnreadManifestIssues $fragments) + @(Get-TextIssues $text)
     if ($issues) { return $issues }
     if (-not @($fragments.Content.containers).Count) { return New-Issue $Repository 'nessuna applicazione riconosciuta' $SourceDirectory }
 
-    $script:ModelText = Get-OwnText $texts
+    $script:ModelText = Get-PartText $text $fragments
     $name = $Repository.ToLowerInvariant()
-    $outputs = [ordered]@{ "$name.dsl" = Format-Model $fragments; "$name.views.dsl" = Format-Views $fragments }
+    $outputs = [ordered]@{ "$name.dsl" = Format-Model $fragments; "$name.views.dsl" = Format-Views $fragments; 'context.dsl' = Format-Context }
     & $ModeActions[$Mode] $outputs
 }
 

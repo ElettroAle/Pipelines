@@ -19,6 +19,7 @@
 #   branch             → ramo della PR [REQUIRED]
 #   title              → titolo della PR e messaggio del commit [REQUIRED]
 #   description        → descrizione della PR (default: nessuna)
+#   descriptionFile    → file da aggiungere alla descrizione, se esiste (default: nessuno)
 #   originDirectory    → checkout del repository che ha causato la modifica: la descrizione ne cita
 #                        l'ultimo commit, es. "Merged PR 12: ..." (default: nessuno)
 #   originLabel        → etichetta della riga che cita quel commit (default: Origin)
@@ -43,6 +44,10 @@ parameters:
     type: string
 
   - name: description
+    type: string
+    default: ''
+
+  - name: descriptionFile
     type: string
     default: ''
 
@@ -97,6 +102,7 @@ steps:
       PULL_REQUEST_BRANCH: ${{ parameters.branch }}
       PULL_REQUEST_TITLE: ${{ parameters.title }}
       PULL_REQUEST_DESCRIPTION: ${{ parameters.description }}
+      PULL_REQUEST_DESCRIPTION_FILE: ${{ parameters.descriptionFile }}
       PULL_REQUEST_ORIGIN_DIRECTORY: ${{ parameters.originDirectory }}
       PULL_REQUEST_ORIGIN_LABEL: ${{ parameters.originLabel }}
       PULL_REQUEST_TARGET: ${{ parameters.targetBranch }}

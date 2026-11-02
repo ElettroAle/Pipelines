@@ -5,6 +5,8 @@
 # con i commit di un passo precedente: si riparte da li'. Se le cartelle sul ramo non differiscono dal
 # ramo di destinazione non si apre nessuna PR, e un ramo rimasto senza PR si cancella. Una PR gia'
 # attiva sullo stesso ramo si aggiorna. Il repository e' quello di origin, nel progetto della pipeline.
+# PULL_REQUEST_DESCRIPTION_FILE aggiunge alla descrizione un file scritto da un passo precedente, se
+# esiste: ad esempio le correzioni che quel passo ha fatto senza fermarsi.
 
 $ErrorActionPreference = 'Stop'
 
@@ -13,6 +15,7 @@ $Branch = "$env:PULL_REQUEST_BRANCH" -replace '^refs/heads/', ''
 $Target = if ($env:PULL_REQUEST_TARGET) { $env:PULL_REQUEST_TARGET -replace '^refs/heads/', '' } else { 'main' }
 $Title = "$env:PULL_REQUEST_TITLE"
 $Description = "$env:PULL_REQUEST_DESCRIPTION"
+$DescriptionFile = "$env:PULL_REQUEST_DESCRIPTION_FILE"
 $OriginDirectory = "$env:PULL_REQUEST_ORIGIN_DIRECTORY"
 $MergeStrategy = if ($env:PULL_REQUEST_MERGE_STRATEGY) { $env:PULL_REQUEST_MERGE_STRATEGY } else { 'noFastForward' }
 $OriginLabel = if ($env:PULL_REQUEST_ORIGIN_LABEL) { $env:PULL_REQUEST_ORIGIN_LABEL } else { 'Origin' }
@@ -69,8 +72,13 @@ function Get-OriginLine {
     return "${OriginLabel}: $subject ($repository@$commit)"
 }
 
+function Get-DescriptionFileText {
+    if (-not $DescriptionFile -or -not (Test-Path $DescriptionFile -PathType Leaf)) { return }
+    return "$(Get-Content -Raw $DescriptionFile)".Trim()
+}
+
 function Get-PullRequestDescription {
-    $text = (@($Description, (Get-OriginLine)) | Where-Object { $_ }) -join "`n`n"
+    $text = (@($Description, (Get-DescriptionFileText), (Get-OriginLine)) | Where-Object { $_ }) -join "`n`n"
     if ($text.Length -gt $MaxDescriptionLength) { $text = $text.Substring(0, $MaxDescriptionLength) }
     return $text
 }

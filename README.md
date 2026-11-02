@@ -245,9 +245,8 @@ parametri di formato e senza condizioni sul formato.
 | `c4-read.yaml` | lo script passato con `scriptPath` | repository sorgente letto da un lettore nel frammento del modello C4 | C4 |
 | `c4-read-dotnet10.yaml` | `Read-C4DotNet10Model.ps1`, con `c4-read.yaml` | progetti .NET 10 di un repository sorgente letti nel frammento del modello C4 | C4, .NET 10 |
 | `c4-read-angular18.yaml` | `Read-C4Angular18Model.ps1`, con `c4-read.yaml` | applicazione Angular 18 di un repository sorgente letta nel frammento del modello C4 | C4, Angular 18 |
-| `c4-describe.yaml` | `Write-C4ModelText.ps1` | testo della parte del modello C4 di un repository sorgente, scritto da un modello Azure OpenAI e verificato | C4, Azure OpenAI |
-| `c4-generate.yaml` | `Export-C4CodeModel.ps1` | parte del modello C4 generata dai frammenti e dal testo di un repository sorgente, allineata al codice | C4 |
-| `c4-context.yaml` | `Export-C4Context.ps1` | persone e sistemi esterni del modello C4 dai testi di tutti i repository sorgente, scritti quando il documento si compone | C4 |
+| `c4-describe.yaml` | `Write-C4ModelText.ps1` | testo del modello C4 di tutto il sistema dai frammenti di tutti i repository sorgente, scritto da un modello Azure OpenAI, con un solo catalogo di persone e sistemi esterni | C4, Azure OpenAI |
+| `c4-generate.yaml` | `Export-C4CodeModel.ps1` | parte del modello C4 generata dai frammenti di un repository sorgente e dal testo del sistema, allineata al codice, e contesto con persone e sistemi esterni | C4 |
 | `c4-verify.yaml` | `Test-C4Model.ps1` | modello Structurizr valido e completo, testo del modello coerente con la parte generata, viste mostrate nelle sezioni | C4 |
 | `mermaid-verify.yaml` | `Test-MermaidDiagrams.ps1` | diagrammi Mermaid validi, nel documento e nelle decisioni | Mermaid |
 | `flows-verify.yaml` | `Test-DiagramFlows.ps1` | flussi fatti degli elementi del modello C4 e delle classi delle decisioni | C4, Mermaid |
@@ -364,31 +363,35 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   `sources` (le cartelle del suo codice), `technology`, `tags`, `properties` e i `components` con gli
   stessi campi tranne `tags`; `relationships`, coppie `source` e `target` di identificativi.
 - **Il testo** (`c4-describe.yaml`, `CI/Scripts/C4/Write-C4ModelText.ps1`). Un modello Azure OpenAI
-  (`model`, con ragionamento `reasoningEffort`, default `high`) scrive, un container alla volta, la
-  descrizione di ogni elemento, ciò che passa su ogni relazione, le persone e i sistemi esterni che il
-  container usa o che lo usano, con le loro relazioni. Legge la struttura del container, il codice delle
-  sue `sources`, la guida di stile (`guide`), i documenti di contesto (`context`) e il catalogo delle
-  persone e dei sistemi esterni già dichiarati dagli altri repository. Ogni stesura passa controlli
-  deterministici: ogni elemento e ogni relazione descritti una volta, nessuna relazione fra elementi del
-  codice che il codice non dichiara, persone e sistemi esterni nuovi con almeno una relazione, ogni
-  relazione con una persona o un sistema esterno legata a un elemento del container, frasi entro
-  `maxWords` parole. Una stesura respinta torna al modello con i motivi; oltre `maxDrafts`
-  stesure, o senza modello disponibile, la pipeline fallisce nominando il container. Il testo accettato
-  si salva in `<repository in minuscolo>.text.json` nella cartella delle parti generate e, con
-  `progressBranch`, sul ramo, un container alla volta: rilanciata, la pipeline riparte dai container
-  senza testo accettato. Il testo di un container la cui struttura non cambia resta quello accettato;
-  quello di un container sparito si toglie. Due run partite insieme non vedono l'una il testo dell'altra
-  e possono dichiarare la stessa persona o lo stesso sistema esterno: appartiene al testo che viene prima
-  per nome, e la run successiva dell'altro repository toglie la propria dichiarazione e ne collega
-  l'identificativo, senza chiedere al modello.
-  Allo stesso modo una stesura che dichiara una persona o un sistema esterno già nel catalogo, per
-  identificativo o per nome, non si respinge: la dichiarazione si scarta e le relazioni passano
-  all'identificativo del catalogo.
-  Le applicazioni dei repository sorgente (`sourceRepositories`) fanno parte del sistema: un sistema
-  esterno con il nome di uno di loro si toglie, con le sue relazioni, dalla stesura e dal testo salvato,
-  senza chiedere al modello. Una relazione che parte da un elemento di un altro repository, ad esempio
-  da un'applicazione verso la risorsa che l'infrastruttura le assegna, la descrive il container a cui
-  arriva.
+  (`model`, con ragionamento `reasoningEffort`, default `high`) scrive il testo di tutto il sistema in una
+  sola generazione, un container alla volta: la descrizione di ogni elemento, ciò che passa su ogni
+  relazione, le persone e i sistemi esterni che il container usa o che lo usano, con le loro relazioni.
+  Legge i frammenti di tutti i repository sorgente (`sourceRepositories`, con il checkout di ognuno in
+  `sourcesDirectory/<repository>`), la struttura del container, il codice delle sue `sources`, gli altri
+  container del sistema, la guida di stile (`guide`), i documenti di contesto (`context`) e il catalogo
+  delle persone e dei sistemi esterni già dichiarati. Una relazione appartiene al container da cui parte;
+  se parte da un elemento che nessun container letto contiene, ad esempio da un'applicazione verso la
+  risorsa che l'infrastruttura le assegna, appartiene al container a cui arriva.
+- **Una stesura non ferma mai la pipeline.** Ciò che la struttura non contiene si toglie in modo
+  deterministico: elementi e relazioni che il codice non dichiara, identificativi non validi o uguali a
+  quelli di un elemento del codice, relazioni legate a un elemento assente dal container, persone e
+  sistemi esterni senza relazioni, sistemi esterni con il nome di un repository sorgente. Una persona o
+  un sistema esterno già nel catalogo, per identificativo o per nome, si scarta e le relazioni passano
+  all'identificativo del catalogo. Ciò che manca, cioè un testo da scrivere, una frase oltre `maxWords`
+  parole, il nome o la descrizione di una persona o di un sistema esterno, torna al modello con i motivi,
+  e il modello riscrive solo quelle voci: le voci già accettate restano. Oltre `maxDrafts` stesure il
+  testo si salva comunque, con un avviso e senza la struttura di riferimento, così la run successiva lo
+  riscrive. La pipeline fallisce solo se il modello non è disponibile.
+- **Il catalogo.** Dopo i container, il modello controlla in una sola chiamata il catalogo delle persone
+  e dei sistemi esterni con tutti i container del sistema davanti: unisce due voci che sono la stessa
+  persona o lo stesso sistema, e toglie un sistema esterno che è un container del sistema, passandone le
+  relazioni al container. Una risposta respinta torna al modello fino a `maxDrafts` volte; una voce
+  ancora respinta resta distinta.
+- **Il testo salvato e le correzioni.** Il testo accettato si salva in `model.text.json` nella cartella
+  delle parti generate e, con `progressBranch`, sul ramo, un container alla volta: rilanciata, la
+  pipeline riparte da ciò che non ha testo accettato. Il testo di un container la cui struttura non
+  cambia resta quello accettato; quello di un container sparito si toglie. Ogni voce tolta, unita o
+  rimasta da scrivere si elenca in `correctionsFile`, che la PR aggiunge alla propria descrizione.
 - **Un lettore del consumer** (`c4-read.yaml`). Per una tecnologia o una convenzione che questo
   repository non conosce, ad esempio come l'infrastruttura di un progetto lega un'applicazione al suo
   progetto, il consumer scrive il lettore nel proprio repository e lo passa con `scriptPath`, con le sue
@@ -400,26 +403,24 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   `<repository in minuscolo>.dsl` nella cartella delle parti generate, da includere con `!include` nel
   sistema di `model/workspace.dsl`. Con più di un container, i container stanno in un gruppo con il nome
   del repository senza il prefisso comune ai repository sorgente; un container unico non ha gruppo; ogni elemento porta il tag `Generato` in italiano e il nome
-  completo nella proprietà `codice`, e una proprietà vuota non si scrive. Compone il testo del
-  repository: descrizioni, ciò che passa sulle relazioni, relazioni con persone e sistemi esterni. Scrive
-  solo i file del proprio repository, così le PR delle parti di due repository non si scontrano. Non
+  completo nella proprietà `codice`, e una proprietà vuota non si scrive. Prende da `model.text.json`
+  le descrizioni e ciò che passa sulle relazioni dei propri elementi, comprese quelle che partono da un
+  altro repository, e le relazioni con persone e sistemi esterni legate ai propri container. Non
   conosce le tecnologie: un
   file di progetto del repository (`*.csproj`, `package.json`, `angular.json`, `*.tf`, `pom.xml` e gli
   altri della sua lista) che nessun frammento dichiara letto ferma la generazione nominando il file, e
   così un frammento che non si legge. Il file generato non si scrive a mano. Scrive anche
   `<repository in minuscolo>.views.dsl`, da includere fra le viste del documento: una vista dei
-  componenti per ogni container che ne ha, con l'identificativo del container come chiave.
-- **Il contesto** (`c4-context.yaml`, `CI/Scripts/C4/Export-C4Context.ps1`). Quando il documento si
-  compone, dichiara in `contextFile` le persone e i sistemi esterni dei testi di tutti i repository, da
-  includere nel modello prima del sistema. Non si committa: la PR di ogni parte tocca solo i file del
-  proprio repository. Un identificativo dichiarato da più testi vale una volta, con il testo che viene
-  prima per nome.
+  componenti per ogni container che ne ha, con l'identificativo del container come chiave. Scrive
+  infine `context.dsl`, da includere nel modello prima del sistema: le persone e i sistemi esterni del
+  catalogo, i sistemi con il tag `Esterno` e, se tecnici, `Tecnico`. Si committa con le parti generate.
 - **La PR della parte** (`azureRepos-pull-request.yaml`, `CI/Scripts/AzureRepos/Publish-PullRequest.ps1`).
   Dopo lo scrittore, porta la cartella delle parti generate sul ramo di `progressBranch` e apre una PR
   verso `targetBranch` con il completamento automatico, che cancella il ramo a fine integrazione. Se la
   cartella non cambia non si apre nessuna PR, e un ramo rimasto senza PR si cancella; una PR attiva sullo
   stesso ramo si aggiorna. Con `originDirectory` la descrizione cita l'ultimo commit del repository
-  sorgente, cioè la PR che lo ha integrato. L'identità della build deve poter contribuire al repository
+  sorgente, cioè la PR che lo ha integrato; con `descriptionFile` vi aggiunge il contenuto del file, se
+  esiste. L'identità della build deve poter contribuire al repository
   della documentazione, creare rami e contribuire alle PR.
 - **.NET 10** (`c4-read-dotnet10.yaml`). Ogni progetto dichiara `net10.0` in `TargetFramework` o
   `TargetFrameworks`, o lo eredita dal `Directory.Build.props` più vicino; un'altra versione, o nessuna,
@@ -535,7 +536,8 @@ Dopo il merge su `main` il documento arc42 si pubblica nella wiki di progetto di
 (`CI/Agnostic/publish-arc42-wiki.yaml`, lo step `CI/Common/Steps/arc42-wiki-publish.yaml` e lo script
 `CI/Scripts/Arc42/Publish-Arc42Wiki.ps1`). Lo step prepara Java e i font di sistema con `ensure-java.yaml` ed
 `ensure-fonts.yaml`. Prima della pubblicazione dichiara la lingua del documento (`document-language.yaml`) ed
-esegue i `composeSteps` del consumer, ad esempio `c4-context.yaml` per il contesto del modello C4:
+esegue i `composeSteps` del consumer, gli step che preparano i file del documento prima della
+pubblicazione:
 
 - Ogni sezione diventa una pagina sotto `wikiRoot` (default il nome della lingua, `Architettura` o
   `Architecture`), nell'ordine dei numeri; le decisioni diventano sottopagine della sezione 9, quella
@@ -642,10 +644,9 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/C4/C4CodeModel.ps1` | Contratto del frammento del modello C4 generato, incluso dai lettori: file di progetto letti, container, componenti, relazioni |
 | `CI/Scripts/C4/Read-C4DotNet10Model.ps1` | Lettore .NET 10 (`c4-read-dotnet10.yaml`): applicazioni come container, progetti di produzione come componenti, regole di .NET 10; un progetto di un'altra versione ferma la lettura |
 | `CI/Scripts/C4/Read-C4Angular18Model.ps1` | Lettore Angular 18 (`c4-read-angular18.yaml`): l'applicazione come container, cartelle di funzionalità e moduli di base come componenti; un workspace di un'altra versione ferma la lettura |
-| `CI/Scripts/C4/Write-C4ModelText.ps1` | Testo del modello C4 di un repository sorgente (`c4-describe.yaml`): stesure di un modello Azure OpenAI verificate in modo deterministico, testo accettato salvato un container alla volta e ripreso al rilancio |
-| `CI/Scripts/C4/Export-C4CodeModel.ps1` | Parte del modello C4 generata dai frammenti e dal testo di un repository sorgente (`c4-generate.yaml`), solo con i file del repository: errore sui file di progetto che nessun lettore legge, confronto in modalità `check` |
-| `CI/Scripts/C4/Export-C4Context.ps1` | Persone e sistemi esterni dei testi di tutti i repository sorgente (`c4-context.yaml`), scritti quando il documento si compone e non committati: un identificativo dichiarato da più testi vale una volta |
-| `CI/Scripts/AzureRepos/Publish-PullRequest.ps1` | Porta su un ramo le cartelle che la pipeline ha scritto e apre una PR Azure Repos (`azureRepos-pull-request.yaml`), con completamento automatico, cancellazione del ramo e bozza a scelta: riparte dai commit già sul ramo, nessuna PR senza differenze, una PR attiva si aggiorna |
+| `CI/Scripts/C4/Write-C4ModelText.ps1` | Testo del modello C4 di tutto il sistema (`c4-describe.yaml`): stesure di un modello Azure OpenAI corrette in modo deterministico o rimandate al modello, catalogo unico di persone e sistemi esterni controllato dal modello, testo salvato un container alla volta e ripreso al rilancio, correzioni elencate |
+| `CI/Scripts/C4/Export-C4CodeModel.ps1` | Parte del modello C4 generata dai frammenti di un repository sorgente e dal testo del sistema (`c4-generate.yaml`), con il contesto delle persone e dei sistemi esterni: errore sui file di progetto che nessun lettore legge, confronto in modalità `check` |
+| `CI/Scripts/AzureRepos/Publish-PullRequest.ps1` | Porta su un ramo le cartelle che la pipeline ha scritto e apre una PR Azure Repos (`azureRepos-pull-request.yaml`), con completamento automatico, cancellazione del ramo e bozza a scelta: riparte dai commit già sul ramo, nessuna PR senza differenze, una PR attiva si aggiorna, descrizione completata da un file |
 | `CI/Scripts/Arc42/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |
 | `CI/Scripts/Mermaid/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni e delle decisioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
 | `CI/Scripts/Mermaid/Test-DiagramFlows.ps1` | Flussi coerenti con la struttura (`flows-verify.yaml`): partecipanti e chiamate dei diagrammi di sequenza contro il modello C4, flusso delle decisioni contro le classi della loro struttura |

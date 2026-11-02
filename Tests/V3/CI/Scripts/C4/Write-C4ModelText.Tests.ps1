@@ -5,13 +5,14 @@
     Test Pester per V3/CI/Scripts/C4/Write-C4ModelText.ps1 e per il testo composto da Export-C4CodeModel.ps1
 
 .DESCRIPTION
-    Ogni scenario costruisce un repository sorgente finto ed esegue, come in pipeline, il lettore .NET,
-    il generatore del testo e lo scrittore. Il modello e' sostituito da un endpoint locale
-    (Tests/V3/CI/Scripts/C4/Fixtures/ModelTextStub.ps1) che descrive ogni elemento e ogni relazione della parte, salvo
-    le stesure cambiate dallo scenario; le prove verificano cosa il generatore manda al modello, quali
-    stesure accetta, cosa salva e cosa lo scrittore compone. Il testo vero del modello si giudica sul
-    repository della documentazione. Lo scenario che controlla la validita' del DSL richiede Java 17 o
-    successivo (STRUCTURIZR_JAVA, JAVA_HOME_17_X64 o JAVA_HOME).
+    Ogni scenario costruisce i repository sorgente finti di un sistema ed esegue, come in pipeline, i
+    lettori di ogni repository, il generatore del testo di tutto il sistema e lo scrittore di ogni parte.
+    Il modello e' sostituito da un endpoint locale (Tests/V3/CI/Scripts/C4/Fixtures/ModelTextStub.ps1)
+    che descrive ogni elemento e ogni relazione della parte e lascia distinte le voci del catalogo, salvo
+    le risposte cambiate dallo scenario; le prove verificano cosa il generatore manda al modello, quali
+    stesure accetta, cosa corregge, cosa salva e cosa lo scrittore compone. Il testo vero del modello si
+    giudica sul repository della documentazione. Lo scenario che controlla la validita' del DSL richiede
+    Java 17 o successivo (STRUCTURIZR_JAVA, JAVA_HOME_17_X64 o JAVA_HOME).
 #>
 
 BeforeAll {
@@ -33,8 +34,12 @@ BeforeAll {
 
     $Api = 'contoso_shop_ai_api'
     $Worker = 'contoso_shop_ai_worker'
+    $Web = 'contoso_shop_bff_web'
+    $Utils = 'contoso_shop_ai_api__contoso_shop_ai_utils'
     $UseCase = 'contoso_shop_ai_api__contoso_shop_ai_usecase_writtenconversations'
     $ServiceBus = 'contoso_shop_ai_api__contoso_shop_ai_dataaccess_azureservicebus'
+    $Engine = 'Contoso.Shop.AI'
+    $Bff = 'Contoso.Shop.Bff.Web'
     $Guide = "# Guida di stile`n`n## Regole`n`n### Niente riempitivi`n`nUn'espressione che non aggiunge informazione si toglie.`n"
     $Decision = "# Canale eventi di sessione`n`n## Esito della decisione`n`nGli eventi viaggiano su Service Bus.`n"
 
@@ -56,15 +61,33 @@ BeforeAll {
     }
 
     function Get-RequestedUnits {
-        return @(Get-StubRequests | ForEach-Object { [regex]::Match((Get-UserMessage $_), 'PARTE DA DESCRIVERE: (\S+)').Groups[1].Value })
+        return @(Get-StubRequests | ForEach-Object { [regex]::Match((Get-UserMessage $_), 'PARTE DA DESCRIVERE: (\S+)').Groups[1].Value } | Where-Object { $_ })
+    }
+
+    function Get-UnitRequests([string]$Unit) {
+        return @(Get-StubRequests | Where-Object { (Get-UserMessage $_) -match "PARTE DA DESCRIVERE: $Unit\b" })
+    }
+
+    function Get-CatalogueRequests {
+        return @(Get-StubRequests | Where-Object { (Get-UserMessage $_).Contains("CATALOGO DA CONTROLLARE:`n") })
+    }
+
+    function Add-Sources([System.Collections.IDictionary]$Files, [string]$Repository, [System.Collections.IDictionary]$Repo) {
+        $Repo.Keys | ForEach-Object { $Files["sources/$Repository/$($_ -replace '^source/', '')"] = $Repo[$_] }
+        return $Files
     }
 
     function New-DescribedEngine {
-        $files = New-EngineRepository
-        $files['source/Contoso.Shop.AI.Api/Program.cs'] = "app.MapPost(`"/conversations`", SendMessage);`n"
+        $engineFiles = New-EngineRepository
+        $engineFiles['source/Contoso.Shop.AI.Api/Program.cs'] = "app.MapPost(`"/conversations`", SendMessage);`n"
+        $files = Add-Sources ([ordered]@{}) $Engine $engineFiles
         $files['docs/STYLE.md'] = $Guide
         $files['docs/decisions/0012-canale-eventi-di-sessione.md'] = $Decision
         return $files
+    }
+
+    function New-DescribedSystem {
+        return Add-Sources (New-DescribedEngine) $Bff (New-BffRepository)
     }
 
     function New-Workspace([System.Collections.IDictionary]$Files) {
@@ -73,33 +96,48 @@ BeforeAll {
         return $root
     }
 
-    function Invoke-Text([string]$Root, [string]$Repository, [string[]]$Readers = @('dotnet10'), [hashtable]$Environment = @{}) {
+    function New-Step([string]$Script, [hashtable]$Variables, [string]$Repository) {
+        $own = $Variables.Clone()
+        $own['SOURCE_REPOSITORY'] = $Repository
+        $own['SOURCE_DIRECTORY'] = "sources/$Repository"
+        return @{ Script = $Script; Variables = $own }
+    }
+
+    # Readers dice i lettori di un repository: senza voce il repository si legge con il lettore .NET.
+    function Invoke-Text([string]$Root, [string[]]$Repositories = @('Contoso.Shop.AI'), [hashtable]$Readers = @{}, [hashtable]$Environment = @{}) {
         $variables = @{
-            SOURCE_DIRECTORY = 'source'; SOURCE_REPOSITORY = $Repository; SOURCE_REPOSITORIES = $C4SourceRepositories
+            SOURCE_DIRECTORY = ''; SOURCE_REPOSITORY = ''; SOURCE_REPOSITORIES = $C4SourceRepositories; SOURCES_DIRECTORY = 'sources'
             FRAGMENT_DIRECTORY = 'fragments'; GENERATED_DIRECTORY = 'docs/architecture/model/generated'; GENERATION_MODE = 'write'; DOCUMENT_LANGUAGE = ''
             C4_TEXT_ENDPOINT = $StubEndpoint; C4_TEXT_MODEL = 'gpt-6-luna'; C4_TEXT_TOKEN = 'token-di-prova'; C4_TEXT_REASONING_EFFORT = ''
             C4_TEXT_MAX_DRAFTS = ''; C4_TEXT_CONTEXT = 'docs/decisions'; STYLE_GUIDE = 'docs/STYLE.md'; PROGRESS_BRANCH = ''
-            READABILITY_MAX_WORDS = ''; READABILITY_ABBREVIATIONS = ''; GATE_MODE = ''; SYSTEM_ACCESSTOKEN = ''
+            READABILITY_MAX_WORDS = ''; READABILITY_ABBREVIATIONS = ''; GATE_MODE = ''; SYSTEM_ACCESSTOKEN = ''; C4_CORRECTIONS_FILE = 'corrections.md'
         }
         $Environment.Keys | ForEach-Object { $variables[$_] = $Environment[$_] }
-        $steps = @($Readers | ForEach-Object { $C4Readers[$_] }) + 'C4/Write-C4ModelText.ps1' + 'C4/Export-C4CodeModel.ps1'
+        $steps = @(foreach ($repository in $Repositories) {
+                $own = if ($Readers.ContainsKey($repository)) { @($Readers[$repository]) } else { @('dotnet10') }
+                $own | Where-Object { $_ } | ForEach-Object { New-Step $C4Readers[$_] $variables $repository }
+            })
+        $steps += @{ Script = 'C4/Write-C4ModelText.ps1'; Variables = $variables }
+        $steps += @($Repositories | ForEach-Object { New-Step 'C4/Export-C4CodeModel.ps1' $variables $_ })
         Push-Location $Root
         try {
             $outputs = @()
             $exitCode = 0
             foreach ($step in $steps) {
-                $result = Invoke-C4Script $step $variables
+                $result = Invoke-C4Script $step.Script $step.Variables
                 $outputs += $result.Output
                 $exitCode = $result.ExitCode
                 if ($exitCode) { break }
             }
             $generated = Join-Path $Root 'docs/architecture/model/generated'
-            $textFile = Join-Path $generated "$($Repository.ToLowerInvariant()).text.json"
+            $textFile = Join-Path $generated 'model.text.json'
+            $correctionsFile = Join-Path $Root 'corrections.md'
             return @{
-                ExitCode  = $exitCode
-                Output    = $outputs -join "`n"
-                Generated = Read-Directory $generated '*.dsl'
-                Text      = if (Test-Path $textFile) { Get-Content -Raw $textFile | ConvertFrom-Json } else { $null }
+                ExitCode    = $exitCode
+                Output      = $outputs -join "`n"
+                Generated   = Read-Directory $generated '*.dsl'
+                Text        = if (Test-Path $textFile) { Get-Content -Raw $textFile | ConvertFrom-Json } else { $null }
+                Corrections = if (Test-Path $correctionsFile) { Get-Content -Raw $correctionsFile } else { '' }
             }
         }
         finally { Pop-Location }
@@ -136,7 +174,7 @@ BeforeAll {
     }
 
     function Get-OriginText([string]$Origin, [string]$Branch) {
-        return (git -C $Origin show "${Branch}:docs/architecture/model/generated/contoso.shop.ai.text.json" 2>$null) -join "`n" | ConvertFrom-Json
+        return (git -C $Origin show "${Branch}:docs/architecture/model/generated/model.text.json" 2>$null) -join "`n" | ConvertFrom-Json
     }
 }
 
@@ -156,7 +194,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         BeforeAll {
             Reset-Stub
             $root = New-Workspace (New-DescribedEngine)
-            $res = Invoke-Text $root 'Contoso.Shop.AI'
+            $res = Invoke-Text $root
             $dsl = $res.Generated['contoso.shop.ai.dsl']
             Remove-Workspace $root
         }
@@ -177,23 +215,26 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             $dsl | Should -Match "$ServiceBus -> $UseCase `"Passa da $ServiceBus a $UseCase`" `"chiamata`"" -Because $dsl
         }
 
-        It "E il testo accettato resta nel file del testo del repository" {
+        It "E il testo accettato resta nel testo del sistema" {
             $res.Text.units.$Api.elements.$Api | Should -Be "Descrizione di $Api."
+        }
+
+        It "E non ci sono correzioni da elencare" {
+            $res.Corrections | Should -BeNullOrEmpty
         }
     }
 
     Context "Scenario: cosa il generatore manda al modello" {
         BeforeAll {
             Reset-Stub
-            $root = New-Workspace (New-DescribedEngine)
-            $res = Invoke-Text $root 'Contoso.Shop.AI'
+            $root = New-Workspace (New-DescribedSystem)
+            $res = Invoke-Text $root @($Engine, $Bff)
             Remove-Workspace $root
-            $requests = Get-StubRequests
-            $apiRequest = $requests | Where-Object { (Get-UserMessage $_) -match "PARTE DA DESCRIVERE: $Api\b" } | Select-Object -First 1
+            $apiRequest = Get-UnitRequests $Api | Select-Object -First 1
         }
 
         It "Allora chiede un container per richiesta" {
-            Get-RequestedUnits | Sort-Object | Should -Be @($Api, $Worker)
+            Get-RequestedUnits | Sort-Object | Should -Be @($Api, $Worker, $Web)
         }
 
         It "E usa il modello configurato" {
@@ -216,6 +257,10 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             Get-UserMessage $apiRequest | Should -Match 'Gli eventi viaggiano su Service Bus'
         }
 
+        It "E manda i container degli altri repository del sistema" {
+            Get-UserMessage $apiRequest | Should -Match "ALTRI CONTAINER DEL SISTEMA:\n(- .+\n)*- $Web = Web \(Contoso\.Shop\.Bff\.Web\)"
+        }
+
         It "E chiede una risposta con lo schema del testo" {
             $apiRequest.response_format.json_schema.schema.required | Should -Be @('elements', 'relationships', 'people', 'externalSystems', 'links')
         }
@@ -225,9 +270,9 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         BeforeAll {
             Reset-Stub
             $root = New-Workspace (New-DescribedEngine)
-            $first = Invoke-Text $root 'Contoso.Shop.AI'
+            $first = Invoke-Text $root
             Reset-Stub
-            $res = Invoke-Text $root 'Contoso.Shop.AI'
+            $res = Invoke-Text $root
             Remove-Workspace $root
         }
 
@@ -247,12 +292,11 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
     Context "Scenario: la struttura di un container cambia" {
         BeforeAll {
             Reset-Stub
-            $files = New-DescribedEngine
-            $root = New-Workspace $files
-            Invoke-Text $root 'Contoso.Shop.AI' | Out-Null
+            $root = New-Workspace (New-DescribedEngine)
+            Invoke-Text $root | Out-Null
             Reset-Stub
-            Write-SourceFiles $root ([ordered]@{ 'source/Contoso.Shop.AI.Worker/Contoso.Shop.AI.Worker.csproj' = (New-Project 'Microsoft.NET.Sdk' @('Contoso.Shop.AI.UseCase.WrittenConversations', 'Contoso.Shop.AI.Utils') "    <OutputType>Exe</OutputType>`n    <AzureFunctionsVersion>v4</AzureFunctionsVersion>") })
-            $res = Invoke-Text $root 'Contoso.Shop.AI'
+            Write-SourceFiles $root ([ordered]@{ 'sources/Contoso.Shop.AI/Contoso.Shop.AI.Worker/Contoso.Shop.AI.Worker.csproj' = (New-Project 'Microsoft.NET.Sdk' @('Contoso.Shop.AI.UseCase.WrittenConversations', 'Contoso.Shop.AI.Utils') "    <OutputType>Exe</OutputType>`n    <AzureFunctionsVersion>v4</AzureFunctionsVersion>") })
+            $res = Invoke-Text $root
             Remove-Workspace $root
         }
 
@@ -269,19 +313,16 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
     }
 
-    Context "Schema dello scenario: stesura respinta e corretta — <difetto>" -ForEach @(
-        @{ difetto = 'un elemento senza descrizione'; spec = @{ omitElement = 'contoso_shop_ai_api__contoso_shop_ai_utils' }; motivo = 'elemento senza descrizione: contoso_shop_ai_api__contoso_shop_ai_utils' }
-        @{ difetto = 'una relazione che il codice non dichiara'; spec = @{ extraRelationship = @{ source = 'contoso_shop_ai_api__contoso_shop_ai_utils'; target = 'contoso_shop_ai_api' } }; motivo = "relazione che il codice non dichiara: contoso_shop_ai_api__contoso_shop_ai_utils -> contoso_shop_ai_api" }
-        @{ difetto = 'una persona senza relazioni'; spec = @{ people = @(@{ id = 'cliente'; name = 'Cliente'; description = 'Scrive al negozio.'; technical = $false }) }; motivo = 'persona o sistema esterno senza relazioni: cliente' }
-        @{ difetto = 'una relazione che non lega un elemento della parte'; spec = @{ externalSystems = @(@{ id = 'entra'; name = 'Entra'; description = 'Identita''.'; technical = $false }); links = @(@{ source = 'entra'; target = 'contoso_shop_ai_worker'; description = 'Autentica'; technology = '' }) }; motivo = 'relazione che non lega una persona o un sistema esterno a un elemento della parte: entra -> contoso_shop_ai_worker' }
-        @{ difetto = 'una frase troppo lunga'; spec = @{ longDescription = 'contoso_shop_ai_api' }; motivo = 'frase di contoso_shop_ai_api oltre 25 parole' }
+    Context "Schema dello scenario: stesura respinta, il modello riscrive solo le voci da riscrivere — <difetto>" -ForEach @(
+        @{ difetto = 'un elemento senza descrizione'; first = @{ omitElement = 'contoso_shop_ai_api__contoso_shop_ai_utils' }; motivo = 'elemento senza descrizione: contoso_shop_ai_api__contoso_shop_ai_utils' }
+        @{ difetto = 'una frase troppo lunga'; first = @{ longDescription = 'contoso_shop_ai_api__contoso_shop_ai_utils' }; motivo = 'frase di contoso_shop_ai_api__contoso_shop_ai_utils oltre 25 parole' }
     ) {
         BeforeAll {
-            Reset-Stub @{ $Api = @($spec, @{}) }
+            Reset-Stub @{ $Api = @($first, @{ longDescription = $Api }) }
             $root = New-Workspace (New-DescribedEngine)
-            $res = Invoke-Text $root 'Contoso.Shop.AI' -Environment @{ READABILITY_MAX_WORDS = '25' }
+            $res = Invoke-Text $root -Environment @{ READABILITY_MAX_WORDS = '25' }
             Remove-Workspace $root
-            $apiRequests = @(Get-StubRequests | Where-Object { (Get-UserMessage $_) -match "PARTE DA DESCRIVERE: $Api\b" })
+            $apiRequests = Get-UnitRequests $Api
         }
 
         It "Allora la generazione riesce" {
@@ -295,34 +336,80 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         It "E la seconda richiesta nomina il motivo" {
             Get-UserMessage $apiRequests[1] | Should -Match ([regex]::Escape($motivo))
         }
+
+        It "E la voce riscritta prende il testo della seconda stesura" {
+            $res.Text.units.$Api.elements.$Utils | Should -Be "Descrizione di $Utils."
+        }
+
+        It "E la voce accettata alla prima stesura resta" {
+            $res.Text.units.$Api.elements.$Api | Should -Be "Descrizione di $Api."
+        }
     }
 
-    Context "Scenario: testo respinto a ogni stesura" {
+    Context "Schema dello scenario: cio' che la struttura non contiene si toglie senza un'altra stesura — <difetto>" -ForEach @(
+        @{ difetto = 'una relazione che il codice non dichiara'; spec = @{ extraRelationship = @{ source = 'contoso_shop_ai_api__contoso_shop_ai_utils'; target = 'contoso_shop_ai_api' } }; motivo = "relazione che il codice non dichiara: contoso_shop_ai_api__contoso_shop_ai_utils -> contoso_shop_ai_api"; voce = 'contoso_shop_ai_api__contoso_shop_ai_utils -> contoso_shop_ai_api' }
+        @{ difetto = 'una persona senza relazioni'; spec = @{ people = @(@{ id = 'cliente'; name = 'Cliente'; description = 'Scrive al negozio.'; technical = $false }) }; motivo = 'persona o sistema esterno senza relazioni: cliente'; voce = 'cliente' }
+        @{ difetto = 'una relazione che non lega un elemento della parte'; spec = @{ externalSystems = @(@{ id = 'entra'; name = 'Entra'; description = 'Identita''.'; technical = $false }); links = @(@{ source = 'entra'; target = 'contoso_shop_ai_worker'; description = 'Autentica'; technology = '' }) }; motivo = 'relazione che non lega una persona o un sistema esterno a un elemento della parte: entra -> contoso_shop_ai_worker'; voce = 'entra' }
+    ) {
+        BeforeAll {
+            Reset-Stub @{ $Api = @($spec) }
+            $root = New-Workspace (New-DescribedEngine)
+            $res = Invoke-Text $root
+            Remove-Workspace $root
+            $apiRequests = Get-UnitRequests $Api
+        }
+
+        It "Allora la generazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E il modello riceve una sola stesura" {
+            $apiRequests.Count | Should -Be 1
+        }
+
+        It "E le correzioni nominano cio' che si e' tolto" {
+            $res.Corrections | Should -Match ([regex]::Escape("${Api}: $motivo"))
+        }
+
+        It "E il testo non contiene cio' che si e' tolto" {
+            $res.Text | ConvertTo-Json -Depth 20 | Should -Not -Match ([regex]::Escape("""$voce"""))
+        }
+    }
+
+    Context "Scenario: testo ancora da scrivere dopo l'ultima stesura" {
         BeforeAll {
             Reset-Stub @{ $Worker = @(@{ omitElement = $Worker }) }
             $root = New-Workspace (New-DescribedEngine)
-            $res = Invoke-Text $root 'Contoso.Shop.AI'
+            $res = Invoke-Text $root
             Remove-Workspace $root
         }
 
-        It "Allora la pipeline fallisce" {
-            $res.ExitCode | Should -Be 1
-        }
-
-        It "E nomina il container e il motivo" {
-            Get-Issues $res.Output | Where-Object { $_ -match "testo di $Worker respinto a ogni stesura \(elemento senza descrizione: $Worker\)" } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        It "Allora la generazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
         }
 
         It "E il modello riceve tre stesure" {
             @(Get-RequestedUnits | Where-Object { $_ -eq $Worker }).Count | Should -Be 3
         }
 
+        It "E le correzioni nominano il container e la voce" {
+            $res.Corrections | Should -Match ([regex]::Escape("${Worker}: testo ancora da scrivere dopo 3 stesure: elemento senza descrizione: $Worker"))
+        }
+
+        It "E la pipeline lo segnala come avviso" {
+            Get-Issues $res.Output 'warning' | Where-Object { $_ -match "testo ancora da scrivere dopo 3 stesure" } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+
         It "E il testo dell'altro container resta accettato" {
             $res.Text.units.$Api.elements.$Api | Should -Not -BeNullOrEmpty
         }
 
-        It "E la parte generata non si scrive" {
-            $res.Generated['contoso.shop.ai.dsl'] | Should -BeNullOrEmpty
+        It "E il testo di ""Worker"" si riscrive alla run successiva" {
+            $res.Text.units.$Worker.basis | Should -BeNullOrEmpty
+        }
+
+        It "E la parte generata si scrive" {
+            $res.Generated['contoso.shop.ai.dsl'] | Should -Not -BeNullOrEmpty
         }
     }
 
@@ -331,7 +418,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             Reset-Stub
             Set-StubStatus 503
             $root = New-Workspace (New-DescribedEngine)
-            $res = Invoke-Text $root 'Contoso.Shop.AI'
+            $res = Invoke-Text $root
             Remove-Workspace $root
             $requested = @(Get-RequestedUnits)
             Reset-Stub
@@ -356,7 +443,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             [IO.File]::WriteAllText((Join-Path $StubState 'throttle'), '4')
             $root = New-Workspace (New-DescribedEngine)
             $started = Get-Date
-            $res = Invoke-Text $root 'Contoso.Shop.AI'
+            $res = Invoke-Text $root
             $elapsed = (Get-Date) - $started
             Remove-Workspace $root
             Reset-Stub
@@ -373,20 +460,21 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
 
     Context "Scenario: generazione rilanciata" {
         BeforeAll {
-            $branch = 'c4/contoso.shop.ai'
+            $branch = 'c4/model'
             $origin = New-OriginWorkspace
             $files = New-DescribedEngine
             $files.Remove('docs/STYLE.md')
 
-            Reset-Stub @{ $Worker = @(@{ omitElement = $Worker }) }
+            Reset-Stub
+            [IO.File]::WriteAllText((Join-Path $StubState 'fail-after'), '1')
             $first = New-Clone $origin $files
-            $failed = Invoke-Text $first 'Contoso.Shop.AI' -Environment @{ PROGRESS_BRANCH = $branch }
+            $failed = Invoke-Text $first -Environment @{ PROGRESS_BRANCH = $branch }
             Remove-Workspace $first
             $saved = Get-OriginText $origin $branch
 
             Reset-Stub
             $second = New-Clone $origin $files
-            $res = Invoke-Text $second 'Contoso.Shop.AI' -Environment @{ PROGRESS_BRANCH = $branch }
+            $res = Invoke-Text $second -Environment @{ PROGRESS_BRANCH = $branch }
             Remove-Workspace $second
             $resumed = Get-OriginText $origin $branch
             Remove-Workspace $origin
@@ -413,21 +501,15 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
     }
 
-    Context "Scenario: persone e sistemi esterni" {
+    Context "Scenario: persone e sistemi esterni di piu' repository" {
         BeforeAll {
             $person = @{ id = 'cliente'; name = 'Cliente'; description = 'Scrive al negozio dal sito.'; technical = $false }
             $link = @{ source = 'cliente'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }
-            Reset-Stub @{ $Api = @(@{ people = @($person); links = @($link) }) }
-            $files = New-DescribedEngine
-            $bff = New-BffRepository
-            $bff.Keys | ForEach-Object { $files["bff/$($_ -replace '^source/', '')"] = $bff[$_] }
-            $root = New-Workspace $files
-            $res = Invoke-Text $root 'Contoso.Shop.AI'
-
-            $bffLink = @{ source = 'cliente'; target = 'contoso_shop_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' }
-            Reset-Stub @{ contoso_shop_bff_web = @(@{ people = @($person); links = @($bffLink) }, @{ links = @($bffLink) }) }
-            $bffResult = Invoke-Text $root 'Contoso.Shop.Bff.Web' -Environment @{ SOURCE_DIRECTORY = 'bff' }
-            $bffRequests = @(Get-StubRequests)
+            $webLink = @{ source = 'cliente'; target = $Web; description = 'Apre la chat'; technology = 'HTTPS' }
+            Reset-Stub @{ $Api = @(@{ people = @($person); links = @($link) }); $Web = @(@{ people = @($person); links = @($webLink) }) }
+            $root = New-Workspace (New-DescribedSystem)
+            $res = Invoke-Text $root @($Engine, $Bff)
+            $webRequests = Get-UnitRequests $Web
             Remove-Workspace $root
         }
 
@@ -435,109 +517,202 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             $res.ExitCode | Should -Be 0 -Because ($res.Output)
         }
 
-        It "E la generazione non scrive il contesto, che e' di tutti i repository" {
-            @($bffResult.Generated.Keys) | Should -Not -Contain 'context.dsl'
+        It "E il testo dei due repository e' uno solo" {
+            @($res.Text.units.PSObject.Properties.Name | Sort-Object) | Should -Be @($Api, $Worker, $Web)
         }
 
-        It "E la parte generata contiene la relazione dalla persona all'applicazione" {
+        It "E il contesto dichiara la persona una volta sola" {
+            @($res.Generated['context.dsl'] -split "`n" | Where-Object { $_ -match '^cliente = person "Cliente"' }).Count | Should -Be 1
+        }
+
+        It "E la parte del Motore contiene la relazione dalla persona all'applicazione" {
             $res.Generated['contoso.shop.ai.dsl'] | Should -Match "cliente -> $Api `"Invia i messaggi`" `"HTTPS`""
         }
 
-        It "E un altro repository trova la persona nel catalogo" {
-            Get-UserMessage $bffRequests[0] | Should -Match '- cliente = Cliente'
+        It "E il container del BFF trova la persona nel catalogo" {
+            Get-UserMessage $webRequests[0] | Should -Match '- cliente = Cliente'
         }
 
         It "E una stesura che la dichiara di nuovo si accetta senza un'altra richiesta" {
-            $bffRequests.Count | Should -Be 1
+            $webRequests.Count | Should -Be 1
         }
 
-        It "E il testo dell'altro repository non la dichiara" {
-            @($bffResult.Text.people.PSObject.Properties.Name) | Should -BeNullOrEmpty
-        }
-
-        It "E l'altro repository la collega senza dichiararla" {
-            $bffResult.Generated['contoso.shop.bff.web.dsl'] | Should -Match 'cliente -> contoso_shop_bff_web "Apre la chat" "HTTPS"'
+        It "E la parte del BFF la collega con lo stesso identificativo" {
+            $res.Generated['contoso.shop.bff.web.dsl'] | Should -Match "cliente -> $Web `"Apre la chat`" `"HTTPS`""
         }
     }
 
     Context "Scenario: una stesura dichiara con un altro identificativo una persona del catalogo" {
         BeforeAll {
             $person = @{ id = 'cliente'; name = 'Cliente'; description = 'Scrive al negozio dal sito.'; technical = $false }
-            Reset-Stub @{ $Api = @(@{ people = @($person); links = @(@{ source = 'cliente'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }) }) }
-            $files = New-DescribedEngine
-            $bff = New-BffRepository
-            $bff.Keys | ForEach-Object { $files["bff/$($_ -replace '^source/', '')"] = $bff[$_] }
-            $root = New-Workspace $files
-            Invoke-Text $root 'Contoso.Shop.AI' | Out-Null
-
             $renamed = @{ id = 'customer'; name = ' cliente '; description = 'Apre la chat.'; technical = $false }
-            Reset-Stub @{ contoso_shop_bff_web = @(@{ people = @($renamed); links = @(@{ source = 'customer'; target = 'contoso_shop_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' }) }) }
-            $res = Invoke-Text $root 'Contoso.Shop.Bff.Web' -Environment @{ SOURCE_DIRECTORY = 'bff' }
-            $requests = @(Get-StubRequests)
+            Reset-Stub @{
+                $Api = @(@{ people = @($person); links = @(@{ source = 'cliente'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }) })
+                $Web = @(@{ people = @($renamed); links = @(@{ source = 'customer'; target = $Web; description = 'Apre la chat'; technology = 'HTTPS' }) })
+            }
+            $root = New-Workspace (New-DescribedSystem)
+            $res = Invoke-Text $root @($Engine, $Bff)
+            $webRequests = Get-UnitRequests $Web
             Remove-Workspace $root
         }
 
         It "Allora la stesura si accetta senza un'altra richiesta" {
-            $requests.Count | Should -Be 1
+            $webRequests.Count | Should -Be 1
         }
 
-        It "E il testo non dichiara la persona" {
-            @($res.Text.people.PSObject.Properties.Name) | Should -BeNullOrEmpty
+        It "E il testo non dichiara l'altro identificativo" {
+            @($res.Text.people.PSObject.Properties.Name) | Should -Be @('cliente')
         }
 
         It "E la parte collega l'identificativo del catalogo" {
-            $res.Generated['contoso.shop.bff.web.dsl'] | Should -Match 'cliente -> contoso_shop_bff_web "Apre la chat" "HTTPS"'
+            $res.Generated['contoso.shop.bff.web.dsl'] | Should -Match "cliente -> $Web `"Apre la chat`" `"HTTPS`""
         }
     }
 
-    Context "Scenario: due repository dichiarano la stessa persona in run partite insieme" {
+    Context "Scenario: il catalogo unisce due voci che indicano la stessa persona" {
         BeforeAll {
-            $files = New-DescribedEngine
-            $bff = New-BffRepository
-            $bff.Keys | ForEach-Object { $files["bff/$($_ -replace '^source/', '')"] = $bff[$_] }
-
             $person = @{ id = 'cliente'; name = 'Cliente'; description = 'Scrive al negozio dal sito.'; technical = $false }
-            Reset-Stub @{ $Api = @(@{ people = @($person); links = @(@{ source = 'cliente'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }) }) }
-            $engineRoot = New-Workspace $files
-            $engine = Invoke-Text $engineRoot 'Contoso.Shop.AI'
-            $engineText = Get-Content -Raw (Join-Path $engineRoot 'docs/architecture/model/generated/contoso.shop.ai.text.json')
-            Remove-Workspace $engineRoot
-
-            $customer = @{ id = 'customer'; name = 'Cliente'; description = 'Apre la chat dal sito.'; technical = $false }
-            Reset-Stub @{ contoso_shop_bff_web = @(@{ people = @($customer); links = @(@{ source = 'customer'; target = 'contoso_shop_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' }) }) }
-            $bffRoot = New-Workspace $files
-            $first = Invoke-Text $bffRoot 'Contoso.Shop.Bff.Web' -Environment @{ SOURCE_DIRECTORY = 'bff' }
-
-            [IO.File]::WriteAllText((Join-Path $bffRoot 'docs/architecture/model/generated/contoso.shop.ai.text.json'), $engineText)
-            Reset-Stub
-            $res = Invoke-Text $bffRoot 'Contoso.Shop.Bff.Web' -Environment @{ SOURCE_DIRECTORY = 'bff' }
-            $requests = @(Get-StubRequests)
-            Remove-Workspace $bffRoot
+            $other = @{ id = 'acquirente'; name = 'Acquirente del negozio'; description = 'Apre la chat dal sito.'; technical = $false }
+            Reset-Stub @{
+                $Api       = @(@{ people = @($person); links = @(@{ source = 'cliente'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }) })
+                $Web       = @(@{ people = @($other); links = @(@{ source = 'acquirente'; target = $Web; description = 'Apre la chat'; technology = 'HTTPS' }) })
+                catalogue  = @(@{ acquirente = 'cliente' })
+            }
+            $root = New-Workspace (New-DescribedSystem)
+            $res = Invoke-Text $root @($Engine, $Bff)
+            $catalogueRequests = Get-CatalogueRequests
+            Remove-Workspace $root
         }
 
-        It "Allora le due run dichiarano la persona ognuna nel proprio testo" {
-            $engine.Text.people.cliente.name | Should -Be 'Cliente'
-            $first.Text.people.customer.name | Should -Be 'Cliente'
-        }
-
-        It "E la run successiva del repository che viene dopo per nome riesce" {
+        It "Allora la generazione riesce" {
             $res.ExitCode | Should -Be 0 -Because ($res.Output)
         }
 
-        It "E toglie la propria dichiarazione" {
-            @($res.Text.people.PSObject.Properties.Name) | Should -BeNullOrEmpty
+        It "E il controllo vede insieme le voci e i container di tutti i repository" {
+            $message = Get-UserMessage $catalogueRequests[0]
+            $message | Should -Match '- acquirente \[persona\] = Acquirente del negozio'
+            $message | Should -Match '- cliente \[persona\] = Cliente'
+            $message | Should -Match "- $Web = Web \(Contoso\.Shop\.Bff\.Web\)"
         }
 
-        It "E collega l'identificativo del testo che viene prima" {
-            $res.Generated['contoso.shop.bff.web.dsl'] | Should -Match 'cliente -> contoso_shop_bff_web "Apre la chat" "HTTPS"'
+        It "E il controllo chiede la risposta con lo schema del catalogo" {
+            $catalogueRequests[0].response_format.json_schema.name | Should -Be 'c4_model_catalogue'
         }
 
-        It "E non chiede nulla al modello" {
-            $requests | Should -BeNullOrEmpty
+        It "E il testo dichiara solo la voce che resta" {
+            @($res.Text.people.PSObject.Properties.Name) | Should -Be @('cliente')
+        }
+
+        It "E la parte del BFF collega la voce che resta" {
+            $res.Generated['contoso.shop.bff.web.dsl'] | Should -Match "cliente -> $Web `"Apre la chat`" `"HTTPS`""
+        }
+
+        It "E il contesto non dichiara la voce unita" {
+            $res.Generated['context.dsl'] | Should -Not -Match 'acquirente'
+        }
+
+        It "E le correzioni elencano l'unione" {
+            $res.Corrections | Should -Match 'catalogo: acquirente unito a cliente'
         }
     }
 
-    Context "Scenario: una relazione arriva da un'applicazione di un altro repository" {
+    Context "Scenario: il catalogo toglie un sistema esterno che e' un container del sistema" {
+        BeforeAll {
+            $portal = @{ id = 'portale'; name = 'Portale del negozio'; description = 'Riceve le richieste del sito.'; technical = $false }
+            Reset-Stub @{
+                $Api      = @(@{ externalSystems = @($portal); links = @(@{ source = 'portale'; target = $Api; description = 'Chiama le API'; technology = 'HTTPS' }) })
+                catalogue = @(@{ portale = $Web })
+            }
+            $root = New-Workspace (New-DescribedSystem)
+            $res = Invoke-Text $root @($Engine, $Bff)
+            Remove-Workspace $root
+        }
+
+        It "Allora la generazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E il testo non dichiara il sistema esterno" {
+            @($res.Text.externalSystems.PSObject.Properties.Name) | Should -BeNullOrEmpty
+        }
+
+        It "E la parte non ha la relazione con il sistema esterno" {
+            $res.Generated['contoso.shop.ai.dsl'] | Should -Not -Match '\bportale ->'
+        }
+
+        It "E le correzioni elencano il sistema esterno tolto" {
+            $res.Corrections | Should -Match "catalogo: sistema esterno portale tolto, e' il container $Web"
+        }
+    }
+
+    Context "Scenario: risposta del catalogo respinta" {
+        BeforeAll {
+            $person = @{ id = 'cliente'; name = 'Cliente'; description = 'Scrive al negozio dal sito.'; technical = $false }
+            $other = @{ id = 'acquirente'; name = 'Acquirente del negozio'; description = 'Apre la chat dal sito.'; technical = $false }
+            Reset-Stub @{
+                $Api      = @(@{ people = @($person); links = @(@{ source = 'cliente'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }) })
+                $Web      = @(@{ people = @($other); links = @(@{ source = 'acquirente'; target = $Web; description = 'Apre la chat'; technology = 'HTTPS' }) })
+                catalogue = @(@{ acquirente = 'sconosciuto'; omit = @('cliente') }, @{ acquirente = 'cliente' })
+            }
+            $root = New-Workspace (New-DescribedSystem)
+            $res = Invoke-Text $root @($Engine, $Bff)
+            $catalogueRequests = Get-CatalogueRequests
+            Remove-Workspace $root
+        }
+
+        It "Allora la generazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E il modello riceve un secondo controllo da correggere" {
+            $catalogueRequests.Count | Should -Be 2
+        }
+
+        It "E il secondo controllo nomina i motivi" {
+            $message = Get-UserMessage $catalogueRequests[1]
+            $message | Should -Match 'voce unita a un identificativo sconosciuto: acquirente -> sconosciuto'
+            $message | Should -Match 'voce del catalogo senza risposta: cliente'
+        }
+
+        It "E la risposta corretta si applica" {
+            @($res.Text.people.PSObject.Properties.Name) | Should -Be @('cliente')
+        }
+    }
+
+    Context "Scenario: una relazione parte da un'applicazione di un altro repository" {
+        BeforeAll {
+            Reset-Stub
+            $archive = 'contoso_shop_infrastructure_archivio'
+            $fragment = [ordered]@{
+                manifests     = @('main.tf')
+                containers    = @([ordered]@{ id = $archive; name = 'archivio'; codeName = 'main.tf'; sources = @(); technology = 'Terraform'; tags = @('Servizio'); properties = @{}; components = @() })
+                relationships = @([ordered]@{ source = $Api; target = $archive })
+            }
+            $files = New-DescribedEngine
+            $files['sources/Contoso.Shop.Infrastructure/main.tf'] = "resource `"azurerm_storage_account`" `"archivio`" {}`n"
+            $files['fragments/contoso.shop.infrastructure.consumer.json'] = $fragment | ConvertTo-Json -Depth 10
+            $root = New-Workspace $files
+            $res = Invoke-Text $root @($Engine, 'Contoso.Shop.Infrastructure') -Readers @{ 'Contoso.Shop.Infrastructure' = @() } -Environment @{ SOURCE_REPOSITORIES = "$C4SourceRepositories,Contoso.Shop.Infrastructure" }
+            $apiRequests = Get-UnitRequests $Api
+            $archiveRequests = Get-UnitRequests $archive
+            Remove-Workspace $root
+        }
+
+        It "Allora la generazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E la relazione la descrive il container da cui parte" {
+            Get-UserMessage $apiRequests[0] | Should -Match """target"":\s*""$archive"""
+            Get-UserMessage $archiveRequests[0] | Should -Not -Match """source"":\s*""$Api"""
+        }
+
+        It "E la parte dell'infrastruttura dice cio' che passa sulla relazione" {
+            $res.Generated['contoso.shop.infrastructure.dsl'] | Should -Match "$Api -> $archive ""Passa da $Api a $archive"""
+        }
+    }
+
+    Context "Scenario: una relazione parte da un elemento che nessun container letto contiene" {
         BeforeAll {
             Reset-Stub
             $archive = 'contoso_shop_infrastructure_archivio'
@@ -547,11 +722,11 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
                 relationships = @([ordered]@{ source = $Api; target = $archive })
             }
             $root = New-Workspace ([ordered]@{
-                    'source/main.tf'                                      = "resource `"azurerm_storage_account`" `"archivio`" {}`n"
+                    'sources/Contoso.Shop.Infrastructure/main.tf'          = "resource `"azurerm_storage_account`" `"archivio`" {}`n"
                     'docs/STYLE.md'                                       = $Guide
                     'fragments/contoso.shop.infrastructure.consumer.json' = ($fragment | ConvertTo-Json -Depth 10)
                 })
-            $res = Invoke-Text $root 'Contoso.Shop.Infrastructure' -Readers @()
+            $res = Invoke-Text $root @('Contoso.Shop.Infrastructure') -Readers @{ 'Contoso.Shop.Infrastructure' = @() } -Environment @{ SOURCE_REPOSITORIES = 'Contoso.Shop.Infrastructure' }
             $requests = @(Get-StubRequests)
             Remove-Workspace $root
         }
@@ -574,9 +749,8 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             $bffSystem = @{ id = 'bff'; name = 'Contoso.Shop.Bff.Web'; description = 'Riceve le richieste del sito.'; technical = $false }
             Reset-Stub @{ $Api = @(@{ externalSystems = @($bffSystem); links = @(@{ source = 'bff'; target = $Api; description = 'Chiama le API'; technology = 'HTTPS' }) }) }
             $root = New-Workspace (New-DescribedEngine)
-            $res = Invoke-Text $root 'Contoso.Shop.AI'
-            $requests = @(Get-StubRequests)
-            $apiRequests = @(Get-RequestedUnits | Where-Object { $_ -eq $Api })
+            $res = Invoke-Text $root
+            $apiRequests = Get-UnitRequests $Api
             Remove-Workspace $root
         }
 
@@ -592,8 +766,12 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             $res.Generated['contoso.shop.ai.dsl'] | Should -Not -Match '\bbff ->'
         }
 
+        It "E le correzioni elencano il sistema esterno tolto" {
+            $res.Corrections | Should -Match "${Api}: sistema esterno con il nome di un repository sorgente: bff"
+        }
+
         It "E il modello riceve i repository sorgente del sistema" {
-            Get-UserMessage $requests[0] | Should -Match 'REPOSITORY SORGENTE DEL SISTEMA:\n- Contoso\.Shop\.AI\n- Contoso\.Shop\.Bff\.Web\n- Contoso\.Shop\.Client\.Web'
+            Get-UserMessage $apiRequests[0] | Should -Match 'REPOSITORY SORGENTE DEL SISTEMA:\n- Contoso\.Shop\.AI\n- Contoso\.Shop\.Bff\.Web\n- Contoso\.Shop\.Client\.Web'
         }
     }
 
@@ -601,15 +779,15 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         BeforeAll {
             Reset-Stub
             $root = New-Workspace (New-DescribedEngine)
-            Invoke-Text $root 'Contoso.Shop.AI' | Out-Null
-            $path = Join-Path $root 'docs/architecture/model/generated/contoso.shop.ai.text.json'
+            Invoke-Text $root | Out-Null
+            $path = Join-Path $root 'docs/architecture/model/generated/model.text.json'
             $saved = Get-Content -Raw $path | ConvertFrom-Json
             $saved.externalSystems | Add-Member -NotePropertyName 'bff' -NotePropertyValue ([pscustomobject]@{ name = 'Contoso.Shop.Bff.Web'; description = 'Riceve le richieste del sito.'; technical = $false })
             $saved.units.$Api.links = @([pscustomobject]@{ source = 'bff'; target = $Api; description = 'Chiama le API'; technology = 'HTTPS' })
             [IO.File]::WriteAllText($path, ($saved | ConvertTo-Json -Depth 20))
 
             Reset-Stub
-            $res = Invoke-Text $root 'Contoso.Shop.AI'
+            $res = Invoke-Text $root
             $requests = @(Get-StubRequests)
             Remove-Workspace $root
         }
@@ -634,21 +812,19 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             $links = @(@{ source = 'cliente'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }, @{ source = $Api; target = 'entra'; description = 'Valida i token'; technology = 'OpenID Connect' })
             Reset-Stub @{ $Api = @(@{ people = @($person); externalSystems = @($system); links = $links }) }
             $root = New-Workspace (New-DescribedEngine)
-            $res = Invoke-Text $root 'Contoso.Shop.AI'
+            $res = Invoke-Text $root
             Remove-Workspace $root
             $dir = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-text-dsl-$(New-Guid)"
             New-Item -ItemType Directory -Force -Path (Join-Path $dir 'generated') | Out-Null
             $res.Generated.Keys | ForEach-Object { [IO.File]::WriteAllText((Join-Path $dir "generated/$_"), $res.Generated[$_]) }
-            [IO.File]::WriteAllText((Join-Path $dir 'generated/contoso.shop.ai.text.json'), ($res.Text | ConvertTo-Json -Depth 20))
-            $context = Invoke-C4Script 'C4/Export-C4Context.ps1' @{ GENERATED_DIRECTORY = (Join-Path $dir 'generated'); CONTEXT_FILE = (Join-Path $dir 'context.dsl'); DOCUMENT_LANGUAGE = ''; GATE_MODE = '' }
-            [IO.File]::WriteAllText((Join-Path $dir 'workspace.dsl'), "workspace {`n    model {`n        !include context.dsl`n        sistema = softwareSystem `"Contoso.Shop`" {`n            !include generated/contoso.shop.ai.dsl`n        }`n    }`n    views {`n        !include generated/contoso.shop.ai.views.dsl`n    }`n}`n")
+            [IO.File]::WriteAllText((Join-Path $dir 'workspace.dsl'), "workspace {`n    model {`n        !include generated/context.dsl`n        sistema = softwareSystem `"Contoso.Shop`" {`n            !include generated/contoso.shop.ai.dsl`n        }`n    }`n    views {`n        !include generated/contoso.shop.ai.views.dsl`n    }`n}`n")
             $export = Export-StructurizrWorkspace (Join-Path $dir 'workspace.dsl')
             Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
             $model = $export.Workspace.model
         }
 
-        It "Allora il contesto si scrive" {
-            $context.ExitCode | Should -Be 0 -Because ($context.Output)
+        It "Allora il contesto si scrive con la parte" {
+            $res.Generated['context.dsl'] | Should -Match 'cliente = person "Cliente"'
         }
 
         It "E il workspace che lo include si esporta senza errori" {
@@ -676,13 +852,12 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
     Context "Scenario: un container sparisce dal codice" {
         BeforeAll {
             Reset-Stub
-            $files = New-DescribedEngine
-            $root = New-Workspace $files
-            Invoke-Text $root 'Contoso.Shop.AI' | Out-Null
-            Remove-Item -Recurse -Force (Join-Path $root 'source/Contoso.Shop.AI.Worker')
+            $root = New-Workspace (New-DescribedEngine)
+            Invoke-Text $root | Out-Null
+            Remove-Item -Recurse -Force (Join-Path $root 'sources/Contoso.Shop.AI/Contoso.Shop.AI.Worker')
             Remove-Item -Recurse -Force (Join-Path $root 'fragments')
             Reset-Stub
-            $res = Invoke-Text $root 'Contoso.Shop.AI'
+            $res = Invoke-Text $root
             Remove-Workspace $root
         }
 
@@ -699,7 +874,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         BeforeAll {
             Reset-Stub
             $root = New-Workspace (New-DescribedEngine)
-            $res = Invoke-Text $root 'Contoso.Shop.AI' -Environment @{ C4_TEXT_ENDPOINT = '' }
+            $res = Invoke-Text $root -Environment @{ C4_TEXT_ENDPOINT = '' }
             Remove-Workspace $root
         }
 

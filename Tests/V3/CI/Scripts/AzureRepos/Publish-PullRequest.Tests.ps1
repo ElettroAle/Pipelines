@@ -96,7 +96,7 @@ BeforeAll {
     function Invoke-PullRequest($Checkout, [hashtable]$Environment = @{}) {
         $variables = @{
             PULL_REQUEST_PATHS = $Generated; PULL_REQUEST_BRANCH = $Branch; PULL_REQUEST_TARGET = 'main'
-            PULL_REQUEST_TITLE = 'docs: C4 model of Contoso.Shop.AI'; PULL_REQUEST_DESCRIPTION = 'Parte rigenerata.'
+            PULL_REQUEST_TITLE = 'docs: C4 model of Contoso.Shop.AI'; PULL_REQUEST_DESCRIPTION = 'Parte rigenerata.'; PULL_REQUEST_DESCRIPTION_FILE = ''
             PULL_REQUEST_ORIGIN_DIRECTORY = ''; PULL_REQUEST_ORIGIN_LABEL = ''; PULL_REQUEST_MERGE_STRATEGY = ''
             PULL_REQUEST_AUTO_COMPLETE = ''; PULL_REQUEST_DELETE_SOURCE_BRANCH = ''; PULL_REQUEST_DRAFT = ''
             SYSTEM_COLLECTIONURI = "$StubEndpoint/org/"; SYSTEM_TEAMPROJECT = 'Contoso Shop'; SYSTEM_ACCESSTOKEN = ''
@@ -287,6 +287,24 @@ Describe 'Publish-PullRequest' {
         Write-Files $checkout.Clone @{ "$Generated/contoso.shop.ai.dsl" = 'nuova' }
         Invoke-PullRequest $checkout @{ PULL_REQUEST_DESCRIPTION = 'x' * 5000 } | Out-Null
         (Get-StubRequests | Where-Object method -EQ 'POST').body.description.Length | Should -Be 4000
+    }
+
+    It 'aggiunge alla descrizione il file scritto da un passo precedente' {
+        Reset-Stub
+        $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'vecchia' }
+        Write-Files $checkout.Clone @{ "$Generated/contoso.shop.ai.dsl" = 'nuova' }
+        $notes = Join-Path (New-Directory 'notes') 'correzioni.md'
+        [IO.File]::WriteAllText($notes, "Correzioni:`n- tolto un sistema esterno`n")
+        Invoke-PullRequest $checkout @{ PULL_REQUEST_DESCRIPTION_FILE = $notes } | Out-Null
+        (Get-StubRequests | Where-Object method -EQ 'POST').body.description | Should -Be "Parte rigenerata.`n`nCorrezioni:`n- tolto un sistema esterno"
+    }
+
+    It 'non cambia la descrizione se il file non esiste' {
+        Reset-Stub
+        $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'vecchia' }
+        Write-Files $checkout.Clone @{ "$Generated/contoso.shop.ai.dsl" = 'nuova' }
+        Invoke-PullRequest $checkout @{ PULL_REQUEST_DESCRIPTION_FILE = (Join-Path ([IO.Path]::GetTempPath()) "assente-$(New-Guid).md") } | Out-Null
+        (Get-StubRequests | Where-Object method -EQ 'POST').body.description | Should -Be 'Parte rigenerata.'
     }
 
     It 'cita il commit d''origine con l''etichetta indicata' {

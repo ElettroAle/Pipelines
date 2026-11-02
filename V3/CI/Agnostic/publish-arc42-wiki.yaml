@@ -19,8 +19,7 @@
 #                        dell'architettura nella lingua del documento, es. Architettura o Architecture)
 #   docsDirectory      → cartella delle sezioni (default: docs/architecture)
 #   decisionsDirectory → cartella degli ADR (default: docs/decisions)
-#   composeSteps       → step che compongono il documento prima della pubblicazione, es.
-#                        CI/Common/Steps/c4-context.yaml (default: nessuno)
+#   composeSteps       → step che compongono il documento prima della pubblicazione (default: nessuno)
 #   pool               → pool del job (default: hosted ubuntu-latest)
 #
 # ─────────────────────────────────────────────────────────────────────────────
