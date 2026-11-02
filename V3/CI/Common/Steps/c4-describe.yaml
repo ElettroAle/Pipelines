@@ -2,21 +2,24 @@
 
 # ── CI Step: C4 model text ────────────────────────────────────────────────────
 #
-# Testo della parte del modello C4 che nasce da un repository sorgente (V3/CI/Scripts/C4/Write-C4ModelText.ps1):
-# la descrizione di ogni elemento, cio' che passa su ogni relazione, le persone e i sistemi esterni con
-# le loro relazioni, scritti da un modello Azure OpenAI leggendo i frammenti dei lettori (c4-read-*.yaml),
-# il codice degli elementi, la guida di stile e i documenti di contesto. Ogni stesura passa controlli
-# deterministici e, se li fallisce, torna al modello con i motivi; oltre maxDrafts stesure la pipeline
-# fallisce. Il testo accettato si salva in generatedDirectory e, con progressBranch, sul ramo, un
-# container alla volta: rilanciata, la pipeline riparte dai container senza testo accettato. Il testo di
-# un container la cui struttura non cambia resta quello accettato. Lo compone c4-generate.yaml, da
-# eseguire dopo questo step. L'accesso al modello passa dalla service connection con un token Entra ID,
+# Testo del modello C4 di tutto il sistema (V3/CI/Scripts/C4/Write-C4ModelText.ps1): la descrizione di
+# ogni elemento, cio' che passa su ogni relazione, le persone e i sistemi esterni con le loro relazioni,
+# scritti da un modello Azure OpenAI leggendo i frammenti dei lettori di tutti i repository sorgente
+# (c4-read-*.yaml), il codice degli elementi, la guida di stile e i documenti di contesto. Un solo testo,
+# cosi' ogni persona, sistema esterno e applicazione compare una volta: dopo i container il modello
+# rilegge insieme il catalogo di persone e sistemi esterni e unisce le voci che indicano la stessa cosa.
+# Una stesura respinta non ferma la pipeline: cio' che la struttura non contiene si toglie e si elenca in
+# correctionsFile, i testi mancanti e le frasi troppo lunghe tornano al modello, che riscrive solo quelli
+# fino a maxDrafts stesure. Il testo accettato si salva in generatedDirectory e, con progressBranch, sul
+# ramo, un container alla volta: rilanciata, la pipeline riparte dai container senza testo accettato. Il
+# testo di un container la cui struttura non cambia resta quello accettato. Lo compone c4-generate.yaml,
+# da eseguire dopo questo step per ogni repository sorgente. L'accesso al modello passa dalla service connection con un token Entra ID,
 # senza chiavi; con progressBranch l'identita' della build deve poter contribuire al repository e creare
 # rami.
 #
 # Riusato da:
-#   il consumer, nella pipeline della documentazione che rigenera la parte di un repository sorgente
-#   dopo la sua integrazione, fra i passi di lettura delle sue tecnologie e c4-generate.yaml
+#   il consumer, nella pipeline della documentazione che rigenera il modello dopo l'integrazione di un
+#   repository sorgente, fra i passi di lettura di tutti i repository sorgente e c4-generate.yaml
 #
 # Parametri
 # ─────────
@@ -25,11 +28,12 @@
 #   endpoint            → endpoint della risorsa Azure OpenAI, es. https://<nome>.openai.azure.com [REQUIRED se mode non e' off]
 #   model               → nome del deployment del modello [REQUIRED se mode non e' off]
 #   reasoningEffort     → ragionamento del modello (default: high)
-#   maxDrafts           → stesure massime per container (default: 3)
-#   sourceRepository    → nome del repository sorgente, es. $(Build.Repository.Name)
-#   sourceRepositories  → repository sorgente del documento separati da virgola: le loro applicazioni non
-#                         sono sistemi esterni (default: nessuno)
-#   sourceDirectory     → checkout del repository sorgente (default: $(Build.SourcesDirectory))
+#   maxDrafts           → stesure massime per container e per il controllo del catalogo (default: 3)
+#   sourceRepositories  → repository sorgente del documento separati da virgola [REQUIRED]
+#   sourcesDirectory    → cartella con il checkout di ogni repository sorgente in <repository>
+#                         (default: $(Pipeline.Workspace)/sources)
+#   correctionsFile     → file in cui si elencano le correzioni della generazione, ad esempio per la PR
+#                         (default: $(Agent.TempDirectory)/c4-corrections.md)
 #   fragmentDirectory   → cartella dei frammenti dei lettori (default: $(Agent.TempDirectory)/c4-fragments)
 #   generatedDirectory  → cartella delle parti generate, relativa a workingDirectory (default: docs/architecture/model/generated)
 #   guide               → guida di stile del documento (default: docs/STYLE.md)
@@ -68,17 +72,16 @@ parameters:
     type: number
     default: 3
 
-  - name: sourceRepository
-    type: string
-    default: '$(Build.Repository.Name)'
-
   - name: sourceRepositories
     type: string
-    default: ''
 
-  - name: sourceDirectory
+  - name: sourcesDirectory
     type: string
-    default: '$(Build.SourcesDirectory)'
+    default: '$(Pipeline.Workspace)/sources'
+
+  - name: correctionsFile
+    type: string
+    default: '$(Agent.TempDirectory)/c4-corrections.md'
 
   - name: fragmentDirectory
     type: string
@@ -123,7 +126,7 @@ steps:
     - template: ensure-azure-cli.yaml
 
     - task: AzureCLI@2
-      displayName: 'C4 model text of ${{ parameters.sourceRepository }} (${{ parameters.mode }})'
+      displayName: 'C4 model text (${{ parameters.mode }})'
       inputs:
         azureSubscription: ${{ parameters.serviceConnection }}
         scriptType: pscore
@@ -132,10 +135,9 @@ steps:
         workingDirectory: '${{ parameters.workingDirectory }}'
       env:
         GATE_MODE: ${{ parameters.mode }}
-        SOURCE_REPOSITORY: ${{ parameters.sourceRepository }}
-        SOURCE_DIRECTORY: ${{ parameters.sourceDirectory }}
-        ${{ if ne(parameters.sourceRepositories, '') }}:
-          SOURCE_REPOSITORIES: ${{ parameters.sourceRepositories }}
+        SOURCE_REPOSITORIES: ${{ parameters.sourceRepositories }}
+        SOURCES_DIRECTORY: ${{ parameters.sourcesDirectory }}
+        C4_CORRECTIONS_FILE: ${{ parameters.correctionsFile }}
         FRAGMENT_DIRECTORY: ${{ parameters.fragmentDirectory }}
         GENERATED_DIRECTORY: ${{ parameters.generatedDirectory }}
         STYLE_GUIDE: ${{ parameters.guide }}

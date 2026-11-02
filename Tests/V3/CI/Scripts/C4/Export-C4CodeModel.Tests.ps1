@@ -103,7 +103,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         BeforeAll {
             $files = if ($repository -eq 'Contoso.Shop.AI') { New-EngineRepository } else { New-BffRepository }
             $res = Invoke-Generation $files $repository
-            $dsl = @($res.Generated.Values)[0]
+            $dsl = $res.Generated["$($repository.ToLowerInvariant()).dsl"]
         }
 
         It "Allora l'elemento del progetto si chiama <nome>" {
@@ -182,8 +182,37 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
             $res.Generated['contoso.shop.ai.dsl'] | Should -Be "# parte del Motore`n"
         }
 
-        It "E non scrive il contesto, che e' di tutti i repository" {
-            @($res.Generated.Keys) | Should -Not -Contain 'context.dsl'
+        It "E scrive il contesto dal testo di tutto il sistema" {
+            $res.Generated['context.dsl'] | Should -Match '^// Persone e sistemi esterni del modello C4'
+        }
+    }
+
+    Context "Scenario: persone e sistemi esterni dal testo di tutto il sistema" {
+        BeforeAll {
+            $text = [ordered]@{
+                units           = [ordered]@{
+                    contoso_shop_bff_web = [ordered]@{ basis = ''; elements = @{}; relationships = @{}; links = @(@{ source = 'cliente'; target = 'contoso_shop_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' }) }
+                    contoso_shop_ai_api  = [ordered]@{ basis = ''; elements = @{}; relationships = @{}; links = @(@{ source = 'contoso_shop_ai_api'; target = 'entra'; description = 'Valida i token'; technology = '' }) }
+                }
+                people          = [ordered]@{ cliente = @{ name = 'Cliente'; description = 'Scrive al negozio.'; technical = $false } }
+                externalSystems = [ordered]@{ entra = @{ name = 'Entra External ID'; description = 'Autentica i clienti.'; technical = $true } }
+            }
+            $files = New-BffRepository
+            $files['docs/architecture/model/generated/model.text.json'] = $text | ConvertTo-Json -Depth 10
+            $res = Invoke-Generation $files 'Contoso.Shop.Bff.Web'
+        }
+
+        It "Allora il contesto dichiara la persona" {
+            $res.Generated['context.dsl'] | Should -Match 'cliente = person "Cliente" "Scrive al negozio\." ""'
+        }
+
+        It "E il contesto dichiara il sistema esterno con i suoi tag" {
+            $res.Generated['context.dsl'] | Should -Match 'entra = softwareSystem "Entra External ID" "Autentica i clienti\." "Esterno,Tecnico"'
+        }
+
+        It "E la parte contiene solo le relazioni con persone e sistemi esterni dei suoi container" {
+            $res.Generated['contoso.shop.bff.web.dsl'] | Should -Match 'cliente -> contoso_shop_bff_web "Apre la chat" "HTTPS"'
+            $res.Generated['contoso.shop.bff.web.dsl'] | Should -Not -Match 'contoso_shop_ai_api -> entra'
         }
     }
 

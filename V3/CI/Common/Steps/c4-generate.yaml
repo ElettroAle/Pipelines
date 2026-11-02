@@ -6,14 +6,14 @@
 # un file Structurizr DSL per repository in generatedDirectory, scritto dai frammenti che i passi di
 # lettura delle tecnologie (c4-read-*.yaml) hanno lasciato in fragmentDirectory. Non conosce le
 # tecnologie: un file di progetto del repository che nessun lettore ha letto ferma la generazione.
-# Compone il testo che c4-describe.yaml ha scritto per il repository; persone e sistemi esterni li scrive
-# c4-context.yaml quando il documento si compone, cosi' scrive solo i file del repository.
+# Compone il testo che c4-describe.yaml ha scritto per tutto il sistema, e scrive anche le viste dei
+# componenti del repository e context.dsl con le persone e i sistemi esterni del testo.
 # Con generationMode 'check' i file del documento si confrontano con quelli che la generazione produce.
 # Tag e proprieta' seguono DOCUMENT_LANGUAGE (document-language.yaml).
 #
 # Riusato da:
-#   il consumer, nella pipeline della documentazione che rigenera la parte di un repository sorgente
-#   dopo la sua integrazione o la verifica sulle PR, dopo i passi di lettura delle sue tecnologie
+#   il consumer, nella pipeline della documentazione che rigenera il modello dopo l'integrazione di un
+#   repository sorgente o la verifica sulle PR, una volta per repository sorgente dopo i passi di lettura
 #
 # Parametri
 # ─────────
