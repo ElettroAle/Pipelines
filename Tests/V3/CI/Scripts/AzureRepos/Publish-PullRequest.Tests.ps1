@@ -25,7 +25,7 @@ BeforeAll {
         param($Endpoint, $State, $Script)
         & $Script $Endpoint $State
     }
-    $script:Branch = 'c4/aidea.dxp.ai'
+    $script:Branch = 'c4/contoso.shop.ai'
     $script:Generated = 'docs/architecture/model/generated'
     $script:Workspaces = [System.Collections.Generic.List[string]]::new()
 
@@ -96,10 +96,10 @@ BeforeAll {
     function Invoke-PullRequest($Checkout, [hashtable]$Environment = @{}) {
         $variables = @{
             PULL_REQUEST_PATHS = $Generated; PULL_REQUEST_BRANCH = $Branch; PULL_REQUEST_TARGET = 'main'
-            PULL_REQUEST_TITLE = 'docs: C4 model of Aidea.Dxp.AI'; PULL_REQUEST_DESCRIPTION = 'Parte rigenerata.'
+            PULL_REQUEST_TITLE = 'docs: C4 model of Contoso.Shop.AI'; PULL_REQUEST_DESCRIPTION = 'Parte rigenerata.'
             PULL_REQUEST_ORIGIN_DIRECTORY = ''; PULL_REQUEST_ORIGIN_LABEL = ''; PULL_REQUEST_MERGE_STRATEGY = ''
             PULL_REQUEST_AUTO_COMPLETE = ''; PULL_REQUEST_DELETE_SOURCE_BRANCH = ''; PULL_REQUEST_DRAFT = ''
-            SYSTEM_COLLECTIONURI = "$StubEndpoint/org/"; SYSTEM_TEAMPROJECT = 'Aidea Dxp'; SYSTEM_ACCESSTOKEN = ''
+            SYSTEM_COLLECTIONURI = "$StubEndpoint/org/"; SYSTEM_TEAMPROJECT = 'Contoso Shop'; SYSTEM_ACCESSTOKEN = ''
             BUILD_REQUESTEDFOR = ''; BUILD_REQUESTEDFOREMAIL = ''
         }
         $Environment.Keys | ForEach-Object { $variables[$_] = $Environment[$_] }
@@ -143,9 +143,9 @@ Describe 'Publish-PullRequest' {
     Context 'con una parte cambiata e nessun ramo' {
         BeforeAll {
             Reset-Stub
-            $checkout = New-Checkout @{ "$Generated/aidea.dxp.ai.dsl" = 'vecchia'; 'README.md' = 'leggimi' }
-            Write-Files $checkout.Clone @{ "$Generated/aidea.dxp.ai.dsl" = 'nuova'; 'README.md' = 'modificato a parte' }
-            $origin = New-OriginRepository 'Aidea.Dxp.AI'
+            $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'vecchia'; 'README.md' = 'leggimi' }
+            Write-Files $checkout.Clone @{ "$Generated/contoso.shop.ai.dsl" = 'nuova'; 'README.md' = 'modificato a parte' }
+            $origin = New-OriginRepository 'Contoso.Shop.AI'
             $result = Invoke-PullRequest $checkout @{ PULL_REQUEST_ORIGIN_DIRECTORY = $origin }
             $requests = Get-StubRequests
             $created = $requests | Where-Object method -EQ 'POST'
@@ -155,7 +155,7 @@ Describe 'Publish-PullRequest' {
         It 'termina senza errori' { $result.ExitCode | Should -Be 0 -Because $result.Output }
 
         It 'porta la parte nuova sul ramo' {
-            Get-OriginFile $checkout "refs/heads/$Branch" "$Generated/aidea.dxp.ai.dsl" | Should -Be 'nuova'
+            Get-OriginFile $checkout "refs/heads/$Branch" "$Generated/contoso.shop.ai.dsl" | Should -Be 'nuova'
         }
 
         It 'non porta sul ramo i file fuori dalle cartelle indicate' {
@@ -163,11 +163,11 @@ Describe 'Publish-PullRequest' {
         }
 
         It 'usa il titolo come messaggio del commit' {
-            (Get-BranchMessages $checkout)[0] | Should -Be 'docs: C4 model of Aidea.Dxp.AI'
+            (Get-BranchMessages $checkout)[0] | Should -Be 'docs: C4 model of Contoso.Shop.AI'
         }
 
         It 'chiama l''API del repository di origin nel progetto della pipeline' {
-            $created.url | Should -Match '^/org/Aidea%20Dxp/_apis/git/repositories/Docs\.Repo/pullrequests\?api-version='
+            $created.url | Should -Match '^/org/Contoso%20Shop/_apis/git/repositories/Docs\.Repo/pullrequests\?api-version='
         }
 
         It 'apre la PR dal ramo verso la destinazione' {
@@ -175,10 +175,10 @@ Describe 'Publish-PullRequest' {
             $created.body.targetRefName | Should -Be 'refs/heads/main'
         }
 
-        It 'da'' alla PR il titolo indicato' { $created.body.title | Should -Be 'docs: C4 model of Aidea.Dxp.AI' }
+        It 'da'' alla PR il titolo indicato' { $created.body.title | Should -Be 'docs: C4 model of Contoso.Shop.AI' }
 
         It 'cita nella descrizione l''ultimo commit del repository d''origine' {
-            $created.body.description | Should -Match '^Parte rigenerata\.\n\nOrigin: Merged PR 42: nuovo endpoint delle conversazioni \(Aidea\.Dxp\.AI@[0-9a-f]{8}\)$'
+            $created.body.description | Should -Match '^Parte rigenerata\.\n\nOrigin: Merged PR 42: nuovo endpoint delle conversazioni \(Contoso\.Shop\.AI@[0-9a-f]{8}\)$'
         }
 
         It 'attiva il completamento automatico a nome dell''identita'' che ha creato la PR' {
@@ -197,7 +197,7 @@ Describe 'Publish-PullRequest' {
     Context 'con la parte uguale a quella della destinazione' {
         BeforeAll {
             Reset-Stub
-            $checkout = New-Checkout @{ "$Generated/aidea.dxp.ai.dsl" = 'uguale' }
+            $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'uguale' }
             $result = Invoke-PullRequest $checkout
         }
 
@@ -211,7 +211,7 @@ Describe 'Publish-PullRequest' {
     Context 'con un ramo rimasto senza differenze e senza PR' {
         BeforeAll {
             Reset-Stub
-            $checkout = New-Checkout @{ "$Generated/aidea.dxp.ai.dsl" = 'uguale' }
+            $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'uguale' }
             Push-Branch $checkout @{ 'altro.md' = 'avanzo' } 'avanzo di una pipeline precedente'
             $result = Invoke-PullRequest $checkout
         }
@@ -224,28 +224,28 @@ Describe 'Publish-PullRequest' {
     Context 'con il ramo che porta gia'' il testo salvato da un passo precedente' {
         BeforeAll {
             Reset-Stub
-            $checkout = New-Checkout @{ "$Generated/aidea.dxp.ai.dsl" = 'vecchia' }
-            Push-Branch $checkout @{ "$Generated/aidea.dxp.ai.text.json" = '{"testo":1}' } 'docs: text of api in the C4 model of Aidea.Dxp.AI'
-            Write-Files $checkout.Clone @{ "$Generated/aidea.dxp.ai.dsl" = 'nuova'; "$Generated/aidea.dxp.ai.text.json" = '{"testo":1}' }
+            $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'vecchia' }
+            Push-Branch $checkout @{ "$Generated/contoso.shop.ai.text.json" = '{"testo":1}' } 'docs: text of api in the C4 model of Contoso.Shop.AI'
+            Write-Files $checkout.Clone @{ "$Generated/contoso.shop.ai.dsl" = 'nuova'; "$Generated/contoso.shop.ai.text.json" = '{"testo":1}' }
             $result = Invoke-PullRequest $checkout
         }
 
         It 'termina senza errori' { $result.ExitCode | Should -Be 0 -Because $result.Output }
 
         It 'aggiunge il commit sopra quelli del ramo' {
-            Get-BranchMessages $checkout | Select-Object -First 2 | Should -Be @('docs: C4 model of Aidea.Dxp.AI', 'docs: text of api in the C4 model of Aidea.Dxp.AI')
+            Get-BranchMessages $checkout | Select-Object -First 2 | Should -Be @('docs: C4 model of Contoso.Shop.AI', 'docs: text of api in the C4 model of Contoso.Shop.AI')
         }
 
         It 'porta sul ramo sia il testo sia la parte' {
-            Get-OriginFile $checkout "refs/heads/$Branch" "$Generated/aidea.dxp.ai.text.json" | Should -Be '{"testo":1}'
-            Get-OriginFile $checkout "refs/heads/$Branch" "$Generated/aidea.dxp.ai.dsl" | Should -Be 'nuova'
+            Get-OriginFile $checkout "refs/heads/$Branch" "$Generated/contoso.shop.ai.text.json" | Should -Be '{"testo":1}'
+            Get-OriginFile $checkout "refs/heads/$Branch" "$Generated/contoso.shop.ai.dsl" | Should -Be 'nuova'
         }
     }
 
     Context 'con un file che la pipeline non scrive piu''' {
         BeforeAll {
             Reset-Stub
-            $checkout = New-Checkout @{ "$Generated/aidea.dxp.ai.dsl" = 'parte'; "$Generated/vecchio.dsl" = 'da togliere' }
+            $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'parte'; "$Generated/vecchio.dsl" = 'da togliere' }
             Remove-Item (Join-Path $checkout.Clone "$Generated/vecchio.dsl")
             $result = Invoke-PullRequest $checkout
         }
@@ -260,8 +260,8 @@ Describe 'Publish-PullRequest' {
     Context 'con una PR gia'' attiva sul ramo' {
         BeforeAll {
             Reset-Stub -Active @(@{ pullRequestId = 77; createdBy = @{ id = 'build-identity' } })
-            $checkout = New-Checkout @{ "$Generated/aidea.dxp.ai.dsl" = 'vecchia' }
-            Write-Files $checkout.Clone @{ "$Generated/aidea.dxp.ai.dsl" = 'nuova' }
+            $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'vecchia' }
+            Write-Files $checkout.Clone @{ "$Generated/contoso.shop.ai.dsl" = 'nuova' }
             $result = Invoke-PullRequest $checkout
             $requests = Get-StubRequests
         }
@@ -283,17 +283,17 @@ Describe 'Publish-PullRequest' {
 
     It 'tronca la descrizione al limite di Azure Repos' {
         Reset-Stub
-        $checkout = New-Checkout @{ "$Generated/aidea.dxp.ai.dsl" = 'vecchia' }
-        Write-Files $checkout.Clone @{ "$Generated/aidea.dxp.ai.dsl" = 'nuova' }
+        $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'vecchia' }
+        Write-Files $checkout.Clone @{ "$Generated/contoso.shop.ai.dsl" = 'nuova' }
         Invoke-PullRequest $checkout @{ PULL_REQUEST_DESCRIPTION = 'x' * 5000 } | Out-Null
         (Get-StubRequests | Where-Object method -EQ 'POST').body.description.Length | Should -Be 4000
     }
 
     It 'cita il commit d''origine con l''etichetta indicata' {
         Reset-Stub
-        $checkout = New-Checkout @{ "$Generated/aidea.dxp.ai.dsl" = 'vecchia' }
-        Write-Files $checkout.Clone @{ "$Generated/aidea.dxp.ai.dsl" = 'nuova' }
-        $origin = New-OriginRepository 'Aidea.Dxp.AI'
+        $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'vecchia' }
+        Write-Files $checkout.Clone @{ "$Generated/contoso.shop.ai.dsl" = 'nuova' }
+        $origin = New-OriginRepository 'Contoso.Shop.AI'
         Invoke-PullRequest $checkout @{ PULL_REQUEST_ORIGIN_DIRECTORY = $origin; PULL_REQUEST_ORIGIN_LABEL = 'Origine' } | Out-Null
         (Get-StubRequests | Where-Object method -EQ 'POST').body.description | Should -Match '\n\nOrigine: Merged PR 42: '
     }
@@ -301,8 +301,8 @@ Describe 'Publish-PullRequest' {
     Context 'senza completamento automatico, senza cancellare il ramo e come bozza' {
         BeforeAll {
             Reset-Stub
-            $checkout = New-Checkout @{ "$Generated/aidea.dxp.ai.dsl" = 'vecchia' }
-            Write-Files $checkout.Clone @{ "$Generated/aidea.dxp.ai.dsl" = 'nuova' }
+            $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'vecchia' }
+            Write-Files $checkout.Clone @{ "$Generated/contoso.shop.ai.dsl" = 'nuova' }
             $result = Invoke-PullRequest $checkout @{ PULL_REQUEST_AUTO_COMPLETE = 'False'; PULL_REQUEST_DELETE_SOURCE_BRANCH = 'False'; PULL_REQUEST_DRAFT = 'True' }
             $requests = Get-StubRequests
             $created = $requests | Where-Object method -EQ 'POST'
@@ -320,8 +320,8 @@ Describe 'Publish-PullRequest' {
 
     It 'usa la strategia di completamento indicata' {
         Reset-Stub
-        $checkout = New-Checkout @{ "$Generated/aidea.dxp.ai.dsl" = 'vecchia' }
-        Write-Files $checkout.Clone @{ "$Generated/aidea.dxp.ai.dsl" = 'nuova' }
+        $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'vecchia' }
+        Write-Files $checkout.Clone @{ "$Generated/contoso.shop.ai.dsl" = 'nuova' }
         Invoke-PullRequest $checkout @{ PULL_REQUEST_MERGE_STRATEGY = 'squash' } | Out-Null
         (Get-StubRequests | Where-Object method -EQ 'PATCH').body.completionOptions.mergeStrategy | Should -Be 'squash'
     }
@@ -329,8 +329,8 @@ Describe 'Publish-PullRequest' {
     Context 'con l''API che risponde con un errore' {
         BeforeAll {
             Reset-Stub -Status 500
-            $checkout = New-Checkout @{ "$Generated/aidea.dxp.ai.dsl" = 'vecchia' }
-            Write-Files $checkout.Clone @{ "$Generated/aidea.dxp.ai.dsl" = 'nuova' }
+            $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'vecchia' }
+            Write-Files $checkout.Clone @{ "$Generated/contoso.shop.ai.dsl" = 'nuova' }
             $result = Invoke-PullRequest $checkout
         }
 
@@ -341,7 +341,7 @@ Describe 'Publish-PullRequest' {
 
     It 'fallisce senza il ramo' {
         Reset-Stub
-        $checkout = New-Checkout @{ "$Generated/aidea.dxp.ai.dsl" = 'vecchia' }
+        $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'vecchia' }
         $result = Invoke-PullRequest $checkout @{ PULL_REQUEST_BRANCH = '' }
         $result.ExitCode | Should -Be 1
         $result.Output | Should -Match 'PULL_REQUEST_PATHS, PULL_REQUEST_BRANCH e PULL_REQUEST_TITLE sono obbligatori'

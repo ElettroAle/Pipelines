@@ -17,7 +17,7 @@ Describe "Lettore Angular 18 del modello C4" {
 
     Context "Scenario: il frammento dell'applicazione Angular" {
         BeforeAll {
-            $res = Invoke-C4Reader (New-ClientRepository) 'Aidea.Dxp.Client.Web' 'angular18'
+            $res = Invoke-C4Reader (New-ClientRepository) 'Contoso.Shop.Client.Web' 'angular18'
         }
 
         It "Allora la lettura riesce" {
@@ -36,7 +36,7 @@ Describe "Lettore Angular 18 del modello C4" {
     Context "Schema dello scenario: caso Angular che il lettore Angular 18 non legge — <elemento>" -ForEach @(
         @{
             elemento = 'ui-kit'
-            Build    = { $f = New-ClientRepository; $f['source/angular.json'] = '{ "projects": { "aidea-dxp-client-web": { "projectType": "application", "sourceRoot": "src" }, "ui-kit": { "projectType": "library", "sourceRoot": "projects/ui-kit/src" } } }'; $f }
+            Build    = { $f = New-ClientRepository; $f['source/angular.json'] = '{ "projects": { "contoso-shop-client-web": { "projectType": "application", "sourceRoot": "src" }, "ui-kit": { "projectType": "library", "sourceRoot": "projects/ui-kit/src" } } }'; $f }
         }
         @{
             elemento = 'angular.json'
@@ -64,7 +64,7 @@ Describe "Lettore Angular 18 del modello C4" {
         }
     ) {
         BeforeAll {
-            $res = Invoke-C4Reader (& $Build) 'Aidea.Dxp.Client.Web' 'angular18'
+            $res = Invoke-C4Reader (& $Build) 'Contoso.Shop.Client.Web' 'angular18'
         }
 
         It "Allora la lettura fallisce" {
@@ -72,7 +72,7 @@ Describe "Lettore Angular 18 del modello C4" {
         }
 
         It "E nomina il repository e l'elemento" {
-            Get-Issues $res.Output | Where-Object { $_ -match 'Aidea\.Dxp\.Client\.Web' -and $_.Contains($elemento) } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+            Get-Issues $res.Output | Where-Object { $_ -match 'Contoso\.Shop\.Client\.Web' -and $_.Contains($elemento) } | Should -Not -BeNullOrEmpty -Because ($res.Output)
         }
 
         It "E non lascia il frammento" {
