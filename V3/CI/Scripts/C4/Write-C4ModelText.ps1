@@ -356,11 +356,14 @@ function Get-RelationshipRejections($Unit, $Draft) {
     }
 }
 
+function Get-ActorKey([string]$Name) {
+    return ($Name -replace '\s+', ' ').Trim().ToLowerInvariant()
+}
+
 function Get-ActorRejections($Draft, [hashtable]$Catalogue, [string[]]$GeneratedIds) {
     $actors = @($Draft.people) + @($Draft.externalSystems) | Where-Object { $_ }
     foreach ($actor in $actors) {
         if ($actor.id -notmatch $IdentifierPattern) { "identificativo non valido: $($actor.id)" }
-        if ($Catalogue.ContainsKey($actor.id)) { "persona o sistema esterno gia' nel catalogo: $($actor.id)" }
         if ($GeneratedIds -contains $actor.id) { "persona o sistema esterno con l'identificativo di un elemento del codice: $($actor.id)" }
         if (-not "$($actor.name)".Trim()) { "persona o sistema esterno senza nome: $($actor.id)" }
         if (-not "$($actor.description)".Trim()) { "persona o sistema esterno senza descrizione: $($actor.id)" }
@@ -369,6 +372,25 @@ function Get-ActorRejections($Draft, [hashtable]$Catalogue, [string[]]$Generated
     $actors | Group-Object id | Where-Object Count -GT 1 | ForEach-Object { "persona o sistema esterno dichiarato piu' volte: $($_.Name)" }
     $linked = @($Draft.links | ForEach-Object { $_.source; $_.target })
     $actors | Where-Object { $linked -notcontains $_.id } | ForEach-Object { "persona o sistema esterno senza relazioni: $($_.id)" }
+}
+
+# Una persona o un sistema esterno che il catalogo ha gia', per identificativo o per nome, non si
+# dichiara di nuovo: la stesura lo collega con l'identificativo del catalogo invece di essere respinta,
+# cosi' una ripetizione del modello non costa una stesura ne' ferma la run.
+function Merge-CatalogueActors($Draft, [hashtable]$Catalogue) {
+    $catalogueIds = @{}
+    $Catalogue.GetEnumerator() | ForEach-Object { $catalogueIds[$_.Key] = $_.Key; $catalogueIds[(Get-ActorKey $_.Value.name)] = $_.Key }
+    foreach ($part in 'people', 'externalSystems') {
+        $kept = foreach ($actor in @($Draft.$part | Where-Object { $_ })) {
+            $known = if ($Catalogue.ContainsKey($actor.id)) { $actor.id } else { $catalogueIds[(Get-ActorKey $actor.name)] }
+            if (-not $known) { $actor; continue }
+            foreach ($link in @($Draft.links | Where-Object { $_ })) {
+                if ($link.source -eq $actor.id) { $link.source = $known }
+                if ($link.target -eq $actor.id) { $link.target = $known }
+            }
+        }
+        $Draft.$part = @($kept)
+    }
 }
 
 function Get-LinkRejections($Unit, $Draft, [hashtable]$Catalogue) {
@@ -411,6 +433,40 @@ function Add-Actors($Text, $Draft) {
     }
 }
 
+# Due run partite insieme non vedono l'una il testo dell'altra e possono dichiarare la stessa persona o lo
+# stesso sistema esterno. Appartiene al testo che viene prima per nome: questo repository toglie la
+# propria dichiarazione e collega l'identificativo di quel testo, senza chiedere al modello.
+function Get-EarlierActors {
+    $own = Get-TextFileName
+    $earlier = Get-ChildItem -Path $GeneratedDirectory -Filter '*.text.json' -File -ErrorAction SilentlyContinue |
+        Where-Object { [string]::CompareOrdinal($_.Name, $own) -lt 0 }
+    foreach ($file in $earlier) {
+        $text = ConvertFrom-TextJson (Get-Content -Raw $file.FullName)
+        foreach ($part in 'people', 'externalSystems') {
+            $text.$part.PSObject.Properties | ForEach-Object { [pscustomobject]@{ Id = $_.Name; Key = Get-ActorKey $_.Value.name } }
+        }
+    }
+}
+
+function Rename-LinkedActor($Text, [string]$From, [string]$To) {
+    foreach ($link in @($Text.units.PSObject.Properties.Value | ForEach-Object { @($_.links) } | Where-Object { $_ })) {
+        if ($link.source -eq $From) { $link.source = $To }
+        if ($link.target -eq $From) { $link.target = $To }
+    }
+}
+
+function Merge-EarlierActors($Text) {
+    $owners = @(Get-EarlierActors)
+    foreach ($part in 'people', 'externalSystems') {
+        foreach ($actor in @($Text.$part.PSObject.Properties)) {
+            $owner = $owners | Where-Object { $_.Id -eq $actor.Name -or $_.Key -eq (Get-ActorKey $actor.Value.name) } | Select-Object -First 1
+            if (-not $owner) { continue }
+            $Text.$part.PSObject.Properties.Remove($actor.Name)
+            Rename-LinkedActor $Text $actor.Name $owner.Id
+        }
+    }
+}
+
 # Un container che non c'e' piu' perde il testo; una persona o un sistema esterno dichiarato qui resta
 # finche' una relazione di un repository lo usa.
 function Remove-StaleText($Text, $Units) {
@@ -431,6 +487,7 @@ function Write-UnitText($Unit, $Units, $Text, [string[]]$GeneratedIds, $Progress
     $rejections = @()
     for ($draft = 1; $draft -le $MaxDrafts; $draft++) {
         $answer = Invoke-Writer (Get-SystemMessage) (Get-UserMessage $Unit $Units $catalogue $previous $rejections)
+        Merge-CatalogueActors $answer $catalogue
         $rejections = @(Get-DraftRejections $Unit $answer $catalogue $GeneratedIds)
         if (-not $rejections) {
             $Text.units | Add-Member -Force -NotePropertyName $Unit.Id -NotePropertyValue (ConvertTo-UnitText $Unit $answer)
@@ -459,6 +516,7 @@ function Get-TextIssues {
     $generatedIds = @($units | ForEach-Object { $_.ElementIds })
     $text = Read-ProgressText
     if (-not $text) { $text = Read-SavedText }
+    Merge-EarlierActors $text
     Remove-StaleText $text $units
     Save-Text $text
 

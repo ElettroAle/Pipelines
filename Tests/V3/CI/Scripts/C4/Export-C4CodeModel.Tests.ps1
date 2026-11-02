@@ -173,6 +173,10 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         It "E la parte generata di ""Aidea.Dxp.AI"" resta com'era" {
             $res.Generated['aidea.dxp.ai.dsl'] | Should -Be "# parte del Motore`n"
         }
+
+        It "E non scrive il contesto, che e' di tutti i repository" {
+            @($res.Generated.Keys) | Should -Not -Contain 'context.dsl'
+        }
     }
 
     Context "Schema dello scenario: caso non riconosciuto — <elemento>" -ForEach @(

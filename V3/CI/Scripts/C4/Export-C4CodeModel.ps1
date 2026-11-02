@@ -8,8 +8,8 @@
 # il nome del repository senza il prefisso comune ai repository sorgente (SOURCE_REPOSITORIES).
 # Il testo che Write-C4ModelText.ps1 ha scritto per il repository (<repository>.text.json) da' le
 # descrizioni degli elementi, cio' che passa sulle relazioni e le relazioni con persone e sistemi
-# esterni; context.dsl dichiara le persone e i sistemi esterni dei testi di tutti i repository, da
-# includere nel modello prima del sistema.
+# esterni. Persone e sistemi esterni non si scrivono qui: li dichiara Export-C4Context.ps1 quando il
+# documento si compone, cosi' le run di due repository non scrivono mai lo stesso file.
 # GENERATION_MODE=check confronta il file del repository con quello che la generazione produce.
 
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
@@ -20,9 +20,6 @@ $SourceRepositories = @("$env:SOURCE_REPOSITORIES" -split ',' | ForEach-Object {
 $GeneratedDirectory = if ($env:GENERATED_DIRECTORY) { $env:GENERATED_DIRECTORY } else { 'docs/architecture/model/generated' }
 $Mode = if ($env:GENERATION_MODE) { $env:GENERATION_MODE.ToLower() } else { 'write' }
 $GeneratedTag = $DocumentLanguage.GeneratedTag
-$TechnicalTag = $DocumentLanguage.TechnicalTag
-$ExternalTag = $DocumentLanguage.ExternalTag
-$ContextFileName = 'context.dsl'
 $CodeNameProperty = $DocumentLanguage.CodeNameProperty
 $Manifests = @('*.csproj', '*.fsproj', '*.vbproj', '*.sqlproj', '*.esproj', '*.njsproj', '*.shproj', 'package.json', 'angular.json',
     'pom.xml', 'build.gradle', 'go.mod', 'pyproject.toml', 'Cargo.toml', '*.tf')
@@ -59,9 +56,6 @@ function Read-ModelTexts {
 
 function Get-TextIssues($Texts) {
     $Texts | Where-Object { -not $_.Content } | ForEach-Object { New-Issue $Repository 'testo del modello non leggibile' $_.File }
-    $Texts | Where-Object Content | ForEach-Object { @($_.Content.people.PSObject.Properties.Name) + @($_.Content.externalSystems.PSObject.Properties.Name) } |
-        Where-Object { $_ } | Group-Object | Where-Object Count -GT 1 |
-        ForEach-Object { New-Issue $Repository 'persona o sistema esterno dichiarato da piu'' repository' $_.Name }
 }
 
 function Get-OwnText($Texts) {
@@ -117,19 +111,6 @@ function Format-Model($Fragments) {
     return ($lines -join "`n") + "`n"
 }
 
-function Format-Actor([string]$Id, $Actor, [string]$Kind, [string[]]$Tags) {
-    $allTags = @($Tags) + @(if ($Actor.technical) { $TechnicalTag })
-    return "$Id = $Kind $(Format-Text $Actor.name) $(Format-Text $Actor.description) $(Format-Text ($allTags -join ','))"
-}
-
-function Format-Context($Texts) {
-    $lines = @("// Persone e sistemi esterni del modello C4, dai testi scritti con Write-C4ModelText.ps1: non si modifica a mano.")
-    $contents = @($Texts | Where-Object Content | ForEach-Object Content)
-    $contents | ForEach-Object { $_.people.PSObject.Properties } | Sort-Object Name | ForEach-Object { $lines += Format-Actor $_.Name $_.Value 'person' @() }
-    $contents | ForEach-Object { $_.externalSystems.PSObject.Properties } | Sort-Object Name | ForEach-Object { $lines += Format-Actor $_.Name $_.Value 'softwareSystem' @($ExternalTag) }
-    return ($lines -join "`n") + "`n"
-}
-
 function Get-CheckIssues([System.Collections.IDictionary]$Outputs) {
     foreach ($name in $Outputs.Keys) {
         $target = Join-Path $GeneratedDirectory $name
@@ -160,7 +141,7 @@ function Get-GenerationIssues {
     if (-not @($fragments.Content.containers).Count) { return New-Issue $Repository 'nessuna applicazione riconosciuta' $SourceDirectory }
 
     $script:ModelText = Get-OwnText $texts
-    $outputs = [ordered]@{ "$($Repository.ToLowerInvariant()).dsl" = Format-Model $fragments; $ContextFileName = Format-Context $texts }
+    $outputs = [ordered]@{ "$($Repository.ToLowerInvariant()).dsl" = Format-Model $fragments; }
     & $ModeActions[$Mode] $outputs
 }
 
