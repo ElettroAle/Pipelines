@@ -19,6 +19,8 @@
 #                        dell'architettura nella lingua del documento, es. Architettura o Architecture)
 #   docsDirectory      → cartella delle sezioni (default: docs/architecture)
 #   decisionsDirectory → cartella degli ADR (default: docs/decisions)
+#   composeSteps       → step che compongono il documento prima della pubblicazione, es.
+#                        CI/Common/Steps/c4-context.yaml (default: nessuno)
 #   pool               → pool del job (default: hosted ubuntu-latest)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -49,6 +51,10 @@ parameters:
     type: string
     default: 'docs/decisions'
 
+  - name: composeSteps
+    type: stepList
+    default: []
+
   - name: pool
     type: object
     default:
@@ -72,6 +78,12 @@ stages:
 
           - checkout: ${{ parameters.wikiRepository }}
             path: wiki
+
+          - template: ../Common/Steps/document-language.yaml
+            parameters:
+              language: ${{ parameters.language }}
+
+          - ${{ parameters.composeSteps }}
 
           - template: ../Common/Steps/arc42-wiki-publish.yaml
             parameters:

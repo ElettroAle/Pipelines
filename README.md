@@ -384,6 +384,11 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   Allo stesso modo una stesura che dichiara una persona o un sistema esterno già nel catalogo, per
   identificativo o per nome, non si respinge: la dichiarazione si scarta e le relazioni passano
   all'identificativo del catalogo.
+  Le applicazioni dei repository sorgente (`sourceRepositories`) fanno parte del sistema: un sistema
+  esterno con il nome di uno di loro si toglie, con le sue relazioni, dalla stesura e dal testo salvato,
+  senza chiedere al modello. Una relazione che parte da un elemento di un altro repository, ad esempio
+  da un'applicazione verso la risorsa che l'infrastruttura le assegna, la descrive il container a cui
+  arriva.
 - **Un lettore del consumer** (`c4-read.yaml`). Per una tecnologia o una convenzione che questo
   repository non conosce, ad esempio come l'infrastruttura di un progetto lega un'applicazione al suo
   progetto, il consumer scrive il lettore nel proprio repository e lo passa con `scriptPath`, con le sue
@@ -401,7 +406,9 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   conosce le tecnologie: un
   file di progetto del repository (`*.csproj`, `package.json`, `angular.json`, `*.tf`, `pom.xml` e gli
   altri della sua lista) che nessun frammento dichiara letto ferma la generazione nominando il file, e
-  così un frammento che non si legge. Il file generato non si scrive a mano.
+  così un frammento che non si legge. Il file generato non si scrive a mano. Scrive anche
+  `<repository in minuscolo>.views.dsl`, da includere fra le viste del documento: una vista dei
+  componenti per ogni container che ne ha, con l'identificativo del container come chiave.
 - **Il contesto** (`c4-context.yaml`, `CI/Scripts/C4/Export-C4Context.ps1`). Quando il documento si
   compone, dichiara in `contextFile` le persone e i sistemi esterni dei testi di tutti i repository, da
   includere nel modello prima del sistema. Non si committa: la PR di ogni parte tocca solo i file del
@@ -527,7 +534,8 @@ Giudizio dello stile (`styleMode`, `CI/Scripts/Documentation/Test-DocumentationS
 Dopo il merge su `main` il documento arc42 si pubblica nella wiki di progetto di Azure DevOps
 (`CI/Agnostic/publish-arc42-wiki.yaml`, lo step `CI/Common/Steps/arc42-wiki-publish.yaml` e lo script
 `CI/Scripts/Arc42/Publish-Arc42Wiki.ps1`). Lo step prepara Java e i font di sistema con `ensure-java.yaml` ed
-`ensure-fonts.yaml`:
+`ensure-fonts.yaml`. Prima della pubblicazione dichiara la lingua del documento (`document-language.yaml`) ed
+esegue i `composeSteps` del consumer, ad esempio `c4-context.yaml` per il contesto del modello C4:
 
 - Ogni sezione diventa una pagina sotto `wikiRoot` (default il nome della lingua, `Architettura` o
   `Architecture`), nell'ordine dei numeri; le decisioni diventano sottopagine della sezione 9, quella

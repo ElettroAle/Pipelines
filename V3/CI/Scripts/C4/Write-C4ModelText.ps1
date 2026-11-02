@@ -8,7 +8,8 @@
 # fallisce, torna al modello con i motivi. Si scrive un container alla volta; il testo accettato si
 # salva in <repository in minuscolo>.text.json (GENERATED_DIRECTORY) e, con PROGRESS_BRANCH, sul ramo,
 # cosi' una pipeline fallita e rilanciata riparte dai container senza testo accettato. Il testo di un
-# container la cui struttura non cambia resta quello accettato.
+# container la cui struttura non cambia resta quello accettato. SOURCE_REPOSITORIES nomina i repository
+# sorgente del sistema, le cui applicazioni non sono sistemi esterni.
 
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
 . "$PSScriptRoot/../Common/DocumentLanguage.ps1"
@@ -16,6 +17,7 @@
 . "$PSScriptRoot/../Common/ModelRetry.ps1"
 . "$PSScriptRoot/C4CodeModel.ps1"
 
+$SourceRepositories = @("$env:SOURCE_REPOSITORIES" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $GeneratedDirectory = if ($env:GENERATED_DIRECTORY) { $env:GENERATED_DIRECTORY } else { 'docs/architecture/model/generated' }
 $GuidePath = $env:STYLE_GUIDE
 $ContextPaths = @("$env:C4_TEXT_CONTEXT" -split ';' | ForEach-Object Trim | Where-Object { $_ })
@@ -50,6 +52,8 @@ lavora sulla piattaforma.
   underscore; technical vale true se interessa solo chi gestisce la piattaforma.
 - links: le relazioni fra una persona o un sistema esterno (del catalogo o nuovo) e un elemento della
   parte, in una delle due direzioni, con cio' che passa.
+
+Le applicazioni dei repository sorgente del sistema fanno parte del sistema: non sono sistemi esterni.
 
 Non aggiungere elementi o relazioni fra elementi del codice. Scrivi solo cio' che il codice, le
 decisioni e i requisiti mostrano. Il testo segue la guida di stile.
@@ -122,7 +126,7 @@ function Read-Catalogue {
     foreach ($file in (Get-ChildItem -Path $GeneratedDirectory -Filter '*.text.json' -File -ErrorAction SilentlyContinue | Where-Object Name -NE $own)) {
         $text = ConvertFrom-TextJson (Get-Content -Raw $file.FullName)
         foreach ($part in 'people', 'externalSystems') {
-            $text.$part.PSObject.Properties | ForEach-Object { $catalogue[$_.Name] = $_.Value }
+            $text.$part.PSObject.Properties | Where-Object { -not (Test-SourceRepositoryName $_.Value.name) } | ForEach-Object { $catalogue[$_.Name] = $_.Value }
         }
     }
     return $catalogue
@@ -196,11 +200,20 @@ function Get-RelationshipKey($Relationship) {
     return "$($Relationship.source) -> $($Relationship.target)"
 }
 
+function Get-ElementIds($Container) {
+    return @($Container.id) + @($Container.components | Where-Object { $_ } | ForEach-Object id)
+}
+
+# Una relazione che parte da un elemento di un altro repository, ad esempio da un'applicazione verso la
+# risorsa che l'infrastruttura le assegna, la descrive il container a cui arriva: la parte dell'altro
+# repository non la contiene, e senza di lui resterebbe senza cio' che passa.
 function Get-Units($Fragments) {
     $relationships = @($Fragments | ForEach-Object { @($_.relationships) } | Where-Object { $_ })
-    foreach ($container in @($Fragments | ForEach-Object { @($_.containers) } | Where-Object { $_ })) {
-        $ids = @($container.id) + @($container.components | Where-Object { $_ } | ForEach-Object id)
-        $own = @($relationships | Where-Object { $ids -contains $_.source })
+    $containers = @($Fragments | ForEach-Object { @($_.containers) } | Where-Object { $_ })
+    $partIds = @($containers | ForEach-Object { Get-ElementIds $_ })
+    foreach ($container in $containers) {
+        $ids = Get-ElementIds $container
+        $own = @($relationships | Where-Object { $ids -contains $_.source -or ($ids -contains $_.target -and $partIds -notcontains $_.source) })
         [pscustomobject]@{
             Id            = $container.id
             Container     = $container
@@ -275,6 +288,7 @@ function Get-UserMessage($Unit, $Units, [hashtable]$Catalogue, $Previous, [strin
         "PARTE DA DESCRIVERE: $($Unit.Id)"
         "STRUTTURA DELLA PARTE (JSON):`n$(Get-UnitStructure $Unit)"
         "ALTRI CONTAINER DEL REPOSITORY:`n$(if ($others) { $others -join "`n" } else { '(nessuno)' })"
+        "REPOSITORY SORGENTE DEL SISTEMA:`n$(if ($SourceRepositories) { ($SourceRepositories | ForEach-Object { "- $_" }) -join "`n" } else { '(nessuno)' })"
         "CATALOGO DI PERSONE E SISTEMI ESTERNI:`n$(Format-Catalogue $Catalogue)"
         "TESTO ACCETTATO PRIMA CHE LA STRUTTURA CAMBIASSE:`n$previousText"
     )
@@ -393,6 +407,34 @@ function Merge-CatalogueActors($Draft, [hashtable]$Catalogue) {
     }
 }
 
+# Un'applicazione di un repository sorgente dichiarata come sistema esterno comparirebbe due volte nel
+# modello: la dichiarazione e le sue relazioni si tolgono senza chiedere al modello, e la relazione fra le
+# applicazioni resta quella che nasce dalla struttura.
+function Test-SourceRepositoryName([string]$Name) {
+    $key = Get-ActorKey $Name
+    return [bool]($SourceRepositories | Where-Object { (Get-ActorKey $_) -eq $key })
+}
+
+function Test-KeptLink($Link, [string[]]$Dropped) {
+    return $Link -and $Dropped -notcontains $Link.source -and $Dropped -notcontains $Link.target
+}
+
+function Remove-SourceRepositoryDraftSystems($Draft) {
+    $dropped = @($Draft.externalSystems | Where-Object { $_ -and (Test-SourceRepositoryName $_.name) } | ForEach-Object id)
+    if (-not $dropped) { return }
+    $Draft.externalSystems = @($Draft.externalSystems | Where-Object { $_ -and $dropped -notcontains $_.id })
+    $Draft.links = @($Draft.links | Where-Object { Test-KeptLink $_ $dropped })
+}
+
+function Remove-SourceRepositorySystems($Text) {
+    $dropped = @($Text.externalSystems.PSObject.Properties | Where-Object { Test-SourceRepositoryName $_.Value.name } | ForEach-Object Name)
+    if (-not $dropped) { return }
+    $dropped | ForEach-Object { $Text.externalSystems.PSObject.Properties.Remove($_) }
+    foreach ($unit in @($Text.units.PSObject.Properties.Value | Where-Object { $_ })) {
+        $unit.links = @($unit.links | Where-Object { Test-KeptLink $_ $dropped })
+    }
+}
+
 function Get-LinkRejections($Unit, $Draft, [hashtable]$Catalogue) {
     $actors = @($Catalogue.Keys) + @(@($Draft.people) + @($Draft.externalSystems) | Where-Object { $_ } | ForEach-Object id)
     foreach ($link in $Draft.links) {
@@ -487,6 +529,7 @@ function Write-UnitText($Unit, $Units, $Text, [string[]]$GeneratedIds, $Progress
     $rejections = @()
     for ($draft = 1; $draft -le $MaxDrafts; $draft++) {
         $answer = Invoke-Writer (Get-SystemMessage) (Get-UserMessage $Unit $Units $catalogue $previous $rejections)
+        Remove-SourceRepositoryDraftSystems $answer
         Merge-CatalogueActors $answer $catalogue
         $rejections = @(Get-DraftRejections $Unit $answer $catalogue $GeneratedIds)
         if (-not $rejections) {
@@ -516,6 +559,7 @@ function Get-TextIssues {
     $generatedIds = @($units | ForEach-Object { $_.ElementIds })
     $text = Read-ProgressText
     if (-not $text) { $text = Read-SavedText }
+    Remove-SourceRepositorySystems $text
     Merge-EarlierActors $text
     Remove-StaleText $text $units
     Save-Text $text

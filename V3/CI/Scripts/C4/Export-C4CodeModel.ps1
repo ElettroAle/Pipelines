@@ -10,7 +10,11 @@
 # descrizioni degli elementi, cio' che passa sulle relazioni e le relazioni con persone e sistemi
 # esterni. Persone e sistemi esterni non si scrivono qui: li dichiara Export-C4Context.ps1 quando il
 # documento si compone, cosi' le run di due repository non scrivono mai lo stesso file.
-# GENERATION_MODE=check confronta il file del repository con quello che la generazione produce.
+# Le viste dei componenti dei container della parte stanno in <repository>.views.dsl, da includere fra le
+# viste del documento: una per container con componenti, con l'identificativo del container come chiave.
+# GENERATION_MODE=check confronta i file del repository con quelli che la generazione produce. Un file
+# che il repository non ha ancora non si confronta: lo segnala l'!include del workspace che lo usa, e
+# cosi' un file nuovo della generazione non ferma le PR delle parti generate prima di lui.
 
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
 . "$PSScriptRoot/../Common/DocumentLanguage.ps1"
@@ -111,10 +115,19 @@ function Format-Model($Fragments) {
     return ($lines -join "`n") + "`n"
 }
 
+function Format-Views($Fragments) {
+    $lines = @("// Viste dei componenti generate da $Repository con Export-C4CodeModel.ps1: non si modificano a mano.")
+    foreach ($container in @($Fragments.Content.containers | Where-Object { @($_.components | Where-Object { $_ }).Count })) {
+        $lines += "component $($container.id) $(Format-Text $container.id) {", '    include *', '    autoLayout tb', '}'
+    }
+    return ($lines -join "`n") + "`n"
+}
+
 function Get-CheckIssues([System.Collections.IDictionary]$Outputs) {
     foreach ($name in $Outputs.Keys) {
         $target = Join-Path $GeneratedDirectory $name
         $current = Get-Item $target -ErrorAction SilentlyContinue | ForEach-Object { (Get-Content -Raw $_.FullName) -replace "`r`n", "`n" }
+        if ($null -eq $current) { continue }
         if ($Outputs[$name] -ne $current) { New-Issue $Repository 'parte generata diversa da quella che il codice produce' ($target -replace '\\', '/') }
     }
 }
@@ -141,7 +154,8 @@ function Get-GenerationIssues {
     if (-not @($fragments.Content.containers).Count) { return New-Issue $Repository 'nessuna applicazione riconosciuta' $SourceDirectory }
 
     $script:ModelText = Get-OwnText $texts
-    $outputs = [ordered]@{ "$($Repository.ToLowerInvariant()).dsl" = Format-Model $fragments; }
+    $name = $Repository.ToLowerInvariant()
+    $outputs = [ordered]@{ "$name.dsl" = Format-Model $fragments; "$name.views.dsl" = Format-Views $fragments }
     & $ModeActions[$Mode] $outputs
 }
 
