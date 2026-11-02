@@ -537,6 +537,96 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
     }
 
+    Context "Scenario: una relazione arriva da un'applicazione di un altro repository" {
+        BeforeAll {
+            Reset-Stub
+            $archive = 'contoso_shop_infrastructure_archivio'
+            $fragment = [ordered]@{
+                manifests     = @('main.tf')
+                containers    = @([ordered]@{ id = $archive; name = 'archivio'; codeName = 'main.tf'; sources = @(); technology = 'Terraform'; tags = @('Servizio'); properties = @{}; components = @() })
+                relationships = @([ordered]@{ source = $Api; target = $archive })
+            }
+            $root = New-Workspace ([ordered]@{
+                    'source/main.tf'                                      = "resource `"azurerm_storage_account`" `"archivio`" {}`n"
+                    'docs/STYLE.md'                                       = $Guide
+                    'fragments/contoso.shop.infrastructure.consumer.json' = ($fragment | ConvertTo-Json -Depth 10)
+                })
+            $res = Invoke-Text $root 'Contoso.Shop.Infrastructure' -Readers @()
+            $requests = @(Get-StubRequests)
+            Remove-Workspace $root
+        }
+
+        It "Allora la generazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E la struttura mandata al modello per il container di arrivo contiene la relazione" {
+            Get-UserMessage $requests[0] | Should -Match """source"":\s*""$Api"""
+        }
+
+        It "E la parte dice cio' che passa sulla relazione" {
+            $res.Generated['contoso.shop.infrastructure.dsl'] | Should -Match "$Api -> $archive ""Passa da $Api a $archive"""
+        }
+    }
+
+    Context "Scenario: una stesura dichiara come sistema esterno l'applicazione di un repository sorgente" {
+        BeforeAll {
+            $bffSystem = @{ id = 'bff'; name = 'Contoso.Shop.Bff.Web'; description = 'Riceve le richieste del sito.'; technical = $false }
+            Reset-Stub @{ $Api = @(@{ externalSystems = @($bffSystem); links = @(@{ source = 'bff'; target = $Api; description = 'Chiama le API'; technology = 'HTTPS' }) }) }
+            $root = New-Workspace (New-DescribedEngine)
+            $res = Invoke-Text $root 'Contoso.Shop.AI'
+            $requests = @(Get-StubRequests)
+            $apiRequests = @(Get-RequestedUnits | Where-Object { $_ -eq $Api })
+            Remove-Workspace $root
+        }
+
+        It "Allora la stesura si accetta senza un'altra richiesta" {
+            $apiRequests.Count | Should -Be 1
+        }
+
+        It "E il testo non dichiara il sistema esterno" {
+            @($res.Text.externalSystems.PSObject.Properties.Name) | Should -BeNullOrEmpty
+        }
+
+        It "E la parte non ha la relazione con il sistema esterno" {
+            $res.Generated['contoso.shop.ai.dsl'] | Should -Not -Match '\bbff ->'
+        }
+
+        It "E il modello riceve i repository sorgente del sistema" {
+            Get-UserMessage $requests[0] | Should -Match 'REPOSITORY SORGENTE DEL SISTEMA:\n- Contoso\.Shop\.AI\n- Contoso\.Shop\.Bff\.Web\n- Contoso\.Shop\.Client\.Web'
+        }
+    }
+
+    Context "Scenario: il testo salvato dichiara come sistema esterno l'applicazione di un repository sorgente" {
+        BeforeAll {
+            Reset-Stub
+            $root = New-Workspace (New-DescribedEngine)
+            Invoke-Text $root 'Contoso.Shop.AI' | Out-Null
+            $path = Join-Path $root 'docs/architecture/model/generated/contoso.shop.ai.text.json'
+            $saved = Get-Content -Raw $path | ConvertFrom-Json
+            $saved.externalSystems | Add-Member -NotePropertyName 'bff' -NotePropertyValue ([pscustomobject]@{ name = 'Contoso.Shop.Bff.Web'; description = 'Riceve le richieste del sito.'; technical = $false })
+            $saved.units.$Api.links = @([pscustomobject]@{ source = 'bff'; target = $Api; description = 'Chiama le API'; technology = 'HTTPS' })
+            [IO.File]::WriteAllText($path, ($saved | ConvertTo-Json -Depth 20))
+
+            Reset-Stub
+            $res = Invoke-Text $root 'Contoso.Shop.AI'
+            $requests = @(Get-StubRequests)
+            Remove-Workspace $root
+        }
+
+        It "Allora la run non chiede nulla al modello" {
+            $requests | Should -BeNullOrEmpty
+        }
+
+        It "E il testo non dichiara il sistema esterno" {
+            @($res.Text.externalSystems.PSObject.Properties.Name) | Should -BeNullOrEmpty
+        }
+
+        It "E la parte non ha la relazione con il sistema esterno" {
+            $res.Generated['contoso.shop.ai.dsl'] | Should -Not -Match '\bbff ->'
+        }
+    }
+
     Context "Scenario: il modello descritto e' un modello Structurizr valido" {
         BeforeAll {
             $person = @{ id = 'cliente'; name = 'Cliente'; description = 'Scrive al negozio dal sito.'; technical = $false }
@@ -551,7 +641,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             $res.Generated.Keys | ForEach-Object { [IO.File]::WriteAllText((Join-Path $dir "generated/$_"), $res.Generated[$_]) }
             [IO.File]::WriteAllText((Join-Path $dir 'generated/contoso.shop.ai.text.json'), ($res.Text | ConvertTo-Json -Depth 20))
             $context = Invoke-C4Script 'C4/Export-C4Context.ps1' @{ GENERATED_DIRECTORY = (Join-Path $dir 'generated'); CONTEXT_FILE = (Join-Path $dir 'context.dsl'); DOCUMENT_LANGUAGE = ''; GATE_MODE = '' }
-            [IO.File]::WriteAllText((Join-Path $dir 'workspace.dsl'), "workspace {`n    model {`n        !include context.dsl`n        sistema = softwareSystem `"Contoso.Shop`" {`n            !include generated/contoso.shop.ai.dsl`n        }`n    }`n}`n")
+            [IO.File]::WriteAllText((Join-Path $dir 'workspace.dsl'), "workspace {`n    model {`n        !include context.dsl`n        sistema = softwareSystem `"Contoso.Shop`" {`n            !include generated/contoso.shop.ai.dsl`n        }`n    }`n    views {`n        !include generated/contoso.shop.ai.views.dsl`n    }`n}`n")
             $export = Export-StructurizrWorkspace (Join-Path $dir 'workspace.dsl')
             Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
             $model = $export.Workspace.model
@@ -568,6 +658,10 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         It "E ogni elemento generato ha una descrizione" {
             $elements = @($model.softwareSystems[0].containers) + @($model.softwareSystems[0].containers | ForEach-Object { @($_.components) })
             $elements | Where-Object { $_ -and -not $_.description } | ForEach-Object name | Should -BeNullOrEmpty
+        }
+
+        It "E la vista dei componenti di ""Api"" generata con la parte si esporta" {
+            @($export.Workspace.views.componentViews | ForEach-Object key) | Should -Contain $Api
         }
 
         It "E il sistema esterno porta il tag degli elementi tecnici" {

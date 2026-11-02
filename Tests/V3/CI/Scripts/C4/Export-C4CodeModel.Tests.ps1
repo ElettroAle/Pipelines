@@ -65,6 +65,14 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         It "E un'applicazione e' componente di se stessa" {
             Get-ContainerBlock $dsl 'Api' | Should -Match 'component\s+"Api"'
         }
+
+        It "E le viste della parte hanno la vista dei componenti di ""Api""" {
+            $res.Generated['contoso.shop.ai.views.dsl'] | Should -Match 'component contoso_shop_ai_api "contoso_shop_ai_api" \{'
+        }
+
+        It "E le viste della parte hanno la vista dei componenti di ""Worker""" {
+            $res.Generated['contoso.shop.ai.views.dsl'] | Should -Match 'component contoso_shop_ai_worker "contoso_shop_ai_worker" \{'
+        }
     }
 
     Context "Scenario: test e strumenti non entrano nel modello" {
@@ -235,6 +243,19 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         }
     }
 
+    Context "Scenario: parte generata prima del file delle sue viste" {
+        BeforeAll {
+            $files = New-BffRepository
+            $first = Invoke-Generation $files 'Contoso.Shop.Bff.Web'
+            $files['docs/architecture/model/generated/contoso.shop.bff.web.dsl'] = $first.Generated['contoso.shop.bff.web.dsl']
+            $res = Invoke-Generation $files 'Contoso.Shop.Bff.Web' 'check'
+        }
+
+        It "Allora la verifica passa" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+    }
+
     Context "Scenario: parte generata allineata al codice" {
         BeforeAll {
             $files = New-BffRepository
@@ -364,6 +385,10 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
 
         It "E il container .NET sta nel gruppo di ""Contoso.Shop.Bff.Web""" {
             Get-Block $dsl 'group\s+"Bff.Web"' | Should -Match 'container\s+"Web"' -Because $dsl
+        }
+
+        It "E il container del lettore del consumer, senza componenti, non ha una vista dei componenti" {
+            $res.Generated['contoso.shop.bff.web.views.dsl'] | Should -Not -Match 'component contoso_shop_bff_web_storage\b'
         }
     }
 }

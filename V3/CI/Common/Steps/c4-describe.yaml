@@ -27,6 +27,8 @@
 #   reasoningEffort     → ragionamento del modello (default: high)
 #   maxDrafts           → stesure massime per container (default: 3)
 #   sourceRepository    → nome del repository sorgente, es. $(Build.Repository.Name)
+#   sourceRepositories  → repository sorgente del documento separati da virgola: le loro applicazioni non
+#                         sono sistemi esterni (default: nessuno)
 #   sourceDirectory     → checkout del repository sorgente (default: $(Build.SourcesDirectory))
 #   fragmentDirectory   → cartella dei frammenti dei lettori (default: $(Agent.TempDirectory)/c4-fragments)
 #   generatedDirectory  → cartella delle parti generate, relativa a workingDirectory (default: docs/architecture/model/generated)
@@ -69,6 +71,10 @@ parameters:
   - name: sourceRepository
     type: string
     default: '$(Build.Repository.Name)'
+
+  - name: sourceRepositories
+    type: string
+    default: ''
 
   - name: sourceDirectory
     type: string
@@ -128,6 +134,8 @@ steps:
         GATE_MODE: ${{ parameters.mode }}
         SOURCE_REPOSITORY: ${{ parameters.sourceRepository }}
         SOURCE_DIRECTORY: ${{ parameters.sourceDirectory }}
+        ${{ if ne(parameters.sourceRepositories, '') }}:
+          SOURCE_REPOSITORIES: ${{ parameters.sourceRepositories }}
         FRAGMENT_DIRECTORY: ${{ parameters.fragmentDirectory }}
         GENERATED_DIRECTORY: ${{ parameters.generatedDirectory }}
         STYLE_GUIDE: ${{ parameters.guide }}

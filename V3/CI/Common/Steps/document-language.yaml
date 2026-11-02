@@ -10,6 +10,7 @@
 # Riusato da:
 #   CI/Agnostic/quality-arc42.yaml
 #   CI/Agnostic/quality-docs.yaml
+#   CI/Agnostic/publish-arc42-wiki.yaml
 #
 # Parametri
 # ─────────
