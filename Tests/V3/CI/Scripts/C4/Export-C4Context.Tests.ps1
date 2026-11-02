@@ -37,8 +37,8 @@ Describe "Funzionalità: Contesto del modello C4 composto dai testi dei reposito
     Context "Scenario: persone e sistemi esterni dichiarati da piu' repository" {
         BeforeAll {
             $res = Invoke-Context ([ordered]@{
-                    'aidea.dxp.ai.text.json'      = New-ModelText @{ cittadino = @{ name = 'Cittadino'; description = 'Scrive all''ente.'; technical = $false } }
-                    'aidea.dxp.bff.web.text.json' = New-ModelText @{ cittadino = @{ name = 'Cittadina'; description = 'Apre la chat.'; technical = $false } } @{ entra = @{ name = 'Entra ID'; description = 'Autentica.'; technical = $true } }
+                    'contoso.shop.ai.text.json'      = New-ModelText @{ cliente = @{ name = 'Cliente'; description = 'Scrive al negozio.'; technical = $false } }
+                    'contoso.shop.bff.web.text.json' = New-ModelText @{ cliente = @{ name = 'Cliente del sito'; description = 'Apre la chat.'; technical = $false } } @{ entra = @{ name = 'Entra ID'; description = 'Autentica.'; technical = $true } }
                 })
         }
 
@@ -47,7 +47,7 @@ Describe "Funzionalità: Contesto del modello C4 composto dai testi dei reposito
         }
 
         It "E un identificativo dichiarato da due testi vale una volta, con il testo che viene prima per nome" {
-            @($res.Context -split "`n" | Where-Object { $_ -match '^cittadino = ' }) | Should -Be @('cittadino = person "Cittadino" "Scrive all''ente." ""')
+            @($res.Context -split "`n" | Where-Object { $_ -match '^cliente = ' }) | Should -Be @('cliente = person "Cliente" "Scrive al negozio." ""')
         }
 
         It "E il sistema esterno tecnico porta i tag degli esterni e dei tecnici" {
@@ -57,12 +57,12 @@ Describe "Funzionalità: Contesto del modello C4 composto dai testi dei reposito
 
     Context "Scenario: un testo che non si legge" {
         BeforeAll {
-            $res = Invoke-Context ([ordered]@{ 'aidea.dxp.ai.text.json' = '{ non json' })
+            $res = Invoke-Context ([ordered]@{ 'contoso.shop.ai.text.json' = '{ non json' })
         }
 
         It "Allora lo script fallisce nominando il testo" {
             $res.ExitCode | Should -Not -Be 0
-            $res.Output | Should -Match "testo del modello non leggibile \(aidea\.dxp\.ai\.text\.json\)"
+            $res.Output | Should -Match "testo del modello non leggibile \(contoso\.shop\.ai\.text\.json\)"
         }
 
         It "E il contesto non si scrive" {

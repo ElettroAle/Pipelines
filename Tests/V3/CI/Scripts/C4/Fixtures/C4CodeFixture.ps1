@@ -7,7 +7,7 @@
 
 $C4ScriptsDirectory = Resolve-Path "$PSScriptRoot/../../../../../../V3/CI/Scripts"
 $C4Readers = @{ dotnet10 = 'C4/Read-C4DotNet10Model.ps1'; angular18 = 'C4/Read-C4Angular18Model.ps1'; consumer = "$PSScriptRoot/Read-C4ConsumerModel.ps1" }
-$C4SourceRepositories = 'Aidea.Dxp.AI,Aidea.Dxp.Bff.Web,Aidea.Dxp.Client.Web'
+$C4SourceRepositories = 'Contoso.Shop.AI,Contoso.Shop.Bff.Web,Contoso.Shop.Client.Web'
 
 function New-Project([string]$Sdk = 'Microsoft.NET.Sdk', [string[]]$References = @(), [string]$Properties = '', [string]$Items = '') {
     $refs = ($References | ForEach-Object { "    <ProjectReference Include=`"..\$_\$_.csproj`" />" }) -join "`n"
@@ -20,29 +20,29 @@ function Add-Project([System.Collections.IDictionary]$Files, [string]$Name, [str
 
 function New-EngineRepository {
     $files = [ordered]@{}
-    Add-Project $files 'Aidea.Dxp.AI.Api' (New-Project 'Microsoft.NET.Sdk.Web' @('Aidea.Dxp.AI.UseCase.WrittenConversations', 'Aidea.Dxp.AI.Utils', 'Aidea.Dxp.AI.DataAccess.AzureServiceBus', 'Aidea.Dxp.AI.DataAccess.AzureStorageAccount'))
-    Add-Project $files 'Aidea.Dxp.AI.Worker' (New-Project 'Microsoft.NET.Sdk' @('Aidea.Dxp.AI.UseCase.WrittenConversations', 'Aidea.Dxp.AI.UnitTest.Engine') "    <OutputType>Exe</OutputType>`n    <AzureFunctionsVersion>v4</AzureFunctionsVersion>")
-    Add-Project $files 'Aidea.Dxp.AI.Evals' (New-Project 'Microsoft.NET.Sdk' @('Aidea.Dxp.AI.Api') '    <OutputType>Exe</OutputType>')
-    Add-Project $files 'Aidea.Dxp.AI.UseCase.WrittenConversations' (New-Project)
-    Add-Project $files 'Aidea.Dxp.AI.Utils' (New-Project)
-    Add-Project $files 'Aidea.Dxp.AI.Utils.Reflection' (New-Project)
-    Add-Project $files 'Aidea.Dxp.AI.DataAccess.AzureServiceBus' (New-Project 'Microsoft.NET.Sdk' @('Aidea.Dxp.AI.UseCase.WrittenConversations') '' "    <PackageReference Include=`"Azure.Messaging.ServiceBus`" />`n    <PackageReference Include=`"Azure.Identity`" />")
-    Add-Project $files 'Aidea.Dxp.AI.DataAccess.AzureStorageAccount' (New-Project 'Microsoft.NET.Sdk' @() '' "    <PackageReference Include=`"Azure.Storage.Blobs`" />`n    <PackageReference Include=`"Azure.Data.Tables`" />")
-    Add-Project $files 'Aidea.Dxp.AI.UnitTest.Engine' (New-Project 'Microsoft.NET.Sdk' @('Aidea.Dxp.AI.Utils.Reflection', 'Aidea.Dxp.AI.UseCase.WrittenConversations') '' '    <PackageReference Include="Microsoft.NET.Test.Sdk" />')
+    Add-Project $files 'Contoso.Shop.AI.Api' (New-Project 'Microsoft.NET.Sdk.Web' @('Contoso.Shop.AI.UseCase.WrittenConversations', 'Contoso.Shop.AI.Utils', 'Contoso.Shop.AI.DataAccess.AzureServiceBus', 'Contoso.Shop.AI.DataAccess.AzureStorageAccount'))
+    Add-Project $files 'Contoso.Shop.AI.Worker' (New-Project 'Microsoft.NET.Sdk' @('Contoso.Shop.AI.UseCase.WrittenConversations', 'Contoso.Shop.AI.UnitTest.Engine') "    <OutputType>Exe</OutputType>`n    <AzureFunctionsVersion>v4</AzureFunctionsVersion>")
+    Add-Project $files 'Contoso.Shop.AI.Evals' (New-Project 'Microsoft.NET.Sdk' @('Contoso.Shop.AI.Api') '    <OutputType>Exe</OutputType>')
+    Add-Project $files 'Contoso.Shop.AI.UseCase.WrittenConversations' (New-Project)
+    Add-Project $files 'Contoso.Shop.AI.Utils' (New-Project)
+    Add-Project $files 'Contoso.Shop.AI.Utils.Reflection' (New-Project)
+    Add-Project $files 'Contoso.Shop.AI.DataAccess.AzureServiceBus' (New-Project 'Microsoft.NET.Sdk' @('Contoso.Shop.AI.UseCase.WrittenConversations') '' "    <PackageReference Include=`"Azure.Messaging.ServiceBus`" />`n    <PackageReference Include=`"Azure.Identity`" />")
+    Add-Project $files 'Contoso.Shop.AI.DataAccess.AzureStorageAccount' (New-Project 'Microsoft.NET.Sdk' @() '' "    <PackageReference Include=`"Azure.Storage.Blobs`" />`n    <PackageReference Include=`"Azure.Data.Tables`" />")
+    Add-Project $files 'Contoso.Shop.AI.UnitTest.Engine' (New-Project 'Microsoft.NET.Sdk' @('Contoso.Shop.AI.Utils.Reflection', 'Contoso.Shop.AI.UseCase.WrittenConversations') '' '    <PackageReference Include="Microsoft.NET.Test.Sdk" />')
     return $files
 }
 
 function New-BffRepository {
     $files = [ordered]@{}
-    Add-Project $files 'Aidea.Dxp.Bff.Web' (New-Project 'Microsoft.NET.Sdk.Web' @('Aidea.Dxp.Bff.Web.BusinessLogic'))
-    Add-Project $files 'Aidea.Dxp.Bff.Web.BusinessLogic' (New-Project)
+    Add-Project $files 'Contoso.Shop.Bff.Web' (New-Project 'Microsoft.NET.Sdk.Web' @('Contoso.Shop.Bff.Web.BusinessLogic'))
+    Add-Project $files 'Contoso.Shop.Bff.Web.BusinessLogic' (New-Project)
     return $files
 }
 
 function New-ClientRepository {
     $files = [ordered]@{}
-    $files['source/angular.json'] = '{ "projects": { "aidea-dxp-client-web": { "projectType": "application", "sourceRoot": "src" } } }'
-    $files['source/package.json'] = '{ "name": "aidea-dxp-client-web", "dependencies": { "@angular/core": "^18.2.0" } }'
+    $files['source/angular.json'] = '{ "projects": { "contoso-shop-client-web": { "projectType": "application", "sourceRoot": "src" } } }'
+    $files['source/package.json'] = '{ "name": "contoso-shop-client-web", "dependencies": { "@angular/core": "^18.2.0" } }'
     $files['source/src/app/features/settings/settings.providers.ts'] = "export const provideSettings = () => [];`n"
     $files['source/src/app/features/chat/pages/chat.page.ts'] = "import { SUGGESTIONS } from '../../ai-suggestions/tokens/ai-suggestions.tokens';`nimport { HUB } from '../../../core/realtime/tokens/realtime.tokens';`nimport { guard } from '../../../core/guards/auth.guard';`n"
     $files['source/src/app/features/ai-suggestions/tokens/ai-suggestions.tokens.ts'] = "export const SUGGESTIONS = 'x';`n"

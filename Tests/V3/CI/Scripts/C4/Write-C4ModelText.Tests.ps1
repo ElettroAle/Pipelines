@@ -31,10 +31,10 @@ BeforeAll {
         & $Script $Endpoint $State
     }
 
-    $Api = 'aidea_dxp_ai_api'
-    $Worker = 'aidea_dxp_ai_worker'
-    $UseCase = 'aidea_dxp_ai_api__aidea_dxp_ai_usecase_writtenconversations'
-    $ServiceBus = 'aidea_dxp_ai_api__aidea_dxp_ai_dataaccess_azureservicebus'
+    $Api = 'contoso_shop_ai_api'
+    $Worker = 'contoso_shop_ai_worker'
+    $UseCase = 'contoso_shop_ai_api__contoso_shop_ai_usecase_writtenconversations'
+    $ServiceBus = 'contoso_shop_ai_api__contoso_shop_ai_dataaccess_azureservicebus'
     $Guide = "# Guida di stile`n`n## Regole`n`n### Niente riempitivi`n`nUn'espressione che non aggiunge informazione si toglie.`n"
     $Decision = "# Canale eventi di sessione`n`n## Esito della decisione`n`nGli eventi viaggiano su Service Bus.`n"
 
@@ -61,7 +61,7 @@ BeforeAll {
 
     function New-DescribedEngine {
         $files = New-EngineRepository
-        $files['source/Aidea.Dxp.AI.Api/Program.cs'] = "app.MapPost(`"/conversations`", SendMessage);`n"
+        $files['source/Contoso.Shop.AI.Api/Program.cs'] = "app.MapPost(`"/conversations`", SendMessage);`n"
         $files['docs/STYLE.md'] = $Guide
         $files['docs/decisions/0012-canale-eventi-di-sessione.md'] = $Decision
         return $files
@@ -136,7 +136,7 @@ BeforeAll {
     }
 
     function Get-OriginText([string]$Origin, [string]$Branch) {
-        return (git -C $Origin show "${Branch}:docs/architecture/model/generated/aidea.dxp.ai.text.json" 2>$null) -join "`n" | ConvertFrom-Json
+        return (git -C $Origin show "${Branch}:docs/architecture/model/generated/contoso.shop.ai.text.json" 2>$null) -join "`n" | ConvertFrom-Json
     }
 }
 
@@ -156,8 +156,8 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         BeforeAll {
             Reset-Stub
             $root = New-Workspace (New-DescribedEngine)
-            $res = Invoke-Text $root 'Aidea.Dxp.AI'
-            $dsl = $res.Generated['aidea.dxp.ai.dsl']
+            $res = Invoke-Text $root 'Contoso.Shop.AI'
+            $dsl = $res.Generated['contoso.shop.ai.dsl']
             Remove-Workspace $root
         }
 
@@ -186,7 +186,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         BeforeAll {
             Reset-Stub
             $root = New-Workspace (New-DescribedEngine)
-            $res = Invoke-Text $root 'Aidea.Dxp.AI'
+            $res = Invoke-Text $root 'Contoso.Shop.AI'
             Remove-Workspace $root
             $requests = Get-StubRequests
             $apiRequest = $requests | Where-Object { (Get-UserMessage $_) -match "PARTE DA DESCRIVERE: $Api\b" } | Select-Object -First 1
@@ -209,7 +209,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E manda il codice della parte" {
-            Get-UserMessage $apiRequest | Should -Match '=== Aidea\.Dxp\.AI\.Api/Program\.cs ===\s+app\.MapPost'
+            Get-UserMessage $apiRequest | Should -Match '=== Contoso\.Shop\.AI\.Api/Program\.cs ===\s+app\.MapPost'
         }
 
         It "E manda i documenti di contesto" {
@@ -225,9 +225,9 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         BeforeAll {
             Reset-Stub
             $root = New-Workspace (New-DescribedEngine)
-            $first = Invoke-Text $root 'Aidea.Dxp.AI'
+            $first = Invoke-Text $root 'Contoso.Shop.AI'
             Reset-Stub
-            $res = Invoke-Text $root 'Aidea.Dxp.AI'
+            $res = Invoke-Text $root 'Contoso.Shop.AI'
             Remove-Workspace $root
         }
 
@@ -240,7 +240,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la parte generata resta la stessa" {
-            $res.Generated['aidea.dxp.ai.dsl'] | Should -Be $first.Generated['aidea.dxp.ai.dsl']
+            $res.Generated['contoso.shop.ai.dsl'] | Should -Be $first.Generated['contoso.shop.ai.dsl']
         }
     }
 
@@ -249,10 +249,10 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             Reset-Stub
             $files = New-DescribedEngine
             $root = New-Workspace $files
-            Invoke-Text $root 'Aidea.Dxp.AI' | Out-Null
+            Invoke-Text $root 'Contoso.Shop.AI' | Out-Null
             Reset-Stub
-            Write-SourceFiles $root ([ordered]@{ 'source/Aidea.Dxp.AI.Worker/Aidea.Dxp.AI.Worker.csproj' = (New-Project 'Microsoft.NET.Sdk' @('Aidea.Dxp.AI.UseCase.WrittenConversations', 'Aidea.Dxp.AI.Utils') "    <OutputType>Exe</OutputType>`n    <AzureFunctionsVersion>v4</AzureFunctionsVersion>") })
-            $res = Invoke-Text $root 'Aidea.Dxp.AI'
+            Write-SourceFiles $root ([ordered]@{ 'source/Contoso.Shop.AI.Worker/Contoso.Shop.AI.Worker.csproj' = (New-Project 'Microsoft.NET.Sdk' @('Contoso.Shop.AI.UseCase.WrittenConversations', 'Contoso.Shop.AI.Utils') "    <OutputType>Exe</OutputType>`n    <AzureFunctionsVersion>v4</AzureFunctionsVersion>") })
+            $res = Invoke-Text $root 'Contoso.Shop.AI'
             Remove-Workspace $root
         }
 
@@ -265,21 +265,21 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E il componente nuovo di ""Worker"" ha una descrizione" {
-            $res.Text.units.$Worker.elements.aidea_dxp_ai_worker__aidea_dxp_ai_utils | Should -Not -BeNullOrEmpty
+            $res.Text.units.$Worker.elements.contoso_shop_ai_worker__contoso_shop_ai_utils | Should -Not -BeNullOrEmpty
         }
     }
 
     Context "Schema dello scenario: stesura respinta e corretta — <difetto>" -ForEach @(
-        @{ difetto = 'un elemento senza descrizione'; spec = @{ omitElement = 'aidea_dxp_ai_api__aidea_dxp_ai_utils' }; motivo = 'elemento senza descrizione: aidea_dxp_ai_api__aidea_dxp_ai_utils' }
-        @{ difetto = 'una relazione che il codice non dichiara'; spec = @{ extraRelationship = @{ source = 'aidea_dxp_ai_api__aidea_dxp_ai_utils'; target = 'aidea_dxp_ai_api' } }; motivo = "relazione che il codice non dichiara: aidea_dxp_ai_api__aidea_dxp_ai_utils -> aidea_dxp_ai_api" }
-        @{ difetto = 'una persona senza relazioni'; spec = @{ people = @(@{ id = 'cittadino'; name = 'Cittadino'; description = 'Scrive all''ente.'; technical = $false }) }; motivo = 'persona o sistema esterno senza relazioni: cittadino' }
-        @{ difetto = 'una relazione che non lega un elemento della parte'; spec = @{ externalSystems = @(@{ id = 'entra'; name = 'Entra'; description = 'Identita''.'; technical = $false }); links = @(@{ source = 'entra'; target = 'aidea_dxp_ai_worker'; description = 'Autentica'; technology = '' }) }; motivo = 'relazione che non lega una persona o un sistema esterno a un elemento della parte: entra -> aidea_dxp_ai_worker' }
-        @{ difetto = 'una frase troppo lunga'; spec = @{ longDescription = 'aidea_dxp_ai_api' }; motivo = 'frase di aidea_dxp_ai_api oltre 25 parole' }
+        @{ difetto = 'un elemento senza descrizione'; spec = @{ omitElement = 'contoso_shop_ai_api__contoso_shop_ai_utils' }; motivo = 'elemento senza descrizione: contoso_shop_ai_api__contoso_shop_ai_utils' }
+        @{ difetto = 'una relazione che il codice non dichiara'; spec = @{ extraRelationship = @{ source = 'contoso_shop_ai_api__contoso_shop_ai_utils'; target = 'contoso_shop_ai_api' } }; motivo = "relazione che il codice non dichiara: contoso_shop_ai_api__contoso_shop_ai_utils -> contoso_shop_ai_api" }
+        @{ difetto = 'una persona senza relazioni'; spec = @{ people = @(@{ id = 'cliente'; name = 'Cliente'; description = 'Scrive al negozio.'; technical = $false }) }; motivo = 'persona o sistema esterno senza relazioni: cliente' }
+        @{ difetto = 'una relazione che non lega un elemento della parte'; spec = @{ externalSystems = @(@{ id = 'entra'; name = 'Entra'; description = 'Identita''.'; technical = $false }); links = @(@{ source = 'entra'; target = 'contoso_shop_ai_worker'; description = 'Autentica'; technology = '' }) }; motivo = 'relazione che non lega una persona o un sistema esterno a un elemento della parte: entra -> contoso_shop_ai_worker' }
+        @{ difetto = 'una frase troppo lunga'; spec = @{ longDescription = 'contoso_shop_ai_api' }; motivo = 'frase di contoso_shop_ai_api oltre 25 parole' }
     ) {
         BeforeAll {
             Reset-Stub @{ $Api = @($spec, @{}) }
             $root = New-Workspace (New-DescribedEngine)
-            $res = Invoke-Text $root 'Aidea.Dxp.AI' -Environment @{ READABILITY_MAX_WORDS = '25' }
+            $res = Invoke-Text $root 'Contoso.Shop.AI' -Environment @{ READABILITY_MAX_WORDS = '25' }
             Remove-Workspace $root
             $apiRequests = @(Get-StubRequests | Where-Object { (Get-UserMessage $_) -match "PARTE DA DESCRIVERE: $Api\b" })
         }
@@ -301,7 +301,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         BeforeAll {
             Reset-Stub @{ $Worker = @(@{ omitElement = $Worker }) }
             $root = New-Workspace (New-DescribedEngine)
-            $res = Invoke-Text $root 'Aidea.Dxp.AI'
+            $res = Invoke-Text $root 'Contoso.Shop.AI'
             Remove-Workspace $root
         }
 
@@ -322,7 +322,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la parte generata non si scrive" {
-            $res.Generated['aidea.dxp.ai.dsl'] | Should -BeNullOrEmpty
+            $res.Generated['contoso.shop.ai.dsl'] | Should -BeNullOrEmpty
         }
     }
 
@@ -331,7 +331,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             Reset-Stub
             Set-StubStatus 503
             $root = New-Workspace (New-DescribedEngine)
-            $res = Invoke-Text $root 'Aidea.Dxp.AI'
+            $res = Invoke-Text $root 'Contoso.Shop.AI'
             Remove-Workspace $root
             $requested = @(Get-RequestedUnits)
             Reset-Stub
@@ -342,7 +342,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E nomina il container non descritto" {
-            Get-Issues $res.Output | Where-Object { $_ -match "testo di aidea_dxp_ai_(api|worker) non scritto" } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+            Get-Issues $res.Output | Where-Object { $_ -match "testo di contoso_shop_ai_(api|worker) non scritto" } | Should -Not -BeNullOrEmpty -Because ($res.Output)
         }
 
         It "E non chiama il modello per gli altri container" {
@@ -356,7 +356,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             [IO.File]::WriteAllText((Join-Path $StubState 'throttle'), '4')
             $root = New-Workspace (New-DescribedEngine)
             $started = Get-Date
-            $res = Invoke-Text $root 'Aidea.Dxp.AI'
+            $res = Invoke-Text $root 'Contoso.Shop.AI'
             $elapsed = (Get-Date) - $started
             Remove-Workspace $root
             Reset-Stub
@@ -373,20 +373,20 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
 
     Context "Scenario: generazione rilanciata" {
         BeforeAll {
-            $branch = 'c4/aidea.dxp.ai'
+            $branch = 'c4/contoso.shop.ai'
             $origin = New-OriginWorkspace
             $files = New-DescribedEngine
             $files.Remove('docs/STYLE.md')
 
             Reset-Stub @{ $Worker = @(@{ omitElement = $Worker }) }
             $first = New-Clone $origin $files
-            $failed = Invoke-Text $first 'Aidea.Dxp.AI' -Environment @{ PROGRESS_BRANCH = $branch }
+            $failed = Invoke-Text $first 'Contoso.Shop.AI' -Environment @{ PROGRESS_BRANCH = $branch }
             Remove-Workspace $first
             $saved = Get-OriginText $origin $branch
 
             Reset-Stub
             $second = New-Clone $origin $files
-            $res = Invoke-Text $second 'Aidea.Dxp.AI' -Environment @{ PROGRESS_BRANCH = $branch }
+            $res = Invoke-Text $second 'Contoso.Shop.AI' -Environment @{ PROGRESS_BRANCH = $branch }
             Remove-Workspace $second
             $resumed = Get-OriginText $origin $branch
             Remove-Workspace $origin
@@ -415,18 +415,18 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
 
     Context "Scenario: persone e sistemi esterni" {
         BeforeAll {
-            $person = @{ id = 'cittadino'; name = 'Cittadino'; description = 'Scrive all''ente dal sito.'; technical = $false }
-            $link = @{ source = 'cittadino'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }
+            $person = @{ id = 'cliente'; name = 'Cliente'; description = 'Scrive al negozio dal sito.'; technical = $false }
+            $link = @{ source = 'cliente'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }
             Reset-Stub @{ $Api = @(@{ people = @($person); links = @($link) }) }
             $files = New-DescribedEngine
             $bff = New-BffRepository
             $bff.Keys | ForEach-Object { $files["bff/$($_ -replace '^source/', '')"] = $bff[$_] }
             $root = New-Workspace $files
-            $res = Invoke-Text $root 'Aidea.Dxp.AI'
+            $res = Invoke-Text $root 'Contoso.Shop.AI'
 
-            $bffLink = @{ source = 'cittadino'; target = 'aidea_dxp_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' }
-            Reset-Stub @{ aidea_dxp_bff_web = @(@{ people = @($person); links = @($bffLink) }, @{ links = @($bffLink) }) }
-            $bffResult = Invoke-Text $root 'Aidea.Dxp.Bff.Web' -Environment @{ SOURCE_DIRECTORY = 'bff' }
+            $bffLink = @{ source = 'cliente'; target = 'contoso_shop_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' }
+            Reset-Stub @{ contoso_shop_bff_web = @(@{ people = @($person); links = @($bffLink) }, @{ links = @($bffLink) }) }
+            $bffResult = Invoke-Text $root 'Contoso.Shop.Bff.Web' -Environment @{ SOURCE_DIRECTORY = 'bff' }
             $bffRequests = @(Get-StubRequests)
             Remove-Workspace $root
         }
@@ -440,11 +440,11 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la parte generata contiene la relazione dalla persona all'applicazione" {
-            $res.Generated['aidea.dxp.ai.dsl'] | Should -Match "cittadino -> $Api `"Invia i messaggi`" `"HTTPS`""
+            $res.Generated['contoso.shop.ai.dsl'] | Should -Match "cliente -> $Api `"Invia i messaggi`" `"HTTPS`""
         }
 
         It "E un altro repository trova la persona nel catalogo" {
-            Get-UserMessage $bffRequests[0] | Should -Match '- cittadino = Cittadino'
+            Get-UserMessage $bffRequests[0] | Should -Match '- cliente = Cliente'
         }
 
         It "E una stesura che la dichiara di nuovo si accetta senza un'altra richiesta" {
@@ -456,23 +456,23 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E l'altro repository la collega senza dichiararla" {
-            $bffResult.Generated['aidea.dxp.bff.web.dsl'] | Should -Match 'cittadino -> aidea_dxp_bff_web "Apre la chat" "HTTPS"'
+            $bffResult.Generated['contoso.shop.bff.web.dsl'] | Should -Match 'cliente -> contoso_shop_bff_web "Apre la chat" "HTTPS"'
         }
     }
 
     Context "Scenario: una stesura dichiara con un altro identificativo una persona del catalogo" {
         BeforeAll {
-            $person = @{ id = 'cittadino'; name = 'Cittadino'; description = 'Scrive all''ente dal sito.'; technical = $false }
-            Reset-Stub @{ $Api = @(@{ people = @($person); links = @(@{ source = 'cittadino'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }) }) }
+            $person = @{ id = 'cliente'; name = 'Cliente'; description = 'Scrive al negozio dal sito.'; technical = $false }
+            Reset-Stub @{ $Api = @(@{ people = @($person); links = @(@{ source = 'cliente'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }) }) }
             $files = New-DescribedEngine
             $bff = New-BffRepository
             $bff.Keys | ForEach-Object { $files["bff/$($_ -replace '^source/', '')"] = $bff[$_] }
             $root = New-Workspace $files
-            Invoke-Text $root 'Aidea.Dxp.AI' | Out-Null
+            Invoke-Text $root 'Contoso.Shop.AI' | Out-Null
 
-            $renamed = @{ id = 'citizen'; name = ' cittadino '; description = 'Apre la chat.'; technical = $false }
-            Reset-Stub @{ aidea_dxp_bff_web = @(@{ people = @($renamed); links = @(@{ source = 'citizen'; target = 'aidea_dxp_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' }) }) }
-            $res = Invoke-Text $root 'Aidea.Dxp.Bff.Web' -Environment @{ SOURCE_DIRECTORY = 'bff' }
+            $renamed = @{ id = 'customer'; name = ' cliente '; description = 'Apre la chat.'; technical = $false }
+            Reset-Stub @{ contoso_shop_bff_web = @(@{ people = @($renamed); links = @(@{ source = 'customer'; target = 'contoso_shop_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' }) }) }
+            $res = Invoke-Text $root 'Contoso.Shop.Bff.Web' -Environment @{ SOURCE_DIRECTORY = 'bff' }
             $requests = @(Get-StubRequests)
             Remove-Workspace $root
         }
@@ -486,7 +486,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la parte collega l'identificativo del catalogo" {
-            $res.Generated['aidea.dxp.bff.web.dsl'] | Should -Match 'cittadino -> aidea_dxp_bff_web "Apre la chat" "HTTPS"'
+            $res.Generated['contoso.shop.bff.web.dsl'] | Should -Match 'cliente -> contoso_shop_bff_web "Apre la chat" "HTTPS"'
         }
     }
 
@@ -496,28 +496,28 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             $bff = New-BffRepository
             $bff.Keys | ForEach-Object { $files["bff/$($_ -replace '^source/', '')"] = $bff[$_] }
 
-            $person = @{ id = 'cittadino'; name = 'Cittadino'; description = 'Scrive all''ente dal sito.'; technical = $false }
-            Reset-Stub @{ $Api = @(@{ people = @($person); links = @(@{ source = 'cittadino'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }) }) }
+            $person = @{ id = 'cliente'; name = 'Cliente'; description = 'Scrive al negozio dal sito.'; technical = $false }
+            Reset-Stub @{ $Api = @(@{ people = @($person); links = @(@{ source = 'cliente'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }) }) }
             $engineRoot = New-Workspace $files
-            $engine = Invoke-Text $engineRoot 'Aidea.Dxp.AI'
-            $engineText = Get-Content -Raw (Join-Path $engineRoot 'docs/architecture/model/generated/aidea.dxp.ai.text.json')
+            $engine = Invoke-Text $engineRoot 'Contoso.Shop.AI'
+            $engineText = Get-Content -Raw (Join-Path $engineRoot 'docs/architecture/model/generated/contoso.shop.ai.text.json')
             Remove-Workspace $engineRoot
 
-            $citizen = @{ id = 'citizen'; name = 'Cittadino'; description = 'Apre la chat dal sito.'; technical = $false }
-            Reset-Stub @{ aidea_dxp_bff_web = @(@{ people = @($citizen); links = @(@{ source = 'citizen'; target = 'aidea_dxp_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' }) }) }
+            $customer = @{ id = 'customer'; name = 'Cliente'; description = 'Apre la chat dal sito.'; technical = $false }
+            Reset-Stub @{ contoso_shop_bff_web = @(@{ people = @($customer); links = @(@{ source = 'customer'; target = 'contoso_shop_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' }) }) }
             $bffRoot = New-Workspace $files
-            $first = Invoke-Text $bffRoot 'Aidea.Dxp.Bff.Web' -Environment @{ SOURCE_DIRECTORY = 'bff' }
+            $first = Invoke-Text $bffRoot 'Contoso.Shop.Bff.Web' -Environment @{ SOURCE_DIRECTORY = 'bff' }
 
-            [IO.File]::WriteAllText((Join-Path $bffRoot 'docs/architecture/model/generated/aidea.dxp.ai.text.json'), $engineText)
+            [IO.File]::WriteAllText((Join-Path $bffRoot 'docs/architecture/model/generated/contoso.shop.ai.text.json'), $engineText)
             Reset-Stub
-            $res = Invoke-Text $bffRoot 'Aidea.Dxp.Bff.Web' -Environment @{ SOURCE_DIRECTORY = 'bff' }
+            $res = Invoke-Text $bffRoot 'Contoso.Shop.Bff.Web' -Environment @{ SOURCE_DIRECTORY = 'bff' }
             $requests = @(Get-StubRequests)
             Remove-Workspace $bffRoot
         }
 
         It "Allora le due run dichiarano la persona ognuna nel proprio testo" {
-            $engine.Text.people.cittadino.name | Should -Be 'Cittadino'
-            $first.Text.people.citizen.name | Should -Be 'Cittadino'
+            $engine.Text.people.cliente.name | Should -Be 'Cliente'
+            $first.Text.people.customer.name | Should -Be 'Cliente'
         }
 
         It "E la run successiva del repository che viene dopo per nome riesce" {
@@ -529,7 +529,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E collega l'identificativo del testo che viene prima" {
-            $res.Generated['aidea.dxp.bff.web.dsl'] | Should -Match 'cittadino -> aidea_dxp_bff_web "Apre la chat" "HTTPS"'
+            $res.Generated['contoso.shop.bff.web.dsl'] | Should -Match 'cliente -> contoso_shop_bff_web "Apre la chat" "HTTPS"'
         }
 
         It "E non chiede nulla al modello" {
@@ -539,19 +539,19 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
 
     Context "Scenario: il modello descritto e' un modello Structurizr valido" {
         BeforeAll {
-            $person = @{ id = 'cittadino'; name = 'Cittadino'; description = 'Scrive all''ente dal sito.'; technical = $false }
-            $system = @{ id = 'entra'; name = 'Entra External ID'; description = 'Autentica i cittadini.'; technical = $true }
-            $links = @(@{ source = 'cittadino'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }, @{ source = $Api; target = 'entra'; description = 'Valida i token'; technology = 'OpenID Connect' })
+            $person = @{ id = 'cliente'; name = 'Cliente'; description = 'Scrive al negozio dal sito.'; technical = $false }
+            $system = @{ id = 'entra'; name = 'Entra External ID'; description = 'Autentica i clienti.'; technical = $true }
+            $links = @(@{ source = 'cliente'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }, @{ source = $Api; target = 'entra'; description = 'Valida i token'; technology = 'OpenID Connect' })
             Reset-Stub @{ $Api = @(@{ people = @($person); externalSystems = @($system); links = $links }) }
             $root = New-Workspace (New-DescribedEngine)
-            $res = Invoke-Text $root 'Aidea.Dxp.AI'
+            $res = Invoke-Text $root 'Contoso.Shop.AI'
             Remove-Workspace $root
             $dir = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-text-dsl-$(New-Guid)"
             New-Item -ItemType Directory -Force -Path (Join-Path $dir 'generated') | Out-Null
             $res.Generated.Keys | ForEach-Object { [IO.File]::WriteAllText((Join-Path $dir "generated/$_"), $res.Generated[$_]) }
-            [IO.File]::WriteAllText((Join-Path $dir 'generated/aidea.dxp.ai.text.json'), ($res.Text | ConvertTo-Json -Depth 20))
+            [IO.File]::WriteAllText((Join-Path $dir 'generated/contoso.shop.ai.text.json'), ($res.Text | ConvertTo-Json -Depth 20))
             $context = Invoke-C4Script 'C4/Export-C4Context.ps1' @{ GENERATED_DIRECTORY = (Join-Path $dir 'generated'); CONTEXT_FILE = (Join-Path $dir 'context.dsl'); DOCUMENT_LANGUAGE = ''; GATE_MODE = '' }
-            [IO.File]::WriteAllText((Join-Path $dir 'workspace.dsl'), "workspace {`n    model {`n        !include context.dsl`n        sistema = softwareSystem `"Aidea.Dxp`" {`n            !include generated/aidea.dxp.ai.dsl`n        }`n    }`n}`n")
+            [IO.File]::WriteAllText((Join-Path $dir 'workspace.dsl'), "workspace {`n    model {`n        !include context.dsl`n        sistema = softwareSystem `"Contoso.Shop`" {`n            !include generated/contoso.shop.ai.dsl`n        }`n    }`n}`n")
             $export = Export-StructurizrWorkspace (Join-Path $dir 'workspace.dsl')
             Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
             $model = $export.Workspace.model
@@ -575,7 +575,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la relazione dalla persona all'applicazione dice cio' che passa" {
-            ($model.people | Where-Object name -EQ 'Cittadino').relationships.description | Should -Contain 'Invia i messaggi'
+            ($model.people | Where-Object name -EQ 'Cliente').relationships.description | Should -Contain 'Invia i messaggi'
         }
     }
 
@@ -584,11 +584,11 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             Reset-Stub
             $files = New-DescribedEngine
             $root = New-Workspace $files
-            Invoke-Text $root 'Aidea.Dxp.AI' | Out-Null
-            Remove-Item -Recurse -Force (Join-Path $root 'source/Aidea.Dxp.AI.Worker')
+            Invoke-Text $root 'Contoso.Shop.AI' | Out-Null
+            Remove-Item -Recurse -Force (Join-Path $root 'source/Contoso.Shop.AI.Worker')
             Remove-Item -Recurse -Force (Join-Path $root 'fragments')
             Reset-Stub
-            $res = Invoke-Text $root 'Aidea.Dxp.AI'
+            $res = Invoke-Text $root 'Contoso.Shop.AI'
             Remove-Workspace $root
         }
 
@@ -605,7 +605,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         BeforeAll {
             Reset-Stub
             $root = New-Workspace (New-DescribedEngine)
-            $res = Invoke-Text $root 'Aidea.Dxp.AI' -Environment @{ C4_TEXT_ENDPOINT = '' }
+            $res = Invoke-Text $root 'Contoso.Shop.AI' -Environment @{ C4_TEXT_ENDPOINT = '' }
             Remove-Workspace $root
         }
 
