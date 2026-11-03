@@ -471,14 +471,17 @@ Diagrammi Mermaid (`mermaid-verify.yaml`, `CI/Scripts/Mermaid/Test-MermaidDiagra
 
 Flussi (`flows-verify.yaml`, `CI/Scripts/Mermaid/Test-DiagramFlows.ps1`):
 
-- **Sezioni.** Ogni partecipante di un diagramma di sequenza ha come nome mostrato
-  (`participant T as Esecuzione del turno`) il nome di un elemento del modello C4: un componente, un
-  container, una persona o un sistema. Un container con il tag delle applicazioni che ha componenti
-  compare con i suoi componenti, mai intero. Ogni chiamata fra due partecipanti diversi è una relazione
-  del modello nella stessa direzione, comprese quelle che Structurizr ricava dai livelli inferiori. Le
-  risposte (frecce tratteggiate) e le chiamate di un partecipante a sé non si controllano. L'errore
-  nomina la sezione, il file e la riga del diagramma, e il partecipante o la chiamata; un nome che il
-  modello dà a due elementi è ambiguo.
+- **Sezioni.** Un flusso è un titolo di secondo livello con diagrammi di sequenza: ha almeno un diagramma a livello dei container, cioè senza riquadri, i cui partecipanti
+  hanno come nome mostrato (`participant M as API del Motore`) il nome di un container, di una persona
+  o di un sistema del modello C4. I diagrammi di dettaglio mettono ogni componente nel riquadro
+  (`box API del Motore`) del container a cui il modello lo assegna; gli altri container, le persone e i
+  sistemi possono comparire interi, fuori dai riquadri, ma un container non compare nello stesso
+  diagramma sia intero sia con i suoi componenti. Ogni chiamata fra due partecipanti diversi è una
+  relazione del modello nella stessa direzione, comprese quelle che Structurizr ricava dai livelli
+  inferiori. Le risposte (frecce tratteggiate) e le chiamate di un partecipante a sé non si controllano.
+  L'errore nomina la sezione, il file e la riga del diagramma, e il partecipante, il riquadro o la
+  chiamata, oppure il file e il flusso senza diagramma a livello dei container; un nome che il modello
+  dà a due elementi fuori dai riquadri è ambiguo.
 - **Decisioni.** Una decisione `NNNN-titolo.md` aperta (non `superseded`, `deprecated` o `rejected`)
   con la parte `Struttura nel codice` ha la parte `Flusso nel codice`, con almeno un diagramma di
   sequenza; i suoi partecipanti sono classi del diagramma delle classi della parte della struttura.

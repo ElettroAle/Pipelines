@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Legge i diagrammi da un file JSON [{ id, text }] e scrive, per ognuno, l'esito
-// del parse: il tipo del diagramma con partecipanti e chiamate di un diagramma di sequenza
-// o le classi di un diagramma delle classi, oppure l'errore con la riga.
+// del parse: il tipo del diagramma con partecipanti, riquadri e chiamate di un diagramma di
+// sequenza o le classi di un diagramma delle classi, oppure l'errore con la riga.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 
@@ -16,11 +16,13 @@ mermaid.initialize({ startOnLoad: false });
 function describeSequence(db) {
   const actors = db.getActors();
   const name = (alias) => actors.get(alias)?.description ?? alias;
+  const box = (alias) => actors.get(alias)?.box?.name ?? null;
   const replies = new Set(Object.entries(db.LINETYPE).filter(([kind]) => kind.includes('DOTTED')).map(([, value]) => value));
   const calls = db.getMessages()
     .filter((message) => message.from && message.to && message.type !== db.LINETYPE.NOTE && !replies.has(message.type))
-    .map((message) => ({ from: name(message.from), to: name(message.to) }));
-  return { participants: [...actors.values()].map((actor) => actor.description), calls };
+    .map((message) => ({ from: name(message.from), fromBox: box(message.from), to: name(message.to), toBox: box(message.to) }));
+  const placements = [...actors.values()].map((actor) => ({ name: actor.description, box: actor.box?.name ?? null }));
+  return { participants: placements.map((placement) => placement.name), placements, calls };
 }
 
 function describe(diagram) {
