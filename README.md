@@ -456,8 +456,7 @@ Diagrammi Mermaid (`mermaid-verify.yaml`, `CI/Scripts/Mermaid/Test-MermaidDiagra
 
 Flussi (`flows-verify.yaml`, `CI/Scripts/Mermaid/Test-DiagramFlows.ps1`):
 
-- **Sezioni.** Un flusso è un titolo di secondo livello con diagrammi di sequenza (senza titolo, la
-  sezione): ha almeno un diagramma a livello dei container, cioè senza riquadri, i cui partecipanti
+- **Sezioni.** Un flusso è un titolo di secondo livello con diagrammi di sequenza: ha almeno un diagramma a livello dei container, cioè senza riquadri, i cui partecipanti
   hanno come nome mostrato (`participant M as API del Motore`) il nome di un container, di una persona
   o di un sistema del modello C4. I diagrammi di dettaglio mettono ogni componente nel riquadro
   (`box API del Motore`) del container a cui il modello lo assegna; gli altri container, le persone e i

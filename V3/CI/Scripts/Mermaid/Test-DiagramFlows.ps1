@@ -146,8 +146,7 @@ function Test-ContainerLevel([object[]]$Sequences) {
         $first = $flow.Group[0]
         $atContainerLevel = @($flow.Group | Where-Object { -not @($_.Parsed.placements | Where-Object { $_.box }) })
         if ($atContainerLevel) { continue }
-        $name = if ($first.Part) { $first.Part } else { $first.Section.Title }
-        New-Issue $first.Section.Title 'flusso senza diagramma a livello dei container' "$($first.Section.File.Name) $name"
+        New-Issue $first.Section.Title 'flusso senza diagramma a livello dei container' "$($first.Section.File.Name) $($first.Part)"
     }
 }
 

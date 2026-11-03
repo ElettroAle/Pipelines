@@ -256,13 +256,13 @@ Describe "Test-DiagramFlows — partecipanti, riquadri, decisioni e strumenti" {
         Get-Issue $res '^Runtime View: partecipante ambiguo nel modello C4 \(06_runtime_view\.md:\d+ BFF\)$' | Should -Not -BeNullOrEmpty -Because ($res.Output)
     }
 
-    It "Un diagramma di sequenza senza titolo di flusso vale come flusso della sua sezione" {
+    It "Un diagramma senza un titolo proprio appartiene al flusso del titolo che lo precede" {
         $docs = New-FlowDocs
         Edit-Docs $docs $RuntimeView "## Apertura della sessione`n`n" ''
         Edit-Docs $docs $RuntimeView "``````mermaid`nsequenceDiagram`n$ContainerDiagram`n```````n`n" ''
         $res = Invoke-FlowCheck $docs
         $res.ExitCode | Should -Be 1
-        Get-Issue $res '^Runtime View: flusso senza diagramma a livello dei container \(06_runtime_view\.md Runtime View\)$' | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        Get-Issue $res '^Runtime View: flusso senza diagramma a livello dei container \(06_runtime_view\.md In breve\)$' | Should -Not -BeNullOrEmpty -Because ($res.Output)
     }
 
     It "Senza modello C4 un diagramma di sequenza del documento fallisce nominando il modello" {
