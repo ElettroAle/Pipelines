@@ -363,7 +363,17 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
 - **Il frammento** (`CI/Scripts/C4/C4CodeModel.ps1`, che i lettori includono) ha tre parti: `manifests`,
   i file di progetto letti, relativi al repository; `containers`, ognuno con `id`, `name`, `codeName`,
   `sources` (le cartelle del suo codice), `technology`, `tags`, `properties` e i `components` con gli
-  stessi campi tranne `tags`; `relationships`, coppie `source` e `target` di identificativi.
+  stessi campi tranne `tags`; `relationships`, coppie `source` e `target` di identificativi. Può
+  dichiarare anche `addresses`, gli indirizzi a cui un container si avvia in locale, e `calls`, quelli
+  che chiama in locale, ognuno con `container`, `address` (schema, host e porta in minuscolo) e `source`
+  (il file che lo dichiara).
+- **Relazioni fra applicazioni di repository diversi.** Un indirizzo chiamato a cui si avvia un solo
+  container, di qualunque repository, diventa la relazione fra i due, nella parte e nel testo
+  dell'applicazione che chiama. Il legame viene da file che lo sviluppo in locale tiene già allineati: se
+  il proxy di un'applicazione punta a una porta sbagliata, l'applicazione non funziona in locale. Un
+  indirizzo chiamato a cui non si avvia nessun container, o se ne avvia più d'uno, ferma la generazione
+  del repository che chiama, nominando il file e l'indirizzo. Tutti i lettori girano prima della
+  generazione, che legge i frammenti di tutto il sistema.
 - **Il testo** (`c4-describe.yaml`, `CI/Scripts/C4/Write-C4ModelText.ps1`). Un modello Azure OpenAI
   (`model`, con ragionamento `reasoningEffort`, default `high`) scrive il testo di tutto il sistema in una
   sola generazione, un container alla volta: la descrizione di ogni elemento, ciò che passa su ogni
@@ -439,13 +449,18 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   un'altra interfaccia di quel progetto, c'è anche la relazione opposta. Un'interfaccia che il progetto
   dichiara a sua volta con lo stesso nome non conta, e l'applicazione tiene la relazione verso i
   progetti che compone. Le dichiarazioni si leggono dai file `.cs`, all'inizio della riga. I
-  servizi Azure con cui un'applicazione parla non vengono dalle librerie: li dice l'infrastruttura.
+  servizi Azure con cui un'applicazione parla non vengono dalle librerie: li dice l'infrastruttura. Gli
+  indirizzi di avvio sono gli `applicationUrl` dei profili in `Properties/launchSettings.json`
+  dell'applicazione; un file che non si legge, o un indirizzo senza schema `http` o `https`, ferma la
+  lettura.
 - **Angular 18** (`c4-read-angular18.yaml`). Il `package.json` del workspace dipende da `@angular/core`
   18 (`^18.x`, `~18.x` o `18.x`); un'altra versione, un intervallo che va oltre la 18 o nessuna
   dipendenza ferma la lettura. L'applicazione del workspace è un container con il nome del repository
   senza il prefisso comune ai repository sorgente; i componenti sono le cartelle di funzionalità e i
   moduli di base con un file `*.providers.ts`, le relazioni gli import fra cartelle. Un progetto che non
-  è l'unica applicazione del workspace, o un secondo workspace, ferma la lettura.
+  è l'unica applicazione del workspace, o un secondo workspace, ferma la lettura. Gli indirizzi chiamati
+  sono i `target` del proxy del dev server, il file JSON di `proxyConfig` nelle opzioni di `serve`; un
+  proxy che non è un file JSON leggibile, o un target che non è un indirizzo, ferma la lettura.
 - **Nomi.** Il nome nel codice senza il prefisso comune ai progetti del repository, a segmenti interi e
   più corto di ogni nome. L'identificativo si ricava dal nome completo, così un repository nomina gli
   elementi degli altri senza leggerli.
@@ -461,14 +476,17 @@ Diagrammi Mermaid (`mermaid-verify.yaml`, `CI/Scripts/Mermaid/Test-MermaidDiagra
 
 Flussi (`flows-verify.yaml`, `CI/Scripts/Mermaid/Test-DiagramFlows.ps1`):
 
-- **Sezioni.** Ogni partecipante di un diagramma di sequenza ha come nome mostrato
-  (`participant T as Esecuzione del turno`) il nome di un elemento del modello C4: un componente, un
-  container, una persona o un sistema. Un container con il tag delle applicazioni che ha componenti
-  compare con i suoi componenti, mai intero. Ogni chiamata fra due partecipanti diversi è una relazione
-  del modello nella stessa direzione, comprese quelle che Structurizr ricava dai livelli inferiori. Le
-  risposte (frecce tratteggiate) e le chiamate di un partecipante a sé non si controllano. L'errore
-  nomina la sezione, il file e la riga del diagramma, e il partecipante o la chiamata; un nome che il
-  modello dà a due elementi è ambiguo.
+- **Sezioni.** Un flusso è un titolo di secondo livello con diagrammi di sequenza: ha almeno un diagramma a livello dei container, cioè senza riquadri, i cui partecipanti
+  hanno come nome mostrato (`participant M as API del Motore`) il nome di un container, di una persona
+  o di un sistema del modello C4. I diagrammi di dettaglio mettono ogni componente nel riquadro
+  (`box API del Motore`) del container a cui il modello lo assegna; gli altri container, le persone e i
+  sistemi possono comparire interi, fuori dai riquadri, ma un container non compare nello stesso
+  diagramma sia intero sia con i suoi componenti. Ogni chiamata fra due partecipanti diversi è una
+  relazione del modello nella stessa direzione, comprese quelle che Structurizr ricava dai livelli
+  inferiori. Le risposte (frecce tratteggiate) e le chiamate di un partecipante a sé non si controllano.
+  L'errore nomina la sezione, il file e la riga del diagramma, e il partecipante, il riquadro o la
+  chiamata, oppure il file e il flusso senza diagramma a livello dei container; un nome che il modello
+  dà a due elementi fuori dai riquadri è ambiguo.
 - **Decisioni.** Una decisione `NNNN-titolo.md` aperta (non `superseded`, `deprecated` o `rejected`)
   con la parte `Struttura nel codice` ha la parte `Flusso nel codice`, con almeno un diagramma di
   sequenza; i suoi partecipanti sono classi del diagramma delle classi della parte della struttura.
@@ -650,7 +668,7 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/Adr/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, versione intera, sostituzioni reciproche, ADR `accepted` con l'esito invariato e cambiati solo con una versione nuova rispetto al ramo di destinazione della PR |
 | `CI/Scripts/Arc42/Test-Arc42Document.ps1` | Struttura di un documento arc42 (`arc42-verify.yaml`): un file per sezione con nome e titolo del template ufficiale; release, URL e SHA-256 per lingua fissati nello script |
 | `CI/Scripts/C4/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, nessun elemento tecnico nelle viste di contesto, elementi e relazioni generati descritti, nessuna relazione fra elementi generati che il codice non dichiara, marcatori di vista nelle sezioni |
-| `CI/Scripts/C4/C4CodeModel.ps1` | Contratto del frammento del modello C4 generato, incluso dai lettori: file di progetto letti, container, componenti, relazioni |
+| `CI/Scripts/C4/C4CodeModel.ps1` | Contratto del frammento del modello C4 generato, incluso dai lettori: file di progetto letti, container, componenti, relazioni, indirizzi di avvio e chiamati e il loro legame |
 | `CI/Scripts/C4/Read-C4DotNet10Model.ps1` | Lettore .NET 10 (`c4-read-dotnet10.yaml`): applicazioni come container, progetti di produzione come componenti, regole di .NET 10; un progetto di un'altra versione ferma la lettura |
 | `CI/Scripts/C4/Read-C4Angular18Model.ps1` | Lettore Angular 18 (`c4-read-angular18.yaml`): l'applicazione come container, cartelle di funzionalità e moduli di base come componenti; un workspace di un'altra versione ferma la lettura |
 | `CI/Scripts/C4/Write-C4ModelText.ps1` | Testo del modello C4 di tutto il sistema (`c4-describe.yaml`): stesure di un modello Azure OpenAI corrette in modo deterministico o rimandate al modello, catalogo unico di persone e sistemi esterni controllato dal modello, testo salvato un container alla volta e ripreso al rilancio, correzioni elencate |

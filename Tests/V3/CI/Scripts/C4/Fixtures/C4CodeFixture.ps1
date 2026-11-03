@@ -52,6 +52,24 @@ function New-ClientRepository {
     return $files
 }
 
+# L'indirizzo a cui un'applicazione si avvia in locale: un profilo per URL e uno senza, come quello di IIS Express.
+function Add-LaunchSettings([System.Collections.IDictionary]$Files, [string]$Project, [string[]]$Urls) {
+    $profiles = [ordered]@{ IISExpress = [ordered]@{ commandName = 'IISExpress' } }
+    $index = 0
+    $Urls | ForEach-Object { $profiles["profilo$index"] = [ordered]@{ commandName = 'Project'; applicationUrl = $_ }; $index++ }
+    $Files["source/$Project/Properties/launchSettings.json"] = [ordered]@{ profiles = $profiles } | ConvertTo-Json -Depth 5
+    return $Files
+}
+
+# Il proxy del dev server di un'applicazione Angular, dichiarato nelle opzioni di serve di angular.json.
+function Add-DevProxy([System.Collections.IDictionary]$Files, [hashtable]$Targets, [string]$File = 'proxy.conf.json') {
+    $Files['source/angular.json'] = "{ ""projects"": { ""contoso-shop-client-web"": { ""projectType"": ""application"", ""sourceRoot"": ""src"", ""architect"": { ""serve"": { ""options"": { ""proxyConfig"": ""$File"" } } } } } }"
+    $proxy = [ordered]@{}
+    $Targets.Keys | Sort-Object | ForEach-Object { $proxy[$_] = [ordered]@{ target = $Targets[$_]; secure = $false } }
+    $Files["source/$File"] = $proxy | ConvertTo-Json -Depth 5
+    return $Files
+}
+
 function Write-SourceFiles([string]$Root, [System.Collections.IDictionary]$Files) {
     foreach ($path in ($Files.Keys | Where-Object { $null -ne $Files[$_] })) {
         $file = Join-Path $Root $path

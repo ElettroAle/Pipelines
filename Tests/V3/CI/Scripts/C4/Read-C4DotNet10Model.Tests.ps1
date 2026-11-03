@@ -179,4 +179,60 @@ Describe "Lettore .NET 10 del modello C4" {
             $res.Fragment | Should -BeNullOrEmpty
         }
     }
+
+    Context "Scenario: gli indirizzi a cui un'applicazione si avvia in locale" {
+        BeforeAll {
+            $files = Add-LaunchSettings (New-BffRepository) 'Contoso.Shop.Bff.Web' @('https://localhost:5001;http://localhost:5000', 'http://localhost:5000')
+            $res = Invoke-C4Reader $files 'Contoso.Shop.Bff.Web' 'dotnet10'
+        }
+
+        It "Allora la lettura riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E il frammento dichiara ogni indirizzo dell'applicazione una volta sola" {
+            @($res.Fragment.addresses | ForEach-Object { "$($_.container) $($_.address)" }) | Should -Be @('contoso_shop_bff_web http://localhost:5000', 'contoso_shop_bff_web https://localhost:5001')
+        }
+
+        It "E ogni indirizzo nomina il file che lo dichiara" {
+            @($res.Fragment.addresses.source | Select-Object -Unique) | Should -Be @('Contoso.Shop.Bff.Web/Properties/launchSettings.json')
+        }
+
+        It "E il file degli indirizzi non e' un file di progetto letto" {
+            $res.Fragment.manifests | Should -Not -Contain 'Contoso.Shop.Bff.Web/Properties/launchSettings.json'
+        }
+    }
+
+    Context "Scenario: il profilo di avvio di un progetto che non e' un'applicazione" {
+        BeforeAll {
+            $files = Add-LaunchSettings (New-BffRepository) 'Contoso.Shop.Bff.Web.BusinessLogic' @('https://localhost:5003')
+            $res = Invoke-C4Reader $files 'Contoso.Shop.Bff.Web' 'dotnet10'
+        }
+
+        It "Allora la lettura riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E il frammento non dichiara indirizzi" {
+            @($res.Fragment.addresses) | Should -BeNullOrEmpty
+        }
+    }
+
+    Context "Schema dello scenario: profili di avvio che il lettore non legge — <caso>" -ForEach @(
+        @{ caso = 'JSON non valido'; Build = { $f = New-BffRepository; $f['source/Contoso.Shop.Bff.Web/Properties/launchSettings.json'] = '{ non e'' json'; $f }; elemento = 'Contoso.Shop.Bff.Web/Properties/launchSettings.json' }
+        @{ caso = 'indirizzo senza schema'; Build = { Add-LaunchSettings (New-BffRepository) 'Contoso.Shop.Bff.Web' @('localhost:5001') }; elemento = 'Contoso.Shop.Bff.Web/Properties/launchSettings.json: localhost:5001' }
+        @{ caso = 'schema che non e'' http'; Build = { Add-LaunchSettings (New-BffRepository) 'Contoso.Shop.Bff.Web' @('ftp://localhost:5001') }; elemento = 'Contoso.Shop.Bff.Web/Properties/launchSettings.json: ftp://localhost:5001' }
+    ) {
+        BeforeAll {
+            $res = Invoke-C4Reader (& $Build) 'Contoso.Shop.Bff.Web' 'dotnet10'
+        }
+
+        It "Allora la lettura fallisce" {
+            $res.ExitCode | Should -Be 1
+        }
+
+        It "E nomina il repository e il file" {
+            Get-Issues $res.Output | Where-Object { $_ -match 'Contoso\.Shop\.Bff\.Web' -and $_.Contains($elemento) } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+    }
 }

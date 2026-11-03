@@ -890,4 +890,29 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             Get-StubRequests | Should -BeNullOrEmpty
         }
     }
+
+    Context "Scenario: una relazione nasce dal proxy di sviluppo di un'altra applicazione" {
+        BeforeAll {
+            Reset-Stub
+            $client = 'contoso_shop_client_web'
+            $files = Add-Sources ([ordered]@{ 'docs/STYLE.md' = $Guide }) $Bff (Add-LaunchSettings (New-BffRepository) 'Contoso.Shop.Bff.Web' @('https://localhost:5001'))
+            $files = Add-Sources $files 'Contoso.Shop.Client.Web' (Add-DevProxy (New-ClientRepository) @{ '/api' = 'https://localhost:5001' })
+            $root = New-Workspace $files
+            $res = Invoke-Text $root @($Bff, 'Contoso.Shop.Client.Web') -Readers @{ 'Contoso.Shop.Client.Web' = @('angular18') }
+            $clientRequests = Get-UnitRequests $client
+            Remove-Workspace $root
+        }
+
+        It "Allora la generazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E la relazione la descrive l'applicazione che chiama" {
+            Get-UserMessage $clientRequests[0] | Should -Match """target"":\s*""$Web"""
+        }
+
+        It "E la parte dell'applicazione che chiama dice cio' che passa sulla relazione" {
+            $res.Generated['model/contoso.shop.client.web.dsl'] | Should -Match "$client -> $Web ""Passa da $client a $Web"""
+        }
+    }
 }

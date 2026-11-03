@@ -6,7 +6,8 @@
 # file *.providers.ts sono i suoi componenti, legati dagli import fra cartelle. Un workspace con un
 # progetto che non e' l'unica applicazione, o un secondo workspace, ferma la lettura. Le regole sono
 # provate solo su Angular 18: un workspace che dipende da un'altra versione di @angular/core ferma la
-# lettura invece di essere letto con regole non sue.
+# lettura invece di essere letto con regole non sue. Gli indirizzi che l'applicazione chiama in locale
+# sono i target del proxy del dev server (proxyConfig di serve), letto solo in JSON.
 
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
 . "$PSScriptRoot/../Common/DocumentLanguage.ps1"
@@ -107,6 +108,33 @@ function Get-ApplicationRelationships($Workspace) {
     }
 }
 
+function Read-DevProxies($Workspace) {
+    $file = $Workspace.Projects[0].Value.architect.serve.options.proxyConfig
+    if (-not $file) { return }
+    $path = Join-Path $Workspace.File.DirectoryName $file
+    $proxy = $null
+    if ($file -like '*.json' -and (Test-Path $path -PathType Leaf)) {
+        try { $proxy = Get-Content -Raw $path | ConvertFrom-Json -ErrorAction Stop } catch { $proxy = $null }
+    }
+    $targets = if ($proxy) { @($proxy.PSObject.Properties.Value | ForEach-Object { $_.target } | Where-Object { $_ }) } else { $null }
+    return [pscustomobject]@{ Source = Get-RelativePath $path; Targets = $targets }
+}
+
+function Get-DevProxyIssues($Workspaces) {
+    foreach ($proxy in @($Workspaces | ForEach-Object { Read-DevProxies $_ })) {
+        if ($null -eq $proxy.Targets) { New-Issue $Repository 'proxy di sviluppo che il lettore non legge' $proxy.Source; continue }
+        $proxy.Targets | Where-Object { -not (ConvertTo-Address $_) } |
+            ForEach-Object { New-Issue $Repository 'target del proxy di sviluppo che non e'' un indirizzo' "$($proxy.Source): $_" }
+    }
+}
+
+function Get-ApplicationCalls($Workspace) {
+    $containerId = ConvertTo-Identifier $Repository
+    foreach ($proxy in (Read-DevProxies $Workspace)) {
+        $proxy.Targets | ForEach-Object { ConvertTo-Address $_ } | Sort-Object -Unique | ForEach-Object { New-C4Address $containerId $_ $proxy.Source }
+    }
+}
+
 function Get-Manifests($Workspace) {
     return @($Workspace.File, (Join-Path $Workspace.File.DirectoryName 'package.json') | Where-Object { Test-Path $_ -PathType Leaf } | ForEach-Object { Get-RelativePath "$_" })
 }
@@ -137,10 +165,13 @@ function Get-ReadIssues {
     $workspaces = @(Get-SourceFiles 'angular.json' | ForEach-Object { Read-Workspace $_ })
     $unrecognized = @(Get-UnsupportedVersionIssues $workspaces) + @(Get-UnrecognizedIssues $workspaces)
     if ($unrecognized) { return $unrecognized }
+    $proxyIssues = @(Get-DevProxyIssues $workspaces)
+    if ($proxyIssues) { return $proxyIssues }
 
     $containers = $workspaces | ForEach-Object { New-ApplicationContainer $_ }
     $relationships = $workspaces | ForEach-Object { Get-ApplicationRelationships $_ }
-    Write-C4Fragment 'angular18' @($workspaces | ForEach-Object { Get-Manifests $_ }) $containers $relationships
+    $calls = $workspaces | ForEach-Object { Get-ApplicationCalls $_ }
+    Write-C4Fragment 'angular18' @($workspaces | ForEach-Object { Get-Manifests $_ }) $containers $relationships @() $calls
 }
 
 Invoke-Verification { Get-ReadIssues } "Applicazioni Angular 18 di $Repository lette" 'Lettura delle applicazioni Angular 18 disattivata'
