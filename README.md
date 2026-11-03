@@ -433,7 +433,12 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   Function App sono applicazioni e diventano container, un progetto da riga di comando è uno strumento
   e resta fuori, un tipo che nessuna regola riconosce ferma la lettura. I componenti di un'applicazione
   sono i progetti di produzione che raggiunge con i riferimenti, senza i progetti di test; un progetto
-  usato da più applicazioni è un componente di ognuna. Le relazioni sono i riferimenti fra progetti. I
+  usato da più applicazioni è un componente di ognuna. Le relazioni sono i riferimenti fra progetti,
+  nella direzione del flusso del controllo: un progetto che implementa un'interfaccia del progetto che
+  referenzia (una porta) ne è l'adattatore, e la relazione va dalla porta all'adattatore; se usa anche
+  un'altra interfaccia di quel progetto, c'è anche la relazione opposta. Un'interfaccia che il progetto
+  dichiara a sua volta con lo stesso nome non conta, e l'applicazione tiene la relazione verso i
+  progetti che compone. Le dichiarazioni si leggono dai file `.cs`, all'inizio della riga. I
   servizi Azure con cui un'applicazione parla non vengono dalle librerie: li dice l'infrastruttura.
 - **Angular 18** (`c4-read-angular18.yaml`). Il `package.json` del workspace dipende da `@angular/core`
   18 (`^18.x`, `~18.x` o `18.x`); un'altra versione, un intervallo che va oltre la 18 o nessuna

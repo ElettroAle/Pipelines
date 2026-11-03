@@ -66,6 +66,68 @@ Describe "Lettore .NET 10 del modello C4" {
         }
     }
 
+    Context "Schema dello scenario: direzione della relazione fra due progetti — <caso>" -ForEach @(
+        @{ caso = "un adattatore che implementa la porta del core"; Sorgente = 'Contoso.Shop.Core'; Destinazione = 'Contoso.Shop.Adapter' }
+        @{ caso = "un adattatore che implementa una porta generica del core"; Sorgente = 'Contoso.Shop.Core'; Destinazione = 'Contoso.Shop.Handlers' }
+        @{ caso = "un progetto che usa il core senza implementarne le interfacce"; Sorgente = 'Contoso.Shop.Library'; Destinazione = 'Contoso.Shop.Core' }
+        @{ caso = "l'host che implementa una porta del core"; Sorgente = 'Contoso.Shop.Host'; Destinazione = 'Contoso.Shop.Core' }
+        @{ caso = "un progetto che implementa una propria interfaccia con il nome di una del core"; Sorgente = 'Contoso.Shop.Other'; Destinazione = 'Contoso.Shop.Core' }
+    ) {
+        BeforeAll {
+            $files = [ordered]@{}
+            Add-Project $files 'Contoso.Shop.Host' (New-Project 'Microsoft.NET.Sdk.Web' @('Contoso.Shop.Core', 'Contoso.Shop.Adapter', 'Contoso.Shop.Handlers', 'Contoso.Shop.Library', 'Contoso.Shop.Other'))
+            Add-Project $files 'Contoso.Shop.Core' (New-Project)
+            Add-Project $files 'Contoso.Shop.Adapter' (New-Project 'Microsoft.NET.Sdk' @('Contoso.Shop.Core'))
+            Add-Project $files 'Contoso.Shop.Handlers' (New-Project 'Microsoft.NET.Sdk' @('Contoso.Shop.Core'))
+            Add-Project $files 'Contoso.Shop.Library' (New-Project 'Microsoft.NET.Sdk' @('Contoso.Shop.Core'))
+            Add-Project $files 'Contoso.Shop.Other' (New-Project 'Microsoft.NET.Sdk' @('Contoso.Shop.Core'))
+            $files['source/Contoso.Shop.Core/Ports/IOrderStore.cs'] = "namespace Contoso.Shop.Core.Ports;`n`npublic interface IOrderStore`n{`n    Task SaveAsync(Order order);`n}`n`npublic interface IHandler<in TMessage> where TMessage : class`n{`n}`n`npublic interface IClock { }`n"
+            $files['source/Contoso.Shop.Adapter/SqlOrderStore.cs'] = "using Contoso.Shop.Core.Ports;`n`nnamespace Contoso.Shop.Adapter;`n`n// class Fake : IClock`ninternal sealed class SqlOrderStore(Func<string, IDisposable> connect)`n    : IOrderStore`n{`n}`n"
+            $files['source/Contoso.Shop.Handlers/OrderHandler.cs'] = "namespace Contoso.Shop.Handlers;`n`npublic class OrderHandler<TOrder> : Base<TOrder>, IHandler<TOrder> where TOrder : class`n{`n}`n"
+            $files['source/Contoso.Shop.Library/Pricing.cs'] = "namespace Contoso.Shop.Library;`n`n/* class Fake : IOrderStore */`npublic static class Pricing`n{`n    public const string Example = `"class Fake : IOrderStore`";`n    public static decimal Total(Order order) => order.Lines.Sum(line => line.Price);`n}`n"
+            $files['source/Contoso.Shop.Other/LocalStore.cs'] = "namespace Contoso.Shop.Other;`n`npublic interface IOrderStore { }`n`npublic record LocalStore(string Name) : IOrderStore;`n"
+            $files['source/Contoso.Shop.Host/SystemClock.cs'] = "namespace Contoso.Shop.Host;`n`npublic class SystemClock : IClock { }`n"
+            $res = Invoke-C4Reader $files 'Contoso.Shop' 'dotnet10'
+            $relations = @($res.Fragment.relationships | ForEach-Object { "$($_.source) -> $($_.target)" })
+            $container = 'contoso_shop_host'
+            $expected = "${container}__$(($Sorgente.ToLowerInvariant() -replace '[^a-z0-9]+', '_')) -> ${container}__$(($Destinazione.ToLowerInvariant() -replace '[^a-z0-9]+', '_'))"
+            $reversed = "${container}__$(($Destinazione.ToLowerInvariant() -replace '[^a-z0-9]+', '_')) -> ${container}__$(($Sorgente.ToLowerInvariant() -replace '[^a-z0-9]+', '_'))"
+        }
+
+        It "Allora la lettura riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E la relazione va da <Sorgente> a <Destinazione>" {
+            $relations | Should -Contain $expected -Because ($relations -join "`n")
+        }
+
+        It "E non va nel verso opposto" {
+            $relations | Should -Not -Contain $reversed -Because ($relations -join "`n")
+        }
+    }
+
+    Context "Scenario: un progetto che implementa una porta del core e ne usa un'altra interfaccia" {
+        BeforeAll {
+            $files = [ordered]@{}
+            Add-Project $files 'Contoso.Shop.Host' (New-Project 'Microsoft.NET.Sdk.Web' @('Contoso.Shop.Mixed'))
+            Add-Project $files 'Contoso.Shop.Core' (New-Project)
+            Add-Project $files 'Contoso.Shop.Mixed' (New-Project 'Microsoft.NET.Sdk' @('Contoso.Shop.Core'))
+            $files['source/Contoso.Shop.Core/Ports.cs'] = "namespace Contoso.Shop.Core;`n`npublic interface IClock { }`n`npublic interface IOrderStore { }`n"
+            $files['source/Contoso.Shop.Mixed/Checkout.cs'] = "namespace Contoso.Shop.Mixed;`n`npublic class Checkout(IOrderStore store) : IClock { }`n"
+            $res = Invoke-C4Reader $files 'Contoso.Shop' 'dotnet10'
+            $relations = @($res.Fragment.relationships | ForEach-Object { "$($_.source) -> $($_.target)" })
+        }
+
+        It "Allora la relazione va dal core al progetto, che ne implementa la porta" {
+            $relations | Should -Contain 'contoso_shop_host__contoso_shop_core -> contoso_shop_host__contoso_shop_mixed' -Because ($relations -join "`n")
+        }
+
+        It "E dal progetto al core, di cui usa l'altra interfaccia" {
+            $relations | Should -Contain 'contoso_shop_host__contoso_shop_mixed -> contoso_shop_host__contoso_shop_core' -Because ($relations -join "`n")
+        }
+    }
+
     Context "Scenario: una libreria Azure in un progetto" {
         BeforeAll {
             $res = Invoke-C4Reader (New-HostedRepository (New-Project 'Microsoft.NET.Sdk' @() '' '    <PackageReference Include="Azure.Mystery.Things" />')) 'Contoso.Shop' 'dotnet10'
