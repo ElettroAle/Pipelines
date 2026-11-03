@@ -6,6 +6,9 @@
 # componenti e le relazioni. Ogni elemento dichiara in sources le cartelle del suo codice, che il
 # generatore del testo del modello legge. Lo scrittore unisce i frammenti di un repository senza conoscere le
 # tecnologie che li hanno prodotti.
+# Un frammento puo' dichiarare anche gli indirizzi a cui un container si avvia in locale (addresses) e
+# quelli che chiama in locale (calls), ciascuno con il file che lo dichiara: un indirizzo chiamato a cui si
+# avvia un solo container di qualunque repository e' la relazione fra i due.
 
 $SourceDirectory = if ($env:SOURCE_DIRECTORY) { $env:SOURCE_DIRECTORY } else { '.' }
 $Repository = "$env:SOURCE_REPOSITORY".Trim()
@@ -49,16 +52,51 @@ function Get-FragmentPath([string]$Technology) {
     return Join-Path $FragmentDirectory "$($Repository.ToLowerInvariant()).$Technology.json"
 }
 
-function Write-C4Fragment([string]$Technology, [string[]]$Manifests, $Containers, $Relationships) {
+function Write-C4Fragment([string]$Technology, [string[]]$Manifests, $Containers, $Relationships, $Addresses = @(), $Calls = @()) {
     New-Item -ItemType Directory -Force -Path $FragmentDirectory | Out-Null
     $fragment = [ordered]@{
         manifests     = @($Manifests | Where-Object { $_ })
         containers    = @($Containers | Where-Object { $_ })
         relationships = @($Relationships | Where-Object { $_ })
+        addresses     = @($Addresses | Where-Object { $_ })
+        calls         = @($Calls | Where-Object { $_ })
     }
     [IO.File]::WriteAllText((Join-Path (Resolve-Path $FragmentDirectory).Path (Split-Path (Get-FragmentPath $Technology) -Leaf)), (ConvertTo-Json $fragment -Depth 10))
 }
 
 function New-C4Relationship([string]$Source, [string]$Target) {
     return [ordered]@{ source = $Source; target = $Target }
+}
+
+# Schema, host e porta, che Uri da' in minuscolo: la forma in cui un indirizzo chiamato e uno di avvio
+# si confrontano.
+function ConvertTo-Address([string]$Url) {
+    $uri = $null
+    if (-not [Uri]::TryCreate($Url.Trim(), [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -notin @('http', 'https') -or -not $uri.Host) { return $null }
+    return "$($uri.Scheme)://$($uri.Host):$($uri.Port)"
+}
+
+function New-C4Address([string]$Container, [string]$Address, [string]$Source) {
+    return [ordered]@{ container = $Container; address = $Address; source = $Source }
+}
+
+# Un frammento che non si legge lo segnala la generazione del suo repository.
+function Read-FragmentContents {
+    Get-ChildItem -Path $FragmentDirectory -File -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object {
+        try { Get-Content -Raw $_.FullName | ConvertFrom-Json -ErrorAction Stop } catch { $null }
+    }
+}
+
+# Ogni indirizzo chiamato con i container che vi si avviano.
+function Resolve-C4Calls($Contents) {
+    $addresses = @($Contents | ForEach-Object { @($_.addresses) } | Where-Object { $_ })
+    foreach ($call in @($Contents | ForEach-Object { @($_.calls) } | Where-Object { $_ })) {
+        $targets = @($addresses | Where-Object address -EQ $call.address | ForEach-Object container | Sort-Object -Unique)
+        [pscustomobject]@{ Call = $call; Targets = $targets }
+    }
+}
+
+function Get-C4CallRelationships($ResolvedCalls) {
+    return @($ResolvedCalls | Where-Object { $_.Targets.Count -eq 1 } | ForEach-Object { New-C4Relationship $_.Call.container $_.Targets[0] } |
+            Sort-Object { "$($_.source) -> $($_.target)" } -Unique)
 }

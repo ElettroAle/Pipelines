@@ -10,6 +10,8 @@
 # descrizioni degli elementi, cio' che passa sulle relazioni e le relazioni con persone e sistemi
 # esterni. Persone e sistemi esterni stanno in context.dsl, da includere nel modello prima del sistema:
 # il testo e' uno solo, quindi ogni repository scrive lo stesso contesto.
+# Un indirizzo che un container del repository chiama in locale si lega con i frammenti di tutto il
+# sistema: se non vi si avvia nessun container, o piu' d'uno, la generazione si ferma.
 # Le viste dei componenti dei container della parte stanno in GENERATED_DIRECTORY/views/<repository>.dsl:
 # una per container con componenti, con l'identificativo del container come chiave. Le parti e le viste
 # stanno in due cartelle perche' il workspace le include come cartelle, senza elencare i repository.
@@ -49,6 +51,19 @@ function Get-UnreadManifestIssues($Fragments) {
     $Manifests | ForEach-Object { Get-SourceFiles $_ } | ForEach-Object { Get-RelativePath $_.FullName } |
         Where-Object { $read -notcontains $_ } |
         ForEach-Object { New-Issue $Repository 'file di progetto che nessun lettore riconosce' $_ }
+}
+
+function Get-OwnCalls($Fragments) {
+    $ownIds = @($Fragments.Content.containers | Where-Object { $_ } | ForEach-Object id)
+    return @(Resolve-C4Calls @(Read-FragmentContents) | Where-Object { $ownIds -contains $_.Call.container })
+}
+
+function Get-CallIssues($Calls) {
+    foreach ($resolved in $Calls) {
+        $detail = "$($resolved.Call.source): $($resolved.Call.address)"
+        if (-not $resolved.Targets) { New-Issue $Repository 'indirizzo chiamato a cui nessuna applicazione si avvia' $detail }
+        elseif ($resolved.Targets.Count -gt 1) { New-Issue $Repository "indirizzo chiamato a cui si avvia piu' di un'applicazione" "$detail; $($resolved.Targets -join ', ')" }
+    }
 }
 
 function Read-ModelText {
@@ -110,7 +125,7 @@ function Format-Containers($Containers) {
 function Format-Model($Fragments) {
     $lines = @("// Parte del modello C4 generata da $Repository con Export-C4CodeModel.ps1: non si modifica a mano.")
     $lines += Format-Containers @($Fragments.Content.containers)
-    $Fragments.Content.relationships | ForEach-Object {
+    @($Fragments.Content.relationships) + $script:CallRelationships | Where-Object { $_ } | ForEach-Object {
         $described = $script:ModelText.Relationships["$($_.source) -> $($_.target)"]
         $lines += "$($_.source) -> $($_.target) $(Format-Text $described.description) $(Format-Text $described.technology) $(Format-Text $GeneratedTag)"
     }
@@ -170,6 +185,10 @@ function Get-GenerationIssues {
     $text = Read-ModelText
     $issues = @(Get-FragmentIssues $fragments) + @(Get-UnreadManifestIssues $fragments) + @(Get-TextIssues $text)
     if ($issues) { return $issues }
+    $calls = Get-OwnCalls $fragments
+    $callIssues = @(Get-CallIssues $calls)
+    if ($callIssues) { return $callIssues }
+    $script:CallRelationships = Get-C4CallRelationships $calls
     if (-not @($fragments.Content.containers).Count) { return New-Issue $Repository 'nessuna applicazione riconosciuta' $SourceDirectory }
 
     $script:ModelText = Get-PartText $text $fragments

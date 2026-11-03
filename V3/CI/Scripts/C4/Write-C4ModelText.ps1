@@ -234,7 +234,8 @@ function Get-ElementIds($Container) {
 # Una relazione appartiene al container da cui parte. Una relazione che parte da un elemento che nessun
 # container letto contiene la descrive il container a cui arriva: altrimenti resterebbe senza cio' che passa.
 function Get-Units($Fragments) {
-    $relationships = @($Fragments | ForEach-Object { @($_.Content.relationships) } | Where-Object { $_ })
+    $relationships = @($Fragments | ForEach-Object { @($_.Content.relationships) } | Where-Object { $_ }) +
+        @(Get-C4CallRelationships @(Resolve-C4Calls @($Fragments.Content)))
     $containers = @(foreach ($fragment in $Fragments) {
             @($fragment.Content.containers) | Where-Object { $_ } | ForEach-Object { [pscustomobject]@{ Repository = $fragment.Repository; Container = $_ } }
         })

@@ -4,7 +4,8 @@
 # container; i progetti di produzione che un'applicazione raggiunge con i riferimenti sono i suoi
 # componenti, legati da quei riferimenti. Il tipo di un progetto viene dalle regole di .NET 10 qui
 # sotto, provate solo su .NET 10: un progetto di un'altra versione, o di un tipo che le regole non
-# riconoscono, ferma la lettura invece di essere letto con regole non sue.
+# riconoscono, ferma la lettura invece di essere letto con regole non sue. Gli indirizzi a cui
+# un'applicazione si avvia in locale vengono dai profili del suo Properties/launchSettings.json.
 
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
 . "$PSScriptRoot/../Common/DocumentLanguage.ps1"
@@ -147,6 +148,31 @@ function Get-ApplicationRelationships($Application, $Projects) {
     }
 }
 
+function Read-LaunchSettings($Application) {
+    $path = Join-Path (Split-Path $Application.Path) 'Properties/launchSettings.json'
+    if (-not (Test-Path $path -PathType Leaf)) { return $null }
+    $source = Get-RelativePath $path
+    try { $profiles = @((Get-Content -Raw $path | ConvertFrom-Json -ErrorAction Stop).profiles.PSObject.Properties.Value) }
+    catch { return [pscustomobject]@{ Source = $source; Urls = $null } }
+    $urls = @($profiles | Where-Object { $_.applicationUrl } | ForEach-Object { "$($_.applicationUrl)" -split ';' } | ForEach-Object Trim | Where-Object { $_ })
+    return [pscustomobject]@{ Source = $source; Urls = $urls }
+}
+
+function Get-LaunchSettingsIssues($Applications) {
+    foreach ($settings in @($Applications | ForEach-Object { Read-LaunchSettings $_ } | Where-Object { $_ })) {
+        if ($null -eq $settings.Urls) { New-Issue $Repository 'profili di avvio che il lettore non legge' $settings.Source; continue }
+        $settings.Urls | Where-Object { -not (ConvertTo-Address $_) } |
+            ForEach-Object { New-Issue $Repository 'indirizzo di avvio che non e'' un indirizzo' "$($settings.Source): $_" }
+    }
+}
+
+function Get-ApplicationAddresses($Application) {
+    $settings = Read-LaunchSettings $Application
+    if (-not $settings) { return }
+    $containerId = ConvertTo-Identifier $Application.Name
+    $settings.Urls | ForEach-Object { ConvertTo-Address $_ } | Sort-Object -Unique | ForEach-Object { New-C4Address $containerId $_ $settings.Source }
+}
+
 function Get-UnsupportedVersionIssues($Projects) {
     foreach ($project in $Projects.Values) {
         if (-not $project.TargetFrameworks) { New-Issue $Repository 'progetto .NET senza versione dichiarata' $project.Name; continue }
@@ -167,11 +193,15 @@ function Get-ReadIssues {
     $unsupported = @(Get-UnsupportedVersionIssues $projects) + @(Get-UnrecognizedIssues $projects)
     if ($unsupported) { return $unsupported }
 
-    $allNames = @($projects.Values | ForEach-Object Name)
     $applications = Get-Applications $projects
+    $launchIssues = @(Get-LaunchSettingsIssues $applications)
+    if ($launchIssues) { return $launchIssues }
+
+    $allNames = @($projects.Values | ForEach-Object Name)
     $containers = $applications | ForEach-Object { New-ApplicationContainer $_ $projects $allNames }
     $relationships = $applications | ForEach-Object { Get-ApplicationRelationships $_ $projects }
-    Write-C4Fragment 'dotnet10' @($projects.Keys | ForEach-Object { Get-RelativePath $_ }) $containers $relationships
+    $addresses = $applications | ForEach-Object { Get-ApplicationAddresses $_ }
+    Write-C4Fragment 'dotnet10' @($projects.Keys | ForEach-Object { Get-RelativePath $_ }) $containers $relationships $addresses
 }
 
 Invoke-Verification { Get-ReadIssues } "Progetti .NET 10 di $Repository letti" 'Lettura dei progetti .NET 10 disattivata'
