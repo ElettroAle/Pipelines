@@ -79,4 +79,52 @@ Describe "Lettore Angular 18 del modello C4" {
             $res.Fragment | Should -BeNullOrEmpty
         }
     }
+
+    Context "Scenario: gli indirizzi verso cui il proxy di sviluppo inoltra le chiamate" {
+        BeforeAll {
+            $files = Add-DevProxy (New-ClientRepository) @{ '/api' = 'https://localhost:5001'; '/hubs' = 'https://localhost:5001/' }
+            $res = Invoke-C4Reader $files 'Contoso.Shop.Client.Web' 'angular18'
+        }
+
+        It "Allora la lettura riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E il frammento dichiara l'indirizzo chiamato dall'applicazione una volta sola" {
+            @($res.Fragment.calls | ForEach-Object { "$($_.container) $($_.address)" }) | Should -Be @('contoso_shop_client_web https://localhost:5001')
+        }
+
+        It "E l'indirizzo nomina il file del proxy" {
+            $res.Fragment.calls[0].source | Should -Be 'proxy.conf.json'
+        }
+    }
+
+    Context "Scenario: un'applicazione senza proxy di sviluppo" {
+        BeforeAll {
+            $res = Invoke-C4Reader (New-ClientRepository) 'Contoso.Shop.Client.Web' 'angular18'
+        }
+
+        It "Allora il frammento non dichiara indirizzi chiamati" {
+            @($res.Fragment.calls) | Should -BeNullOrEmpty
+        }
+    }
+
+    Context "Schema dello scenario: proxy di sviluppo che il lettore non legge — <caso>" -ForEach @(
+        @{ caso = 'file JavaScript'; Build = { Add-DevProxy (New-ClientRepository) @{ '/api' = 'https://localhost:5001' } 'proxy.conf.js' }; file = 'proxy.conf.js' }
+        @{ caso = 'JSON non valido'; Build = { $f = Add-DevProxy (New-ClientRepository) @{ '/api' = 'https://localhost:5001' }; $f['source/proxy.conf.json'] = '{ non e'' json'; $f }; file = 'proxy.conf.json' }
+        @{ caso = 'file assente'; Build = { $f = Add-DevProxy (New-ClientRepository) @{ '/api' = 'https://localhost:5001' }; $f.Remove('source/proxy.conf.json'); $f }; file = 'proxy.conf.json' }
+        @{ caso = 'target che non e'' un indirizzo'; Build = { Add-DevProxy (New-ClientRepository) @{ '/api' = 'localhost' } }; file = 'proxy.conf.json' }
+    ) {
+        BeforeAll {
+            $res = Invoke-C4Reader (& $Build) 'Contoso.Shop.Client.Web' 'angular18'
+        }
+
+        It "Allora la lettura fallisce" {
+            $res.ExitCode | Should -Be 1
+        }
+
+        It "E nomina il repository e il file del proxy" {
+            Get-Issues $res.Output | Where-Object { $_ -match 'Contoso\.Shop\.Client\.Web' -and $_.Contains($file) } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+    }
 }

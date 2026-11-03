@@ -21,6 +21,16 @@ BeforeAll {
         $readers = @{ 'Contoso.Shop.AI' = 'dotnet10'; 'Contoso.Shop.Bff.Web' = 'dotnet10'; 'Contoso.Shop.Client.Web' = 'angular18' }
         return Invoke-C4Generation $Files $Repository @($readers[$Repository]) $Mode
     }
+
+    # Il frammento che il lettore .NET lascia per il BFF che si avvia agli indirizzi dati.
+    function Get-BffFragment([string[]]$Urls) {
+        $bff = Invoke-C4Reader (Add-LaunchSettings (New-BffRepository) 'Contoso.Shop.Bff.Web' $Urls) 'Contoso.Shop.Bff.Web' 'dotnet10'
+        return @($bff.Fragments.Values)[0]
+    }
+
+    function New-ProxiedClient {
+        return Add-DevProxy (New-ClientRepository) @{ '/api' = 'https://localhost:5001/'; '/hubs' = 'https://LOCALHOST:5001' }
+    }
 }
 
 AfterAll {
@@ -418,6 +428,63 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
 
         It "E il container del lettore del consumer, senza componenti, non ha una vista dei componenti" {
             $res.Generated['views/contoso.shop.bff.web.dsl'] | Should -Not -Match 'component contoso_shop_bff_web_storage\b'
+        }
+    }
+
+    Context "Schema dello scenario: elementi e relazioni nati dal codice — il proxy di sviluppo verso l'indirizzo di avvio di un'altra applicazione" {
+        BeforeAll {
+            $fragments = @{ 'contoso.shop.bff.web.dotnet10.json' = (Get-BffFragment @('https://localhost:5001;http://localhost:5000')) }
+            $res = Invoke-C4Generation (New-ProxiedClient) 'Contoso.Shop.Client.Web' @('angular18') -Fragments $fragments
+            $dsl = $res.Generated['model/contoso.shop.client.web.dsl']
+        }
+
+        It "Allora la generazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E il modello contiene la relazione dal container ""Client.Web"" al container ""Web"" di ""Contoso.Shop.Bff.Web""" {
+            $dsl | Should -Match '(?m)^contoso_shop_client_web -> contoso_shop_bff_web ' -Because $dsl
+        }
+
+        It "E la relazione compare una volta sola" {
+            @($dsl -split "`n" | Where-Object { $_ -match '^contoso_shop_client_web -> contoso_shop_bff_web ' }).Count | Should -Be 1
+        }
+    }
+
+    Context "Scenario: la relazione del proxy di sviluppo sta nella parte dell'applicazione che chiama" {
+        BeforeAll {
+            $client = Invoke-C4Reader (New-ProxiedClient) 'Contoso.Shop.Client.Web' 'angular18'
+            $fragments = @{ 'contoso.shop.client.web.angular18.json' = @($client.Fragments.Values)[0] }
+            $res = Invoke-C4Generation (Add-LaunchSettings (New-BffRepository) 'Contoso.Shop.Bff.Web' @('https://localhost:5001')) 'Contoso.Shop.Bff.Web' @('dotnet10') -Fragments $fragments
+        }
+
+        It "Allora la generazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E la parte dell'applicazione chiamata non contiene la relazione" {
+            $res.Generated['model/contoso.shop.bff.web.dsl'] | Should -Not -Match 'contoso_shop_client_web ->'
+        }
+    }
+
+    Context "Schema dello scenario: indirizzo del proxy di sviluppo che non porta a una sola applicazione — <caso>" -ForEach @(
+        @{ caso = 'nessuna applicazione vi si avvia'; Fragments = { @{ 'contoso.shop.bff.web.dotnet10.json' = (Get-BffFragment @('https://localhost:7001')) } }; problema = 'indirizzo chiamato a cui nessuna applicazione si avvia' }
+        @{ caso = 'due applicazioni vi si avviano'; Fragments = { @{ 'contoso.shop.bff.web.dotnet10.json' = (Get-BffFragment @('https://localhost:5001')); 'contoso.shop.ai.dotnet10.json' = ((Get-BffFragment @('https://localhost:5001')) -replace 'contoso_shop_bff_web', 'contoso_shop_ai_api') } }; problema = "indirizzo chiamato a cui si avvia piu' di un'applicazione" }
+    ) {
+        BeforeAll {
+            $res = Invoke-C4Generation (New-ProxiedClient) 'Contoso.Shop.Client.Web' @('angular18') -Fragments (& $Fragments)
+        }
+
+        It "Allora la generazione fallisce" {
+            $res.ExitCode | Should -Be 1
+        }
+
+        It "E nomina il repository, l'indirizzo e il file del proxy" {
+            Get-Issues $res.Output | Where-Object { $_ -match 'Contoso\.Shop\.Client\.Web' -and $_.Contains($problema) -and $_.Contains('https://localhost:5001') -and $_.Contains('proxy.conf.json') } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+
+        It "E non scrive la parte generata" {
+            $res.Generated.Keys | Should -BeNullOrEmpty
         }
     }
 }
