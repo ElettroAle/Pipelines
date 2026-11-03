@@ -81,7 +81,9 @@ function Invoke-C4Script([string]$Script, [hashtable]$Variables) {
 
 function Read-Directory([string]$Directory, [string]$Filter) {
     $content = [ordered]@{}
-    Get-ChildItem -Path $Directory -Filter $Filter -ErrorAction SilentlyContinue | ForEach-Object { $content[$_.Name] = [IO.File]::ReadAllText($_.FullName) }
+    $root = if (Test-Path $Directory) { (Resolve-Path $Directory).Path } else { $Directory }
+    Get-ChildItem -Path $Directory -Filter $Filter -Recurse -File -ErrorAction SilentlyContinue | Sort-Object FullName |
+        ForEach-Object { $content[[IO.Path]::GetRelativePath($root, $_.FullName).Replace('\', '/')] = [IO.File]::ReadAllText($_.FullName) }
     return $content
 }
 

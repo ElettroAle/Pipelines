@@ -201,10 +201,10 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
         }
         AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
 
-        It "Allora la pagina mostra l'immagine di ogni vista dei componenti, nell'ordine del modello" {
+        It "Allora la pagina mostra l'immagine di ogni vista dei componenti, in ordine di chiave" {
             $res.ExitCode | Should -Be 0 -Because $res.Output
             $images = [regex]::Matches($page, '!\[(componenti-[\w-]+)\]') | ForEach-Object { $_.Groups[1].Value }
-            $images | Should -Be @('componenti-client', 'componenti-bff', 'componenti-motore', 'componenti-worker')
+            $images | Should -Be @('componenti-bff', 'componenti-client', 'componenti-motore', 'componenti-worker')
         }
 
         It "E la pagina non mostra il marcatore" {

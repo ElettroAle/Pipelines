@@ -15,7 +15,7 @@ BeforeAll {
     $Workspace = [pscustomobject]@{
         views = [pscustomobject]@{
             systemContextViews = @([pscustomobject]@{ key = 'contesto' })
-            componentViews     = @([pscustomobject]@{ key = 'componenti-api' }, [pscustomobject]@{ key = 'componenti-worker' })
+            componentViews     = @([pscustomobject]@{ key = 'componenti-worker' }, [pscustomobject]@{ key = 'componenti-api' })
         }
     }
 }
@@ -27,7 +27,7 @@ Describe "Structurizr — viste di un marcatore" {
         Resolve-ViewMarker 'contesto' $Workspace | Should -Be @('contesto')
     }
 
-    It "Un marcatore con il tipo e l'asterisco nomina tutte le viste del tipo, nell'ordine del modello" {
+    It "Un marcatore con il tipo e l'asterisco nomina tutte le viste del tipo, in ordine di chiave" {
         Resolve-ViewMarker 'component*' $Workspace | Should -Be @('componenti-api', 'componenti-worker')
     }
 
