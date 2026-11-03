@@ -82,6 +82,9 @@ Describe "MarkdownText — blocchi di una sezione" {
     It "Tiene ogni voce di elenco come blocco" { @($section.Blocks | Where-Object Kind -EQ 'list').Count | Should -Be 2 }
     It "Distingue le tabelle" { @($section.Blocks | Where-Object Kind -EQ 'table').Count | Should -Be 1 }
     It "Raccoglie i marcatori di vista" { $section.Views | Should -Be @('contesto') }
+    It "Raccoglie il marcatore delle viste di un tipo" {
+        (ConvertFrom-MarkdownSection "# Titolo`n`n<!-- vista: component* -->").Views | Should -Be @('component*')
+    }
     It "Raccoglie i diagrammi Mermaid con la riga del recinto" {
         $section.Diagrams[0].Line | Should -Be 16
         $section.Diagrams[0].Text | Should -Be 'sequenceDiagram'

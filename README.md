@@ -273,7 +273,7 @@ template d'ingresso: lo step `document-directories.yaml` le mette in `DOCS_DIREC
 
 | Convenzione | `IT` | `EN` |
 |---|---|---|
-| Marcatore di vista | `<!-- vista: <chiave> -->` | `<!-- view: <chiave> -->` |
+| Marcatore di vista | `<!-- vista: <chiave> -->`, `<!-- vista: <tipo>* -->` | `<!-- view: <chiave> -->`, `<!-- view: <tipo>* -->` |
 | Tag dei container con vista dei componenti | `Applicazione` | `Application` |
 | Parti della decisione con struttura e flusso nel codice | `Struttura nel codice`, `Flusso nel codice` | `Code structure`, `Code flow` |
 | Pagina della wiki (default di `wikiRoot`) | `Architettura` | `Architecture` |
@@ -329,15 +329,17 @@ Struttura arc42 (`arc42-verify.yaml`, `CI/Scripts/Arc42/Test-Arc42Document.ps1`)
 
 Modello C4 (`c4-verify.yaml`, `CI/Scripts/C4/Test-C4Model.ps1`):
 
-- Il modello è `model/workspace.dsl` nella cartella del documento: il DSL è valido e ha vista di contesto,
-  vista dei container e vista di deployment; ogni container con il tag delle applicazioni (`Applicazione`
-  in italiano) ha la sua vista dei componenti.
+- Il modello è `model/workspace.dsl` nella cartella del documento: il DSL è valido e ha vista di contesto
+  e vista dei container; ogni container con il tag delle applicazioni (`Applicazione` in italiano) ha la sua
+  vista dei componenti.
 - Una vista di contesto mostra solo il livello di business: una persona o un sistema con il tag tecnico
   (`Tecnico` in italiano) resta fuori, ad esempio con `exclude "element.tag==Tecnico"`, e compare dalla
   vista dei container in giù.
-- Una sezione mostra una vista con il marcatore di vista (`<!-- vista: <chiave> -->` in italiano); ogni vista è mostrata da
-  almeno una sezione e ogni marcatore nomina una vista esistente. Senza questo step i marcatori non si
-  controllano.
+- Una sezione mostra una vista con il marcatore di vista (`<!-- vista: <chiave> -->` in italiano), oppure
+  tutte le viste di un tipo, nell'ordine del modello, con il tipo e l'asterisco (`<!-- vista: component* -->`):
+  così una vista nuova del modello generato si mostra senza scrivere il suo marcatore. Ogni vista è mostrata
+  da almeno una sezione e ogni marcatore nomina almeno una vista esistente. Senza questo step i marcatori
+  non si controllano.
 - La parte generata dal codice (`c4-generate.yaml`) porta il tag `Generato` in italiano: ogni elemento
   generato ha una descrizione, ogni relazione generata dice cosa passa, e fra due elementi generati
   nessuna relazione viene da fuori del codice, nemmeno per ripeterne una generata. Un riferimento a un elemento che nessuna

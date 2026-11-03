@@ -5,7 +5,7 @@
 
 . "$PSScriptRoot/DocumentLanguage.ps1"
 
-$ViewMarkerPattern = '^\s*<!--\s*' + [regex]::Escape($DocumentLanguage.ViewMarker) + ':\s*([\w-]+)\s*-->\s*$'
+$ViewMarkerPattern = '^\s*<!--\s*' + [regex]::Escape($DocumentLanguage.ViewMarker) + ':\s*([\w-]+\*?)\s*-->\s*$'
 $CommentPattern = '^\s*<!--.*-->\s*$'
 $HeadingPattern = '^(#{1,6})\s+(.+?)\s*#*\s*$'
 $HeadingAttributesPattern = '\s*\{#[^}]*\}\s*$'
