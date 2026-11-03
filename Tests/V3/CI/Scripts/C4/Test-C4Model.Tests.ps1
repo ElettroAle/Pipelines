@@ -87,6 +87,33 @@ Describe "Funzionalità: Verifica del modello C4" {
         }
     }
 
+    Context "Scenario: viste dei componenti mostrate da un solo marcatore" {
+        BeforeAll {
+            $docs = New-ValidDocs
+            Edit-Docs $docs 'docs/architecture/05_building_block_view.md' "<!-- vista: componenti-client -->`n<!-- vista: componenti-bff -->`n<!-- vista: componenti-motore -->`n<!-- vista: componenti-worker -->" '<!-- vista: component* -->'
+            $res = Invoke-ModelCheck $docs
+        }
+
+        It "Allora la verifica passa" {
+            Get-Issues $res.Output | Should -BeNullOrEmpty -Because ($res.Output)
+            $res.ExitCode | Should -Be 0
+        }
+    }
+
+    Context "Scenario: modello senza vista di deployment" {
+        BeforeAll {
+            $docs = New-ValidDocs
+            Edit-Docs $docs 'docs/architecture/model/workspace.dsl' "        deployment sistema produzione `"deployment-produzione`" {`n            include *`n        }`n" ''
+            Edit-Docs $docs 'docs/architecture/07_deployment_view.md' "<!-- vista: deployment-produzione -->`n" ''
+            $res = Invoke-ModelCheck $docs
+        }
+
+        It "Allora la verifica passa" {
+            Get-Issues $res.Output | Should -BeNullOrEmpty -Because ($res.Output)
+            $res.ExitCode | Should -Be 0
+        }
+    }
+
     Context "Schema dello scenario: modello non ben formato — <difetto>" -ForEach @(
         @{
             difetto  = 'una relazione da "BFF" verso "Motore v3", che il modello non dichiara'
@@ -103,18 +130,14 @@ Describe "Funzionalità: Verifica del modello C4" {
             }
         }
         @{
-            difetto  = 'un modello senza vista di deployment'
-            elemento = '^modello C4: livello mancante \(vista di deployment\)'
-            Mutate   = {
-                param($d)
-                Edit-Docs $d 'docs/architecture/model/workspace.dsl' "        deployment sistema produzione `"deployment-produzione`" {`n            include *`n        }`n" ''
-                Edit-Docs $d 'docs/architecture/07_deployment_view.md' "<!-- vista: deployment-produzione -->`n" ''
-            }
-        }
-        @{
             difetto  = 'una vista che nessuna sezione mostra'
             elemento = '^modello C4: vista non mostrata in nessuna sezione \(contesto\)'
             Mutate   = { param($d) Edit-Docs $d 'docs/architecture/03_context_and_scope.md' "<!-- vista: contesto -->`n" '' }
+        }
+        @{
+            difetto  = 'un marcatore verso un tipo di vista che il modello non ha'
+            elemento = '^Ambito e contesto del sistema: vista inesistente \(dynamic\*\)'
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/03_context_and_scope.md' 'vista: contesto' "vista: contesto -->`n<!-- vista: dynamic*" }
         }
         @{
             difetto  = 'un marcatore verso una vista inesistente'

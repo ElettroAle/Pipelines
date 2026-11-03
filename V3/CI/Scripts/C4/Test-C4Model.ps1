@@ -18,7 +18,7 @@ $ApplicationTag = $DocumentLanguage.ApplicationTag
 $TechnicalTag = $DocumentLanguage.TechnicalTag
 $GeneratedTag = $DocumentLanguage.GeneratedTag
 $ModelScope = 'modello C4'
-$RequiredLevels = [ordered]@{ systemContextViews = 'vista di contesto'; containerViews = 'vista dei container'; deploymentViews = 'vista di deployment' }
+$RequiredLevels = [ordered]@{ systemContextViews = 'vista di contesto'; containerViews = 'vista dei container' }
 $ViewKinds = @('systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews', 'dynamicViews', 'deploymentViews')
 
 function Test-HasTag($Element, [string]$Tag) {
@@ -87,14 +87,17 @@ function Test-RelationshipsOnlyFromCode($Elements) {
         ForEach-Object { New-Issue $ModelScope 'relazione fra elementi generati che il codice non dichiara' (Get-RelationshipName $_ $Elements) }
 }
 
-function Test-ViewsShown([string[]]$ViewKeys, $Sections) {
-    $shown = @($Sections | ForEach-Object { $_.Content.Views })
+function Test-ViewsShown([string[]]$ViewKeys, $Sections, $Workspace) {
+    $shown = @($Sections | ForEach-Object { $_.Content.Views } | ForEach-Object { Resolve-ViewMarker $_ $Workspace })
     $ViewKeys | Where-Object { $shown -notcontains $_ } | ForEach-Object { New-Issue $ModelScope 'vista non mostrata in nessuna sezione' $_ }
 }
 
-function Test-ViewMarkers([string[]]$ViewKeys, $Sections) {
+function Test-ViewMarkers([string[]]$ViewKeys, $Sections, $Workspace) {
     foreach ($section in $Sections) {
-        $section.Content.Views | Where-Object { $ViewKeys -notcontains $_ } | ForEach-Object { New-Issue $section.Title 'vista inesistente' $_ }
+        foreach ($marker in $section.Content.Views) {
+            $keys = @(Resolve-ViewMarker $marker $Workspace)
+            if (-not $keys.Count -or @($keys | Where-Object { $ViewKeys -notcontains $_ }).Count) { New-Issue $section.Title 'vista inesistente' $marker }
+        }
     }
 }
 
@@ -113,8 +116,8 @@ function Get-ModelIssues {
     Test-GeneratedElementsDescribed $elements
     Test-GeneratedRelationshipsDescribed $elements
     Test-RelationshipsOnlyFromCode $elements
-    Test-ViewsShown $viewKeys $sections
-    Test-ViewMarkers $viewKeys $sections
+    Test-ViewsShown $viewKeys $sections $export.Workspace
+    Test-ViewMarkers $viewKeys $sections $export.Workspace
 }
 
 Invoke-Verification { Get-ModelIssues } "Modello C4 in $WorkspaceDsl valido" 'Verifica del modello C4 disattivata'

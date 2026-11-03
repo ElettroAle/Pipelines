@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Parte del modello C4 che nasce da un repository sorgente, in Structurizr DSL da includere nel
-# sistema del documento: un file per repository in GENERATED_DIRECTORY, che si legge e non si scrive
-# a mano. Unisce i frammenti che i lettori delle tecnologie hanno scritto in FRAGMENT_DIRECTORY
+# sistema del documento: un file per repository in GENERATED_DIRECTORY/model, che si legge e non si
+# scrive a mano. Unisce i frammenti che i lettori delle tecnologie hanno scritto in FRAGMENT_DIRECTORY
 # (contratto in C4CodeModel.ps1) e non conosce le tecnologie: un file manifest del repository che
 # nessun frammento ha letto ferma la generazione. I container del repository stanno in un gruppo con
 # il nome del repository senza il prefisso comune ai repository sorgente (SOURCE_REPOSITORIES).
@@ -10,8 +10,9 @@
 # descrizioni degli elementi, cio' che passa sulle relazioni e le relazioni con persone e sistemi
 # esterni. Persone e sistemi esterni stanno in context.dsl, da includere nel modello prima del sistema:
 # il testo e' uno solo, quindi ogni repository scrive lo stesso contesto.
-# Le viste dei componenti dei container della parte stanno in <repository>.views.dsl, da includere fra le
-# viste del documento: una per container con componenti, con l'identificativo del container come chiave.
+# Le viste dei componenti dei container della parte stanno in GENERATED_DIRECTORY/views/<repository>.dsl:
+# una per container con componenti, con l'identificativo del container come chiave. Le parti e le viste
+# stanno in due cartelle perche' il workspace le include come cartelle, senza elencare i repository.
 # GENERATION_MODE=check confronta i file del repository con quelli che la generazione produce. Un file
 # che il repository non ha ancora non si confronta: lo segnala l'!include del workspace che lo usa, e
 # cosi' un file nuovo della generazione non ferma le PR delle parti generate prima di lui.
@@ -149,7 +150,11 @@ function Get-CheckIssues([System.Collections.IDictionary]$Outputs) {
 function Write-Model([System.Collections.IDictionary]$Outputs) {
     New-Item -ItemType Directory -Force -Path $GeneratedDirectory | Out-Null
     $directory = (Resolve-Path $GeneratedDirectory).Path
-    foreach ($name in $Outputs.Keys) { [IO.File]::WriteAllText((Join-Path $directory $name), $Outputs[$name]) }
+    foreach ($name in $Outputs.Keys) {
+        $path = Join-Path $directory $name
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $path) | Out-Null
+        [IO.File]::WriteAllText($path, $Outputs[$name])
+    }
 }
 
 $ModeActions = @{
@@ -169,7 +174,7 @@ function Get-GenerationIssues {
 
     $script:ModelText = Get-PartText $text $fragments
     $name = $Repository.ToLowerInvariant()
-    $outputs = [ordered]@{ "$name.dsl" = Format-Model $fragments; "$name.views.dsl" = Format-Views $fragments; 'context.dsl' = Format-Context }
+    $outputs = [ordered]@{ "model/$name.dsl" = Format-Model $fragments; "views/$name.dsl" = Format-Views $fragments; 'context.dsl' = Format-Context }
     & $ModeActions[$Mode] $outputs
 }
 

@@ -191,6 +191,27 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
         }
     }
 
+    Context "Scenario: viste dei componenti disegnate da un solo marcatore" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-ValidDocs
+            Edit-Docs $docs 'docs/architecture/05_building_block_view.md' "<!-- vista: componenti-client -->`n<!-- vista: componenti-bff -->`n<!-- vista: componenti-motore -->`n<!-- vista: componenti-worker -->" '<!-- vista: component* -->'
+            $res = Invoke-WikiPublish $docs $wiki
+            $page = Get-WikiPage $wiki 'Architettura/5.-Building-Block-View.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora la pagina mostra l'immagine di ogni vista dei componenti, in ordine di chiave" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $images = [regex]::Matches($page, '!\[(componenti-[\w-]+)\]') | ForEach-Object { $_.Groups[1].Value }
+            $images | Should -Be @('componenti-bff', 'componenti-client', 'componenti-motore', 'componenti-worker')
+        }
+
+        It "E la pagina non mostra il marcatore" {
+            $page | Should -Not -Match '<!-- vista:'
+        }
+    }
+
     Context "Scenario: diagramma Mermaid disegnato nella wiki" {
         BeforeAll {
             $wiki = New-Wiki

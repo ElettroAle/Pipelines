@@ -273,7 +273,7 @@ template d'ingresso: lo step `document-directories.yaml` le mette in `DOCS_DIREC
 
 | Convenzione | `IT` | `EN` |
 |---|---|---|
-| Marcatore di vista | `<!-- vista: <chiave> -->` | `<!-- view: <chiave> -->` |
+| Marcatore di vista | `<!-- vista: <chiave> -->`, `<!-- vista: <tipo>* -->` | `<!-- view: <chiave> -->`, `<!-- view: <tipo>* -->` |
 | Tag dei container con vista dei componenti | `Applicazione` | `Application` |
 | Parti della decisione con struttura e flusso nel codice | `Struttura nel codice`, `Flusso nel codice` | `Code structure`, `Code flow` |
 | Pagina della wiki (default di `wikiRoot`) | `Architettura` | `Architecture` |
@@ -329,15 +329,17 @@ Struttura arc42 (`arc42-verify.yaml`, `CI/Scripts/Arc42/Test-Arc42Document.ps1`)
 
 Modello C4 (`c4-verify.yaml`, `CI/Scripts/C4/Test-C4Model.ps1`):
 
-- Il modello è `model/workspace.dsl` nella cartella del documento: il DSL è valido e ha vista di contesto,
-  vista dei container e vista di deployment; ogni container con il tag delle applicazioni (`Applicazione`
-  in italiano) ha la sua vista dei componenti.
+- Il modello è `model/workspace.dsl` nella cartella del documento: il DSL è valido e ha vista di contesto
+  e vista dei container; ogni container con il tag delle applicazioni (`Applicazione` in italiano) ha la sua
+  vista dei componenti.
 - Una vista di contesto mostra solo il livello di business: una persona o un sistema con il tag tecnico
   (`Tecnico` in italiano) resta fuori, ad esempio con `exclude "element.tag==Tecnico"`, e compare dalla
   vista dei container in giù.
-- Una sezione mostra una vista con il marcatore di vista (`<!-- vista: <chiave> -->` in italiano); ogni vista è mostrata da
-  almeno una sezione e ogni marcatore nomina una vista esistente. Senza questo step i marcatori non si
-  controllano.
+- Una sezione mostra una vista con il marcatore di vista (`<!-- vista: <chiave> -->` in italiano), oppure
+  tutte le viste di un tipo, in ordine di chiave, con il tipo e l'asterisco (`<!-- vista: component* -->`):
+  così una vista nuova del modello generato si mostra senza scrivere il suo marcatore. Ogni vista è mostrata
+  da almeno una sezione e ogni marcatore nomina almeno una vista esistente. Senza questo step i marcatori
+  non si controllano.
 - La parte generata dal codice (`c4-generate.yaml`) porta il tag `Generato` in italiano: ogni elemento
   generato ha una descrizione, ogni relazione generata dice cosa passa, e fra due elementi generati
   nessuna relazione viene da fuori del codice, nemmeno per ripeterne una generata. Un riferimento a un elemento che nessuna
@@ -400,8 +402,9 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   `$env:C4_SCRIPTS_DIRECTORY/Common/VerificationGate.ps1`, e scrive il frammento con lo stesso
   contratto.
 - **Lo scrittore** (`CI/Scripts/C4/Export-C4CodeModel.ps1`) unisce i frammenti del repository e scrive
-  `<repository in minuscolo>.dsl` nella cartella delle parti generate, da includere con `!include` nel
-  sistema di `model/workspace.dsl`. Con più di un container, i container stanno in un gruppo con il nome
+  `model/<repository in minuscolo>.dsl` nella cartella delle parti generate: il sistema di
+  `model/workspace.dsl` include la cartella intera (`!include generated/model`), senza elencare i
+  repository. Con più di un container, i container stanno in un gruppo con il nome
   del repository senza il prefisso comune ai repository sorgente; un container unico non ha gruppo; ogni elemento porta il tag `Generato` in italiano e il nome
   completo nella proprietà `codice`, e una proprietà vuota non si scrive. Prende da `model.text.json`
   le descrizioni e ciò che passa sulle relazioni dei propri elementi, comprese quelle che partono da un
@@ -410,8 +413,9 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   file di progetto del repository (`*.csproj`, `package.json`, `angular.json`, `*.tf`, `pom.xml` e gli
   altri della sua lista) che nessun frammento dichiara letto ferma la generazione nominando il file, e
   così un frammento che non si legge. Il file generato non si scrive a mano. Scrive anche
-  `<repository in minuscolo>.views.dsl`, da includere fra le viste del documento: una vista dei
-  componenti per ogni container che ne ha, con l'identificativo del container come chiave. Scrive
+  `views/<repository in minuscolo>.dsl`, che le viste del documento includono come cartella
+  (`!include generated/views`): una vista dei componenti per ogni container che ne ha, con
+  l'identificativo del container come chiave. Scrive
   infine `context.dsl`, da includere nel modello prima del sistema: le persone e i sistemi esterni del
   catalogo, i sistemi con il tag `Esterno` e, se tecnici, `Tecnico`. Si committa con le parti generate.
 - **La PR della parte** (`azureRepos-pull-request.yaml`, `CI/Scripts/AzureRepos/Publish-PullRequest.ps1`).

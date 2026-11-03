@@ -178,7 +178,7 @@ function Get-ViewImagePath([string]$View) {
     return "$AttachmentsFolder/$(ConvertTo-WikiName $wikiRoot)/$View.png"
 }
 
-function Convert-PageBody($Page, [hashtable]$PagesBySource, [hashtable]$Views, [hashtable]$ShownViews) {
+function Convert-PageBody($Page, [hashtable]$PagesBySource, $Views, [hashtable]$ShownViews) {
     $output = [Collections.Generic.List[string]]::new()
     $table = [Collections.Generic.List[string]]::new()
     $fence = $null
@@ -204,10 +204,13 @@ function Convert-PageBody($Page, [hashtable]$PagesBySource, [hashtable]$Views, [
             $output.Add($(if ($fence -eq 'mermaid') { '::: mermaid' } else { $line }))
         }
         elseif ($line -match $ViewMarkerPattern) {
-            $key = $Matches[1]
-            if (-not $Views.ContainsKey($key)) { throw "$($Page.Source): la vista $key non esiste nel modello C4" }
-            $ShownViews[$key] = $Views[$key]
-            $output.Add("![$key](/$(Get-ViewImagePath $key))")
+            $marker = $Matches[1]
+            $keys = @(Resolve-ViewMarker $marker $Views.Workspace)
+            if (-not $keys.Count -or @($keys | Where-Object { -not $Views.Diagrams.ContainsKey($_) }).Count) { throw "$($Page.Source): la vista $marker non esiste nel modello C4" }
+            foreach ($key in $keys) {
+                $ShownViews[$key] = $Views.Diagrams[$key]
+                $output.Add("![$key](/$(Get-ViewImagePath $key))")
+            }
         }
         else { $output.Add((Convert-Links $line $Page $PagesBySource)) }
     }
@@ -309,10 +312,15 @@ function Publish-Document($Pages, [hashtable]$Contents, [hashtable]$Images) {
 
 #endregion
 
+# Le immagini vengono dai diagrammi C4-PlantUML; il tipo di ogni vista, che un marcatore come component*
+# nomina, dal workspace in JSON.
 function Get-Views {
     $workspace = Join-Path $docsDirectory 'model/workspace.dsl'
-    if (-not (Test-Path $workspace -PathType Leaf)) { return @{} }
-    return Export-StructurizrC4PlantUml (Resolve-Path $workspace).Path
+    if (-not (Test-Path $workspace -PathType Leaf)) { return [pscustomobject]@{ Diagrams = @{}; Workspace = $null } }
+    $path = (Resolve-Path $workspace).Path
+    $export = Export-StructurizrWorkspace $path
+    if ($export.Error) { throw "modello C4 non valido: $($export.Error)" }
+    return [pscustomobject]@{ Diagrams = (Export-StructurizrC4PlantUml $path); Workspace = $export.Workspace }
 }
 
 function Get-ViewImages([hashtable]$ShownViews) {

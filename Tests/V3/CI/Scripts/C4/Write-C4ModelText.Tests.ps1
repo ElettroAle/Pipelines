@@ -195,7 +195,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             Reset-Stub
             $root = New-Workspace (New-DescribedEngine)
             $res = Invoke-Text $root
-            $dsl = $res.Generated['contoso.shop.ai.dsl']
+            $dsl = $res.Generated['model/contoso.shop.ai.dsl']
             Remove-Workspace $root
         }
 
@@ -285,7 +285,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la parte generata resta la stessa" {
-            $res.Generated['contoso.shop.ai.dsl'] | Should -Be $first.Generated['contoso.shop.ai.dsl']
+            $res.Generated['model/contoso.shop.ai.dsl'] | Should -Be $first.Generated['model/contoso.shop.ai.dsl']
         }
     }
 
@@ -409,7 +409,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la parte generata si scrive" {
-            $res.Generated['contoso.shop.ai.dsl'] | Should -Not -BeNullOrEmpty
+            $res.Generated['model/contoso.shop.ai.dsl'] | Should -Not -BeNullOrEmpty
         }
     }
 
@@ -526,7 +526,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la parte del Motore contiene la relazione dalla persona all'applicazione" {
-            $res.Generated['contoso.shop.ai.dsl'] | Should -Match "cliente -> $Api `"Invia i messaggi`" `"HTTPS`""
+            $res.Generated['model/contoso.shop.ai.dsl'] | Should -Match "cliente -> $Api `"Invia i messaggi`" `"HTTPS`""
         }
 
         It "E il container del BFF trova la persona nel catalogo" {
@@ -538,7 +538,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la parte del BFF la collega con lo stesso identificativo" {
-            $res.Generated['contoso.shop.bff.web.dsl'] | Should -Match "cliente -> $Web `"Apre la chat`" `"HTTPS`""
+            $res.Generated['model/contoso.shop.bff.web.dsl'] | Should -Match "cliente -> $Web `"Apre la chat`" `"HTTPS`""
         }
     }
 
@@ -565,7 +565,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la parte collega l'identificativo del catalogo" {
-            $res.Generated['contoso.shop.bff.web.dsl'] | Should -Match "cliente -> $Web `"Apre la chat`" `"HTTPS`""
+            $res.Generated['model/contoso.shop.bff.web.dsl'] | Should -Match "cliente -> $Web `"Apre la chat`" `"HTTPS`""
         }
     }
 
@@ -604,7 +604,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la parte del BFF collega la voce che resta" {
-            $res.Generated['contoso.shop.bff.web.dsl'] | Should -Match "cliente -> $Web `"Apre la chat`" `"HTTPS`""
+            $res.Generated['model/contoso.shop.bff.web.dsl'] | Should -Match "cliente -> $Web `"Apre la chat`" `"HTTPS`""
         }
 
         It "E il contesto non dichiara la voce unita" {
@@ -637,7 +637,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la parte non ha la relazione con il sistema esterno" {
-            $res.Generated['contoso.shop.ai.dsl'] | Should -Not -Match '\bportale ->'
+            $res.Generated['model/contoso.shop.ai.dsl'] | Should -Not -Match '\bportale ->'
         }
 
         It "E le correzioni elencano il sistema esterno tolto" {
@@ -708,7 +708,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la parte dell'infrastruttura dice cio' che passa sulla relazione" {
-            $res.Generated['contoso.shop.infrastructure.dsl'] | Should -Match "$Api -> $archive ""Passa da $Api a $archive"""
+            $res.Generated['model/contoso.shop.infrastructure.dsl'] | Should -Match "$Api -> $archive ""Passa da $Api a $archive"""
         }
     }
 
@@ -740,7 +740,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la parte dice cio' che passa sulla relazione" {
-            $res.Generated['contoso.shop.infrastructure.dsl'] | Should -Match "$Api -> $archive ""Passa da $Api a $archive"""
+            $res.Generated['model/contoso.shop.infrastructure.dsl'] | Should -Match "$Api -> $archive ""Passa da $Api a $archive"""
         }
     }
 
@@ -763,7 +763,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la parte non ha la relazione con il sistema esterno" {
-            $res.Generated['contoso.shop.ai.dsl'] | Should -Not -Match '\bbff ->'
+            $res.Generated['model/contoso.shop.ai.dsl'] | Should -Not -Match '\bbff ->'
         }
 
         It "E le correzioni elencano il sistema esterno tolto" {
@@ -801,7 +801,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la parte non ha la relazione con il sistema esterno" {
-            $res.Generated['contoso.shop.ai.dsl'] | Should -Not -Match '\bbff ->'
+            $res.Generated['model/contoso.shop.ai.dsl'] | Should -Not -Match '\bbff ->'
         }
     }
 
@@ -815,9 +815,9 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             $res = Invoke-Text $root
             Remove-Workspace $root
             $dir = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-text-dsl-$(New-Guid)"
-            New-Item -ItemType Directory -Force -Path (Join-Path $dir 'generated') | Out-Null
+            New-Item -ItemType Directory -Force -Path (Join-Path $dir 'generated/model'), (Join-Path $dir 'generated/views') | Out-Null
             $res.Generated.Keys | ForEach-Object { [IO.File]::WriteAllText((Join-Path $dir "generated/$_"), $res.Generated[$_]) }
-            [IO.File]::WriteAllText((Join-Path $dir 'workspace.dsl'), "workspace {`n    model {`n        !include generated/context.dsl`n        sistema = softwareSystem `"Contoso.Shop`" {`n            !include generated/contoso.shop.ai.dsl`n        }`n    }`n    views {`n        !include generated/contoso.shop.ai.views.dsl`n    }`n}`n")
+            [IO.File]::WriteAllText((Join-Path $dir 'workspace.dsl'), "workspace {`n    model {`n        !include generated/context.dsl`n        sistema = softwareSystem `"Contoso.Shop`" {`n            !include generated/model`n        }`n    }`n    views {`n        !include generated/views`n    }`n}`n")
             $export = Export-StructurizrWorkspace (Join-Path $dir 'workspace.dsl')
             Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
             $model = $export.Workspace.model
