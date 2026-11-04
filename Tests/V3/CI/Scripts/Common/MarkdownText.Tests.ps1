@@ -99,12 +99,12 @@ Describe "MarkdownText — sezioni di un documento" {
 
     BeforeAll {
         $directory = Join-Path ([IO.Path]::GetTempPath()) "pester-sections-$(New-Guid)"
-        New-Item -ItemType Directory -Path "$directory/model" | Out-Null
+        New-Item -ItemType Directory -Path "$directory/c4" | Out-Null
         [IO.File]::WriteAllText("$directory/02-uso.md", "# Uso`n")
         [IO.File]::WriteAllText("$directory/01-introduzione.md", "# Introduzione`n")
         [IO.File]::WriteAllText("$directory/note.md", "Testo senza titolo.`n")
-        [IO.File]::WriteAllText("$directory/model/workspace.dsl", "workspace {}`n")
-        [IO.File]::WriteAllText("$directory/model/legenda.md", "# Legenda`n")
+        [IO.File]::WriteAllText("$directory/c4/workspace.dsl", "workspace {}`n")
+        [IO.File]::WriteAllText("$directory/c4/legenda.md", "# Legenda`n")
         $sections = Get-DocumentSections $directory
     }
 

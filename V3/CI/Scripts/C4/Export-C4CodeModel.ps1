@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Parte del modello C4 che nasce da un repository sorgente, in Structurizr DSL da includere nel
-# sistema del documento: un file per repository in GENERATED_DIRECTORY/model, che si legge e non si
+# sistema del documento: un file per repository in GENERATED_DIRECTORY/containers, che si legge e non si
 # scrive a mano. Unisce i frammenti che i lettori delle tecnologie hanno scritto in FRAGMENT_DIRECTORY
 # (contratto in C4CodeModel.ps1) e non conosce le tecnologie: un file manifest del repository che
 # nessun frammento ha letto ferma la generazione. I container del repository stanno in un gruppo con
@@ -24,7 +24,7 @@
 . "$PSScriptRoot/C4CodeModel.ps1"
 
 $SourceRepositories = @("$env:SOURCE_REPOSITORIES" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$GeneratedDirectory = if ($env:GENERATED_DIRECTORY) { $env:GENERATED_DIRECTORY } else { 'docs/architecture/model/generated' }
+$GeneratedDirectory = if ($env:GENERATED_DIRECTORY) { $env:GENERATED_DIRECTORY } else { 'docs/architecture/c4/generated' }
 $Mode = if ($env:GENERATION_MODE) { $env:GENERATION_MODE.ToLower() } else { 'write' }
 $GeneratedTag = $DocumentLanguage.GeneratedTag
 $TechnicalTag = $DocumentLanguage.TechnicalTag
@@ -193,7 +193,7 @@ function Get-GenerationIssues {
 
     $script:ModelText = Get-PartText $text $fragments
     $name = $Repository.ToLowerInvariant()
-    $outputs = [ordered]@{ "model/$name.dsl" = Format-Model $fragments; "views/$name.dsl" = Format-Views $fragments; 'context.dsl' = Format-Context }
+    $outputs = [ordered]@{ "containers/$name.dsl" = Format-Model $fragments; "views/$name.dsl" = Format-Views $fragments; 'context.dsl' = Format-Context }
     & $ModeActions[$Mode] $outputs
 }
 

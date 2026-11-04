@@ -329,7 +329,7 @@ Struttura arc42 (`arc42-verify.yaml`, `CI/Scripts/Arc42/Test-Arc42Document.ps1`)
 
 Modello C4 (`c4-verify.yaml`, `CI/Scripts/C4/Test-C4Model.ps1`):
 
-- Il modello è `model/workspace.dsl` nella cartella del documento: il DSL è valido e ha vista di contesto
+- Il modello è `c4/workspace.dsl` nella cartella del documento: il DSL è valido e ha vista di contesto
   e vista dei container; ogni container con il tag delle applicazioni (`Applicazione` in italiano) ha la sua
   vista dei componenti.
 - Una vista di contesto mostra solo il livello di business: una persona o un sistema con il tag tecnico
@@ -412,8 +412,8 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   `$env:C4_SCRIPTS_DIRECTORY/Common/VerificationGate.ps1`, e scrive il frammento con lo stesso
   contratto.
 - **Lo scrittore** (`CI/Scripts/C4/Export-C4CodeModel.ps1`) unisce i frammenti del repository e scrive
-  `model/<repository in minuscolo>.dsl` nella cartella delle parti generate: il sistema di
-  `model/workspace.dsl` include la cartella intera (`!include generated/model`), senza elencare i
+  `containers/<repository in minuscolo>.dsl` nella cartella delle parti generate: il sistema di
+  `c4/workspace.dsl` include la cartella intera (`!include generated/containers`), senza elencare i
   repository. Con più di un container, i container stanno in un gruppo con il nome
   del repository senza il prefisso comune ai repository sorgente; un container unico non ha gruppo; ogni elemento porta il tag `Generato` in italiano e il nome
   completo nella proprietà `codice`, e una proprietà vuota non si scrive. Prende da `model.text.json`

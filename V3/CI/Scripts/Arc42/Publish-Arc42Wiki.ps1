@@ -315,7 +315,7 @@ function Publish-Document($Pages, [hashtable]$Contents, [hashtable]$Images) {
 # Le immagini vengono dai diagrammi C4-PlantUML; il tipo di ogni vista, che un marcatore come component*
 # nomina, dal workspace in JSON.
 function Get-Views {
-    $workspace = Join-Path $docsDirectory 'model/workspace.dsl'
+    $workspace = Join-Path $docsDirectory 'c4/workspace.dsl'
     if (-not (Test-Path $workspace -PathType Leaf)) { return [pscustomobject]@{ Diagrams = @{}; Workspace = $null } }
     $path = (Resolve-Path $workspace).Path
     $export = Export-StructurizrWorkspace $path

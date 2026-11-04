@@ -20,7 +20,7 @@ $Body
 function New-ValidDocs {
     $docs = [ordered]@{}
     $docs['docs/decisions/0001-esempio.md'] = "---`nstatus: accepted`n---`n`n# Esempio`n"
-    $docs['docs/architecture/model/workspace.dsl'] = @'
+    $docs['docs/architecture/c4/workspace.dsl'] = @'
 workspace "Piattaforma" {
     model {
         utente = person "Utente"

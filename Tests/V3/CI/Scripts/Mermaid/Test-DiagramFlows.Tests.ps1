@@ -19,7 +19,7 @@ BeforeAll {
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-flows-$(New-Guid)"
 
     $RuntimeView = 'docs/architecture/06_runtime_view.md'
-    $WorkspaceDsl = 'docs/architecture/model/workspace.dsl'
+    $WorkspaceDsl = 'docs/architecture/c4/workspace.dsl'
     $Decision = 'docs/decisions/0002-sessioni.md'
     $ContainerDiagram = "    participant B as BFF`n    participant M as API del Motore`n    B->>M: apre la sessione`n    M-->>B: codice della sessione"
     $DetailDiagram = @'

@@ -24,11 +24,11 @@ BeforeAll {
     }
 
     function Add-TechnicalSystem([System.Collections.IDictionary]$Docs) {
-        Edit-Docs $Docs 'docs/architecture/model/workspace.dsl' '        utente -> client "usa"' "        ricerca = softwareSystem `"Ricerca web`" `"Motori di ricerca`" `"Tecnico`"`n        utente -> client `"usa`"`n        motore -> ricerca `"cerca`""
+        Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' '        utente -> client "usa"' "        ricerca = softwareSystem `"Ricerca web`" `"Motori di ricerca`" `"Tecnico`"`n        utente -> client `"usa`"`n        motore -> ricerca `"cerca`""
     }
 
     function Add-GeneratedPart([System.Collections.IDictionary]$Docs) {
-        $Docs['docs/architecture/model/generated/contoso.shop.ai.dsl'] = @"
+        $Docs['docs/architecture/c4/generated/contoso.shop.ai.dsl'] = @"
 contoso_shop_ai_api = container "Api" "Riceve le richieste" "ASP.NET Core" "Applicazione,Generato" {
     properties {
         "codice" "Contoso.Shop.AI.Api"
@@ -46,9 +46,9 @@ contoso_shop_ai_api = container "Api" "Riceve le richieste" "ASP.NET Core" "Appl
     contoso_shop_ai_api__usecase -> contoso_shop_ai_api__engine "Esegue i comandi del dominio" "" "Generato"
 }
 "@
-        Edit-Docs $Docs 'docs/architecture/model/workspace.dsl' "                coda = component `"Coda`"`n            }" "                coda = component `"Coda`"`n            }`n            !include generated/contoso.shop.ai.dsl"
-        Edit-Docs $Docs 'docs/architecture/model/workspace.dsl' '        motore -> worker "accoda"' "        motore -> worker `"accoda`"`n        bff -> contoso_shop_ai_api `"inoltra`""
-        Edit-Docs $Docs 'docs/architecture/model/workspace.dsl' "        component worker `"componenti-worker`" {" "        component contoso_shop_ai_api `"componenti-api`" {`n            include *`n        }`n        component worker `"componenti-worker`" {"
+        Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' "                coda = component `"Coda`"`n            }" "                coda = component `"Coda`"`n            }`n            !include generated/contoso.shop.ai.dsl"
+        Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' '        motore -> worker "accoda"' "        motore -> worker `"accoda`"`n        bff -> contoso_shop_ai_api `"inoltra`""
+        Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' "        component worker `"componenti-worker`" {" "        component contoso_shop_ai_api `"componenti-api`" {`n            include *`n        }`n        component worker `"componenti-worker`" {"
         Edit-Docs $Docs 'docs/architecture/05_building_block_view.md' '<!-- vista: componenti-worker -->' "<!-- vista: componenti-worker -->`n`n<!-- vista: componenti-api -->"
         return $Docs
     }
@@ -77,7 +77,7 @@ Describe "Funzionalità: Verifica del modello C4" {
         BeforeAll {
             $docs = New-ValidDocs
             Add-TechnicalSystem $docs
-            Edit-Docs $docs 'docs/architecture/model/workspace.dsl' "systemContext sistema `"contesto`" {`n            include *" "systemContext sistema `"contesto`" {`n            include *`n            exclude `"element.tag==Tecnico`""
+            Edit-Docs $docs 'docs/architecture/c4/workspace.dsl' "systemContext sistema `"contesto`" {`n            include *" "systemContext sistema `"contesto`" {`n            include *`n            exclude `"element.tag==Tecnico`""
             $res = Invoke-ModelCheck $docs
         }
 
@@ -103,7 +103,7 @@ Describe "Funzionalità: Verifica del modello C4" {
     Context "Scenario: modello senza vista di deployment" {
         BeforeAll {
             $docs = New-ValidDocs
-            Edit-Docs $docs 'docs/architecture/model/workspace.dsl' "        deployment sistema produzione `"deployment-produzione`" {`n            include *`n        }`n" ''
+            Edit-Docs $docs 'docs/architecture/c4/workspace.dsl' "        deployment sistema produzione `"deployment-produzione`" {`n            include *`n        }`n" ''
             Edit-Docs $docs 'docs/architecture/07_deployment_view.md' "<!-- vista: deployment-produzione -->`n" ''
             $res = Invoke-ModelCheck $docs
         }
@@ -118,14 +118,14 @@ Describe "Funzionalità: Verifica del modello C4" {
         @{
             difetto  = 'una relazione da "BFF" verso "Motore v3", che il modello non dichiara'
             elemento = '^modello C4: non valido \(.*"Motore v3"'
-            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/workspace.dsl' 'motore -> worker "accoda"' "motore -> worker `"accoda`"`n        bff -> `"Motore v3`" `"chiama`"" }
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/c4/workspace.dsl' 'motore -> worker "accoda"' "motore -> worker `"accoda`"`n        bff -> `"Motore v3`" `"chiama`"" }
         }
         @{
             difetto  = 'il container "Worker" senza vista dei componenti'
             elemento = '^modello C4: container senza vista dei componenti \(Worker\)'
             Mutate   = {
                 param($d)
-                Edit-Docs $d 'docs/architecture/model/workspace.dsl' "        component worker `"componenti-worker`" {`n            include *`n        }`n" ''
+                Edit-Docs $d 'docs/architecture/c4/workspace.dsl' "        component worker `"componenti-worker`" {`n            include *`n        }`n" ''
                 Edit-Docs $d 'docs/architecture/05_building_block_view.md' "<!-- vista: componenti-worker -->`n" ''
             }
         }
@@ -151,8 +151,8 @@ Describe "Funzionalità: Verifica del modello C4" {
         }
         @{
             difetto  = 'un documento senza modello'
-            elemento = '^modello C4: modello mancante \(docs[\\/]architecture[\\/]model[\\/]workspace\.dsl\)'
-            Mutate   = { param($d) $d['docs/architecture/model/workspace.dsl'] = $null }
+            elemento = '^modello C4: modello mancante \(docs[\\/]architecture[\\/]c4[\\/]workspace\.dsl\)'
+            Mutate   = { param($d) $d['docs/architecture/c4/workspace.dsl'] = $null }
         }
     ) {
         BeforeAll {
@@ -181,7 +181,7 @@ Describe "Test-C4Model — strumenti e modalità" {
 
     It "In modalità off non verifica" {
         $docs = New-ValidDocs
-        $docs['docs/architecture/model/workspace.dsl'] = $null
+        $docs['docs/architecture/c4/workspace.dsl'] = $null
         $res = Invoke-ModelCheck $docs @{ GATE_MODE = 'off' }
         $res.ExitCode | Should -Be 0
         Get-Issues $res.Output | Should -BeNullOrEmpty
@@ -198,7 +198,7 @@ Describe "Test-C4Model — lingua del documento" {
 
     It "In inglese un container Application senza vista dei componenti si segnala" {
         $docs = New-ValidDocs
-        Edit-Docs $docs 'docs/architecture/model/workspace.dsl' "        component worker `"componenti-worker`" {`n            include *`n        }`n" ''
+        Edit-Docs $docs 'docs/architecture/c4/workspace.dsl' "        component worker `"componenti-worker`" {`n            include *`n        }`n" ''
         Edit-Docs $docs 'docs/architecture/05_building_block_view.md' "<!-- vista: componenti-worker -->`n" ''
         $res = Invoke-ModelCheck (ConvertTo-EnglishConventions $docs) @{ DOCUMENT_LANGUAGE = 'EN' }
         $res.ExitCode | Should -Be 1
@@ -243,37 +243,37 @@ Describe "Funzionalità: Testo del modello sulla parte generata dal codice" {
         @{
             difetto  = 'il componente generato "UseCase" senza descrizione'
             elemento = '^modello C4: elemento generato senza descrizione \(UseCase\)'
-            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/generated/contoso.shop.ai.dsl' '"UseCase" "I casi d''uso"' '"UseCase" ""' }
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/c4/generated/contoso.shop.ai.dsl' '"UseCase" "I casi d''uso"' '"UseCase" ""' }
         }
         @{
             difetto  = 'il container generato "Api" senza descrizione'
             elemento = '^modello C4: elemento generato senza descrizione \(Api\)'
-            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/generated/contoso.shop.ai.dsl' '"Api" "Riceve le richieste"' '"Api" ""' }
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/c4/generated/contoso.shop.ai.dsl' '"Api" "Riceve le richieste"' '"Api" ""' }
         }
         @{
             difetto  = 'la relazione generata da "UseCase" a "Engine" senza cio'' che passa'
             elemento = '^modello C4: relazione generata senza cio'' che passa \(UseCase -> Engine\)'
-            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/generated/contoso.shop.ai.dsl' '"Esegue i comandi del dominio"' '""' }
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/c4/generated/contoso.shop.ai.dsl' '"Esegue i comandi del dominio"' '""' }
         }
         @{
             difetto  = 'la relazione del testo da "Engine" a "UseCase", che il codice non dichiara'
             elemento = '^modello C4: relazione fra elementi generati che il codice non dichiara \(Engine -> UseCase\)'
-            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/workspace.dsl' '        bff -> contoso_shop_ai_api "inoltra"' "        bff -> contoso_shop_ai_api `"inoltra`"`n        contoso_shop_ai_api__engine -> contoso_shop_ai_api__usecase `"notifica`"" }
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/c4/workspace.dsl' '        bff -> contoso_shop_ai_api "inoltra"' "        bff -> contoso_shop_ai_api `"inoltra`"`n        contoso_shop_ai_api__engine -> contoso_shop_ai_api__usecase `"notifica`"" }
         }
         @{
             difetto  = 'la relazione del testo da "UseCase" a "Engine", che ripete quella generata'
             elemento = '^modello C4: relazione fra elementi generati che il codice non dichiara \(UseCase -> Engine\)'
-            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/workspace.dsl' '        bff -> contoso_shop_ai_api "inoltra"' "        bff -> contoso_shop_ai_api `"inoltra`"`n        contoso_shop_ai_api__usecase -> contoso_shop_ai_api__engine `"usa`"" }
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/c4/workspace.dsl' '        bff -> contoso_shop_ai_api "inoltra"' "        bff -> contoso_shop_ai_api `"inoltra`"`n        contoso_shop_ai_api__usecase -> contoso_shop_ai_api__engine `"usa`"" }
         }
         @{
             difetto  = 'il testo che descrive "DataAccess.Twilio", assente dal modello generato'
             elemento = '^modello C4: non valido \(.*contoso_shop_ai_api__dataaccess_twilio'
-            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/workspace.dsl' '        bff -> contoso_shop_ai_api "inoltra"' "        bff -> contoso_shop_ai_api `"inoltra`"`n        !element contoso_shop_ai_api__dataaccess_twilio {`n            description `"Invia gli SMS`"`n        }" }
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/c4/workspace.dsl' '        bff -> contoso_shop_ai_api "inoltra"' "        bff -> contoso_shop_ai_api `"inoltra`"`n        !element contoso_shop_ai_api__dataaccess_twilio {`n            description `"Invia gli SMS`"`n        }" }
         }
         @{
             difetto  = 'la relazione del testo dalla persona "Utente" al container "Contoso.Shop.Portal", assente dal modello'
             elemento = '^modello C4: non valido \(.*contoso_shop_portal'
-            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/model/workspace.dsl' '        bff -> contoso_shop_ai_api "inoltra"' "        bff -> contoso_shop_ai_api `"inoltra`"`n        utente -> contoso_shop_portal `"usa`"" }
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/c4/workspace.dsl' '        bff -> contoso_shop_ai_api "inoltra"' "        bff -> contoso_shop_ai_api `"inoltra`"`n        utente -> contoso_shop_portal `"usa`"" }
         }
     ) {
         BeforeAll {

@@ -26,7 +26,7 @@ BeforeAll {
         & $Script $Endpoint $State
     }
     $script:Branch = 'c4/contoso.shop.ai'
-    $script:Generated = 'docs/architecture/model/generated'
+    $script:Generated = 'docs/architecture/c4/generated'
     $script:Workspaces = [System.Collections.Generic.List[string]]::new()
 
     function Reset-Stub([object[]]$Active = @(), [int]$Status = 200) {
