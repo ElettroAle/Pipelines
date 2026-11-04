@@ -13,7 +13,7 @@
 
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
 $decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }
-$WorkspaceDsl = Join-Path $docsDirectory 'model/workspace.dsl'
+$WorkspaceDsl = Join-Path $docsDirectory 'c4/workspace.dsl'
 
 $FlowsScope = 'flussi dei diagrammi'
 $ModelScope = 'modello C4'

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# Modello C4 di un documento, scritto in Structurizr DSL in model/workspace.dsl della cartella
+# Modello C4 di un documento, scritto in Structurizr DSL in c4/workspace.dsl della cartella
 # del documento: modello valido, viste di contesto, dei container e di deployment, una vista dei
 # componenti per ogni container con il tag delle applicazioni, ogni vista mostrata in una sezione
 # con il marcatore di vista, ogni marcatore rivolto a una vista esistente e nessun elemento con il tag
@@ -12,7 +12,7 @@
 . "$PSScriptRoot/Structurizr.ps1"
 
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
-$WorkspaceDsl = Join-Path $docsDirectory 'model/workspace.dsl'
+$WorkspaceDsl = Join-Path $docsDirectory 'c4/workspace.dsl'
 
 $ApplicationTag = $DocumentLanguage.ApplicationTag
 $TechnicalTag = $DocumentLanguage.TechnicalTag

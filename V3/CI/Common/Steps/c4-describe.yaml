@@ -35,7 +35,7 @@
 #   correctionsFile     → file in cui si elencano le correzioni della generazione, ad esempio per la PR
 #                         (default: $(Agent.TempDirectory)/c4-corrections.md)
 #   fragmentDirectory   → cartella dei frammenti dei lettori (default: $(Agent.TempDirectory)/c4-fragments)
-#   generatedDirectory  → cartella delle parti generate, relativa a workingDirectory (default: docs/architecture/model/generated)
+#   generatedDirectory  → cartella delle parti generate, relativa a workingDirectory (default: docs/architecture/c4/generated)
 #   guide               → guida di stile del documento (default: docs/STYLE.md)
 #   context             → file o cartelle di contesto del documento, Markdown (default: [docs/decisions])
 #   maxWords            → parole massime di una frase del testo, 0 senza limite (default: 0)
@@ -89,7 +89,7 @@ parameters:
 
   - name: generatedDirectory
     type: string
-    default: 'docs/architecture/model/generated'
+    default: 'docs/architecture/c4/generated'
 
   - name: guide
     type: string

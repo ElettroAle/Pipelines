@@ -22,7 +22,7 @@
 
 $SourceRepositories = @("$env:SOURCE_REPOSITORIES" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $SourcesDirectory = if ($env:SOURCES_DIRECTORY) { $env:SOURCES_DIRECTORY } else { 'sources' }
-$GeneratedDirectory = if ($env:GENERATED_DIRECTORY) { $env:GENERATED_DIRECTORY } else { 'docs/architecture/model/generated' }
+$GeneratedDirectory = if ($env:GENERATED_DIRECTORY) { $env:GENERATED_DIRECTORY } else { 'docs/architecture/c4/generated' }
 $CorrectionsFile = $env:C4_CORRECTIONS_FILE
 $GuidePath = $env:STYLE_GUIDE
 $ContextPaths = @("$env:C4_TEXT_CONTEXT" -split ';' | ForEach-Object Trim | Where-Object { $_ })

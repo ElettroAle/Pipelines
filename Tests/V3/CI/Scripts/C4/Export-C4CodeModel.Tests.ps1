@@ -44,7 +44,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
     Context "Schema dello scenario: elementi e relazioni nati dal codice .NET" {
         BeforeAll {
             $res = Invoke-Generation (New-EngineRepository) 'Contoso.Shop.AI'
-            $dsl = $res.Generated['model/contoso.shop.ai.dsl']
+            $dsl = $res.Generated['containers/contoso.shop.ai.dsl']
         }
 
         It "Allora la generazione riesce" {
@@ -88,7 +88,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
     Context "Scenario: test e strumenti non entrano nel modello" {
         BeforeAll {
             $res = Invoke-Generation (New-EngineRepository) 'Contoso.Shop.AI'
-            $dsl = $res.Generated['model/contoso.shop.ai.dsl']
+            $dsl = $res.Generated['containers/contoso.shop.ai.dsl']
         }
 
         It "Allora il modello non contiene ""Contoso.Shop.AI.UnitTest.Engine""" {
@@ -113,7 +113,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         BeforeAll {
             $files = if ($repository -eq 'Contoso.Shop.AI') { New-EngineRepository } else { New-BffRepository }
             $res = Invoke-Generation $files $repository
-            $dsl = $res.Generated["model/$($repository.ToLowerInvariant()).dsl"]
+            $dsl = $res.Generated["containers/$($repository.ToLowerInvariant()).dsl"]
         }
 
         It "Allora l'elemento del progetto si chiama <nome>" {
@@ -128,7 +128,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
     Context "Schema dello scenario: elementi nati dall'applicazione Angular" {
         BeforeAll {
             $res = Invoke-Generation (New-ClientRepository) 'Contoso.Shop.Client.Web'
-            $dsl = $res.Generated['model/contoso.shop.client.web.dsl']
+            $dsl = $res.Generated['containers/contoso.shop.client.web.dsl']
             $client = Get-ContainerBlock $dsl 'Client.Web'
         }
 
@@ -168,28 +168,28 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
     Context "Scenario: un elemento sparisce dal codice" {
         BeforeAll {
             $files = New-EngineRepository
-            $files['docs/architecture/model/generated/model/contoso.shop.ai.dsl'] = 'container "DataAccess.Twilio"'
+            $files['docs/architecture/c4/generated/containers/contoso.shop.ai.dsl'] = 'container "DataAccess.Twilio"'
             $res = Invoke-Generation $files 'Contoso.Shop.AI'
         }
 
         It "Allora il modello non contiene ""Contoso.Shop.AI.DataAccess.Twilio""" {
-            $res.Generated['model/contoso.shop.ai.dsl'] | Should -Not -Match 'Twilio'
+            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Not -Match 'Twilio'
         }
     }
 
     Context "Scenario: la generazione cambia solo la parte del repository integrato" {
         BeforeAll {
             $files = New-BffRepository
-            $files['docs/architecture/model/generated/model/contoso.shop.ai.dsl'] = "# parte del Motore`n"
+            $files['docs/architecture/c4/generated/containers/contoso.shop.ai.dsl'] = "# parte del Motore`n"
             $res = Invoke-Generation $files 'Contoso.Shop.Bff.Web'
         }
 
         It "Allora cambia la parte generata di ""Contoso.Shop.Bff.Web""" {
-            $res.Generated['model/contoso.shop.bff.web.dsl'] | Should -Match 'container\s+"Web"'
+            $res.Generated['containers/contoso.shop.bff.web.dsl'] | Should -Match 'container\s+"Web"'
         }
 
         It "E la parte generata di ""Contoso.Shop.AI"" resta com'era" {
-            $res.Generated['model/contoso.shop.ai.dsl'] | Should -Be "# parte del Motore`n"
+            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Be "# parte del Motore`n"
         }
 
         It "E scrive il contesto dal testo di tutto il sistema" {
@@ -208,7 +208,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
                 externalSystems = [ordered]@{ entra = @{ name = 'Entra External ID'; description = 'Autentica i clienti.'; technical = $true } }
             }
             $files = New-BffRepository
-            $files['docs/architecture/model/generated/model.text.json'] = $text | ConvertTo-Json -Depth 10
+            $files['docs/architecture/c4/generated/model.text.json'] = $text | ConvertTo-Json -Depth 10
             $res = Invoke-Generation $files 'Contoso.Shop.Bff.Web'
         }
 
@@ -221,8 +221,8 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         }
 
         It "E la parte contiene solo le relazioni con persone e sistemi esterni dei suoi container" {
-            $res.Generated['model/contoso.shop.bff.web.dsl'] | Should -Match 'cliente -> contoso_shop_bff_web "Apre la chat" "HTTPS"'
-            $res.Generated['model/contoso.shop.bff.web.dsl'] | Should -Not -Match 'contoso_shop_ai_api -> entra'
+            $res.Generated['containers/contoso.shop.bff.web.dsl'] | Should -Match 'cliente -> contoso_shop_bff_web "Apre la chat" "HTTPS"'
+            $res.Generated['containers/contoso.shop.bff.web.dsl'] | Should -Not -Match 'contoso_shop_ai_api -> entra'
         }
     }
 
@@ -246,9 +246,9 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
     ) {
         BeforeAll {
             $files = & $Build
-            $files['docs/architecture/model/generated/model/x.dsl'] = $null
+            $files['docs/architecture/c4/generated/containers/x.dsl'] = $null
             $previousFile = "# parte precedente`n"
-            $files["docs/architecture/model/generated/model/$($repository.ToLower()).dsl"] = $previousFile
+            $files["docs/architecture/c4/generated/containers/$($repository.ToLower()).dsl"] = $previousFile
             $res = Invoke-Generation $files $repository
         }
 
@@ -261,7 +261,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         }
 
         It "E il modello non cambia" {
-            $res.Generated["model/$($repository.ToLower()).dsl"] | Should -Be $previousFile
+            $res.Generated["containers/$($repository.ToLower()).dsl"] | Should -Be $previousFile
         }
     }
 
@@ -269,7 +269,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         BeforeAll {
             $files = New-BffRepository
             $first = Invoke-Generation $files 'Contoso.Shop.Bff.Web'
-            $files['docs/architecture/model/generated/model/contoso.shop.bff.web.dsl'] = $first.Generated['model/contoso.shop.bff.web.dsl'] -replace '"Web.BusinessLogic"', '"Logica"'
+            $files['docs/architecture/c4/generated/containers/contoso.shop.bff.web.dsl'] = $first.Generated['containers/contoso.shop.bff.web.dsl'] -replace '"Web.BusinessLogic"', '"Logica"'
             $res = Invoke-Generation $files 'Contoso.Shop.Bff.Web' 'check'
         }
 
@@ -286,7 +286,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         BeforeAll {
             $files = New-BffRepository
             $first = Invoke-Generation $files 'Contoso.Shop.Bff.Web'
-            $files['docs/architecture/model/generated/model/contoso.shop.bff.web.dsl'] = $first.Generated['model/contoso.shop.bff.web.dsl']
+            $files['docs/architecture/c4/generated/containers/contoso.shop.bff.web.dsl'] = $first.Generated['containers/contoso.shop.bff.web.dsl']
             $res = Invoke-Generation $files 'Contoso.Shop.Bff.Web' 'check'
         }
 
@@ -299,7 +299,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         BeforeAll {
             $files = New-BffRepository
             $first = Invoke-Generation $files 'Contoso.Shop.Bff.Web'
-            $first.Generated.Keys | ForEach-Object { $files["docs/architecture/model/generated/$_"] = $first.Generated[$_] }
+            $first.Generated.Keys | ForEach-Object { $files["docs/architecture/c4/generated/$_"] = $first.Generated[$_] }
             $res = Invoke-Generation $files 'Contoso.Shop.Bff.Web' 'check'
         }
 
@@ -310,13 +310,13 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
 
     Context "Scenario: la parte generata e' un modello Structurizr valido" {
         BeforeAll {
-            $engine = (Invoke-Generation (New-EngineRepository) 'Contoso.Shop.AI').Generated['model/contoso.shop.ai.dsl']
-            $client = (Invoke-Generation (New-ClientRepository) 'Contoso.Shop.Client.Web').Generated['model/contoso.shop.client.web.dsl']
+            $engine = (Invoke-Generation (New-EngineRepository) 'Contoso.Shop.AI').Generated['containers/contoso.shop.ai.dsl']
+            $client = (Invoke-Generation (New-ClientRepository) 'Contoso.Shop.Client.Web').Generated['containers/contoso.shop.client.web.dsl']
             $dir = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-code-dsl-$(New-Guid)"
-            New-Item -ItemType Directory -Force -Path (Join-Path $dir 'generated/model') | Out-Null
-            [IO.File]::WriteAllText((Join-Path $dir 'generated/model/contoso.shop.ai.dsl'), $engine)
-            [IO.File]::WriteAllText((Join-Path $dir 'generated/model/contoso.shop.client.web.dsl'), $client)
-            [IO.File]::WriteAllText((Join-Path $dir 'workspace.dsl'), "workspace {`n    model {`n        sistema = softwareSystem `"Contoso.Shop`" {`n            !include generated/model`n        }`n    }`n}`n")
+            New-Item -ItemType Directory -Force -Path (Join-Path $dir 'generated/containers') | Out-Null
+            [IO.File]::WriteAllText((Join-Path $dir 'generated/containers/contoso.shop.ai.dsl'), $engine)
+            [IO.File]::WriteAllText((Join-Path $dir 'generated/containers/contoso.shop.client.web.dsl'), $client)
+            [IO.File]::WriteAllText((Join-Path $dir 'workspace.dsl'), "workspace {`n    model {`n        sistema = softwareSystem `"Contoso.Shop`" {`n            !include generated/containers`n        }`n    }`n}`n")
             $export = Export-StructurizrWorkspace (Join-Path $dir 'workspace.dsl')
             Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
         }
@@ -334,7 +334,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
     Context "Scenario: un file di progetto che nessun lettore della composizione legge" {
         BeforeAll {
             $files = New-EngineRepository
-            $files['docs/architecture/model/generated/model/contoso.shop.ai.dsl'] = "# parte precedente`n"
+            $files['docs/architecture/c4/generated/containers/contoso.shop.ai.dsl'] = "# parte precedente`n"
             $res = Invoke-C4Generation $files 'Contoso.Shop.AI' @('angular18')
         }
 
@@ -347,7 +347,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         }
 
         It "E il modello non cambia" {
-            $res.Generated['model/contoso.shop.ai.dsl'] | Should -Be "# parte precedente`n"
+            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Be "# parte precedente`n"
         }
     }
 
@@ -376,7 +376,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         }
 
         It "E la parte generata non contiene il container dell'altro repository" {
-            $res.Generated['model/contoso.shop.ai.dsl'] | Should -Not -Match 'Tools\.X'
+            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Not -Match 'Tools\.X'
         }
     }
 
@@ -403,7 +403,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
             $files = New-BffRepository
             $files['source/infra/storage.tf'] = "resource `"azurerm_storage_account`" `"x`" {}`n"
             $res = Invoke-C4Generation $files 'Contoso.Shop.Bff.Web' @('dotnet10', 'consumer')
-            $dsl = $res.Generated['model/contoso.shop.bff.web.dsl']
+            $dsl = $res.Generated['containers/contoso.shop.bff.web.dsl']
         }
 
         It "Allora la generazione riesce" {
@@ -435,7 +435,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         BeforeAll {
             $fragments = @{ 'contoso.shop.bff.web.dotnet10.json' = (Get-BffFragment @('https://localhost:5001;http://localhost:5000')) }
             $res = Invoke-C4Generation (New-ProxiedClient) 'Contoso.Shop.Client.Web' @('angular18') -Fragments $fragments
-            $dsl = $res.Generated['model/contoso.shop.client.web.dsl']
+            $dsl = $res.Generated['containers/contoso.shop.client.web.dsl']
         }
 
         It "Allora la generazione riesce" {
@@ -463,7 +463,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         }
 
         It "E la parte dell'applicazione chiamata non contiene la relazione" {
-            $res.Generated['model/contoso.shop.bff.web.dsl'] | Should -Not -Match 'contoso_shop_client_web ->'
+            $res.Generated['containers/contoso.shop.bff.web.dsl'] | Should -Not -Match 'contoso_shop_client_web ->'
         }
     }
 

@@ -4,7 +4,7 @@
 #
 # Flussi coerenti con la struttura del documento (V3/CI/Scripts/Mermaid/Test-DiagramFlows.ps1):
 # ogni flusso delle sezioni ha un diagramma di sequenza Mermaid a livello dei container del modello C4
-# (model/workspace.dsl), nei dettagli ogni componente sta nel riquadro del suo container e ogni
+# (c4/workspace.dsl), nei dettagli ogni componente sta nel riquadro del suo container e ogni
 # chiamata e' una relazione del modello; una decisione con la parte della struttura nel codice ha la
 # parte del flusso nel codice, con un diagramma di sequenza fatto delle classi del suo diagramma delle
 # classi. I nomi delle parti seguono DOCUMENT_LANGUAGE (document-language.yaml).

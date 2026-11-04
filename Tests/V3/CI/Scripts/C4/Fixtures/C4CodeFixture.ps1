@@ -113,7 +113,7 @@ function Invoke-C4Steps([System.Collections.IDictionary]$Files, [string]$Reposit
     Write-SourceFiles $root $fragmentFiles
     $variables = @{
         SOURCE_DIRECTORY = 'source'; SOURCE_REPOSITORY = $Repository; SOURCE_REPOSITORIES = $C4SourceRepositories
-        FRAGMENT_DIRECTORY = 'fragments'; C4_SCRIPTS_DIRECTORY = "$C4ScriptsDirectory"; GENERATED_DIRECTORY = 'docs/architecture/model/generated'; GENERATION_MODE = $Mode; DOCUMENT_LANGUAGE = ''
+        FRAGMENT_DIRECTORY = 'fragments'; C4_SCRIPTS_DIRECTORY = "$C4ScriptsDirectory"; GENERATED_DIRECTORY = 'docs/architecture/c4/generated'; GENERATION_MODE = $Mode; DOCUMENT_LANGUAGE = ''
     }
     Push-Location $root
     try {
@@ -128,7 +128,7 @@ function Invoke-C4Steps([System.Collections.IDictionary]$Files, [string]$Reposit
         return @{
             ExitCode  = $exitCode
             Output    = $outputs -join "`n"
-            Generated = Read-Directory (Join-Path $root 'docs/architecture/model/generated') '*.dsl'
+            Generated = Read-Directory (Join-Path $root 'docs/architecture/c4/generated') '*.dsl'
             Fragments = Read-Directory (Join-Path $root 'fragments') '*.json'
         }
     }
