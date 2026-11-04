@@ -98,7 +98,7 @@ function Read-DotNetProjects {
 $TypeDeclarationStart = '(?m)^[ \t]*(?:\[[^\]\n]*\][ \t]*)*(?:(?:public|internal|private|protected|static|sealed|abstract|partial|readonly|file|unsafe|new|ref)[ \t]+)*'
 
 function Get-CodeWithoutComments($File) {
-    return [regex]::Replace((Get-Content -Raw $File.FullName), '(?s)/\*.*?\*/|//[^\n]*', '')
+    return (Get-Content -Raw $File.FullName) -replace '(?s)/\*.*?\*/|//[^\n]*', ''
 }
 
 function Test-InOwnProject([string]$File, [string]$Root, [string[]]$NestedRoots) {
@@ -275,7 +275,7 @@ function Get-ReadIssues {
     if ($unsupported) { return $unsupported }
 
     Add-ProjectTypes $projects
-    $applications = Get-Applications $projects
+    $applications = @(Get-Applications $projects)
     $launchIssues = @(Get-LaunchSettingsIssues $applications)
     if ($launchIssues) { return $launchIssues }
 

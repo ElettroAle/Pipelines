@@ -128,6 +128,44 @@ Describe "Lettore .NET 10 del modello C4" {
         }
     }
 
+    Context "Scenario: un file C# vuoto in un progetto" {
+        BeforeAll {
+            $files = [ordered]@{}
+            Add-Project $files 'Contoso.Shop.Host' (New-Project 'Microsoft.NET.Sdk.Web' @('Contoso.Shop.Mixed'))
+            Add-Project $files 'Contoso.Shop.Core' (New-Project)
+            Add-Project $files 'Contoso.Shop.Mixed' (New-Project 'Microsoft.NET.Sdk' @('Contoso.Shop.Core'))
+            $files['source/Contoso.Shop.Core/Ports.cs'] = "namespace Contoso.Shop.Core;`n`npublic interface IClock { }`n"
+            $files['source/Contoso.Shop.Mixed/Empty.cs'] = ''
+            $files['source/Contoso.Shop.Mixed/Clock.cs'] = "namespace Contoso.Shop.Mixed;`n`npublic class Clock : IClock { }`n"
+            $res = Invoke-C4Reader $files 'Contoso.Shop' 'dotnet10'
+            $relations = @($res.Fragment.relationships | ForEach-Object { "$($_.source) -> $($_.target)" })
+        }
+
+        It "Allora la lettura riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E il resto del codice del progetto si legge" {
+            $relations | Should -Contain 'contoso_shop_host__contoso_shop_core -> contoso_shop_host__contoso_shop_mixed' -Because ($relations -join "`n")
+        }
+    }
+
+    Context "Scenario: un repository i cui progetti non sono applicazioni" {
+        BeforeAll {
+            $files = [ordered]@{}
+            Add-Project $files 'Contoso.Shop.Tests' (New-Project)
+            $res = Invoke-C4Reader $files 'Contoso.Shop' 'dotnet10'
+        }
+
+        It "Allora la lettura riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E il frammento non contiene container" {
+            $res.Fragment.containers | Should -BeNullOrEmpty
+        }
+    }
+
     Context "Scenario: una libreria Azure in un progetto" {
         BeforeAll {
             $res = Invoke-C4Reader (New-HostedRepository (New-Project 'Microsoft.NET.Sdk' @() '' '    <PackageReference Include="Azure.Mystery.Things" />')) 'Contoso.Shop' 'dotnet10'
