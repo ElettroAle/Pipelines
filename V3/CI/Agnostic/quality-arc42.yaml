@@ -30,6 +30,8 @@
 #   styleMode          → off | warn | enforce | fix (default: off): giudizio dello stile con il modello;
 #                        fix corregge nella PR e pubblica le correzioni sul suo ramo
 #   styleGuide         → guida di stile del repository (default: docs/STYLE.md)
+#   styleReference     → file o cartelle che descrivono il sistema, contesto del giudizio dello stile: se una
+#                        PR li cambia, tutte le sezioni si rigiudicano (default: nessuno)
 #   styleServiceConnection → service connection Azure per il modello [REQUIRED se styleMode non e' off]
 #   styleEndpoint      → endpoint Azure OpenAI [REQUIRED se styleMode non e' off]
 #   styleModel         → nome del deployment del modello [REQUIRED se styleMode non e' off]
@@ -80,6 +82,10 @@ parameters:
   - name: docsGlossary
     type: string
     default: ''
+
+  - name: styleReference
+    type: object
+    default: []
 
   - name: diagramSteps
     type: stepList
@@ -158,6 +164,7 @@ stages:
             docsDirectory: ${{ parameters.docsDirectory }}
             guide: ${{ parameters.styleGuide }}
             glossary: ${{ parameters.docsGlossary }}
+            reference: ${{ parameters.styleReference }}
             serviceConnection: ${{ parameters.styleServiceConnection }}
             endpoint: ${{ parameters.styleEndpoint }}
             model: ${{ parameters.styleModel }}

@@ -10,6 +10,7 @@
 # descrizioni degli elementi, cio' che passa sulle relazioni e le relazioni con persone e sistemi
 # esterni. Persone e sistemi esterni stanno in context.dsl, da includere nel modello prima del sistema:
 # il testo e' uno solo, quindi ogni repository scrive lo stesso contesto.
+# La revisione del testo da' a ogni container il suo nome e unisce le copie: una copia non si scrive.
 # Un indirizzo che un container del repository chiama in locale si lega con i frammenti di tutto il
 # sistema: se non vi si avvia nessun container, o piu' d'uno, la generazione si ferma.
 # Le viste dei componenti dei container della parte stanno in GENERATED_DIRECTORY/views/<repository>.dsl:
@@ -82,13 +83,33 @@ function Get-TextIssues($Text) {
 # container di questo repository.
 function Get-PartText($Text, $Fragments) {
     $ownIds = @($Fragments.Content.containers | Where-Object { $_ } | ForEach-Object id)
-    $part = @{ Elements = @{}; Relationships = @{}; Links = @(); People = $Text.Content.people; ExternalSystems = $Text.Content.externalSystems }
+    $part = @{ Elements = @{}; Relationships = @{}; Links = @(); People = $Text.Content.people; ExternalSystems = $Text.Content.externalSystems; Names = @{}; SameAs = @{} }
     foreach ($unit in @($Text.Content.units.PSObject.Properties | Where-Object { $_.Value })) {
         $unit.Value.elements.PSObject.Properties | ForEach-Object { $part.Elements[$_.Name] = $_.Value }
         $unit.Value.relationships.PSObject.Properties | ForEach-Object { $part.Relationships[$_.Name] = $_.Value }
         if ($ownIds -contains $unit.Name) { $part.Links += @($unit.Value.links | Where-Object { $_ }) }
     }
+    foreach ($container in @($Text.Content.review.containers.PSObject.Properties | Where-Object { $_.Value })) {
+        if ($container.Value.name) { $part.Names[$container.Name] = $container.Value.name }
+        if ($container.Value.sameAs) { $part.SameAs[$container.Name] = $container.Value.sameAs }
+    }
     return $part
+}
+
+# Un container che la revisione ha unito a un altro non si scrive: le sue relazioni passano a quello,
+# senza doppioni.
+function Get-KeptId([string]$Id) {
+    if ($script:ModelText.SameAs.ContainsKey($Id)) { return $script:ModelText.SameAs[$Id] }
+    return $Id
+}
+
+function Get-KeptContainers($Containers) {
+    return @($Containers | Where-Object { $_ -and -not $script:ModelText.SameAs.ContainsKey($_.id) })
+}
+
+function Get-ContainerName($Container) {
+    if ($script:ModelText.Names.ContainsKey($Container.id)) { return $script:ModelText.Names[$Container.id] }
+    return $Container.name
 }
 
 function Format-Text([string]$Text) {
@@ -102,7 +123,7 @@ function Format-Properties($Element, [string]$Indent) {
 
 function Format-Container($Container, [string]$Indent) {
     $tags = @($Container.tags) + $GeneratedTag
-    $lines = @("$Indent$($Container.id) = container $(Format-Text $Container.name) $(Format-Text $script:ModelText.Elements[$Container.id]) $(Format-Text $Container.technology) $(Format-Text ($tags -join ',')) {")
+    $lines = @("$Indent$($Container.id) = container $(Format-Text (Get-ContainerName $Container)) $(Format-Text $script:ModelText.Elements[$Container.id]) $(Format-Text $Container.technology) $(Format-Text ($tags -join ',')) {")
     $lines += Format-Properties $Container "$Indent    "
     foreach ($component in $Container.components) {
         $lines += "$Indent    $($component.id) = component $(Format-Text $component.name) $(Format-Text $script:ModelText.Elements[$component.id]) $(Format-Text $component.technology) $(Format-Text $GeneratedTag) {"
@@ -118,18 +139,32 @@ function Format-Group($Containers) {
 }
 
 function Format-Containers($Containers) {
+    if (-not $Containers.Count) { return @() }
     if ($Containers.Count -gt 1) { return Format-Group $Containers }
     return Format-Container $Containers[0] ''
 }
 
 function Format-Model($Fragments) {
     $lines = @("// Parte del modello C4 generata da $Repository con Export-C4CodeModel.ps1: non si modifica a mano.")
-    $lines += Format-Containers @($Fragments.Content.containers)
+    $lines += Format-Containers (Get-KeptContainers @($Fragments.Content.containers))
+    $written = @{}
     @($Fragments.Content.relationships) + $script:CallRelationships | Where-Object { $_ } | ForEach-Object {
         $described = $script:ModelText.Relationships["$($_.source) -> $($_.target)"]
-        $lines += "$($_.source) -> $($_.target) $(Format-Text $described.description) $(Format-Text $described.technology) $(Format-Text $GeneratedTag)"
+        $source = Get-KeptId $_.source
+        $target = Get-KeptId $_.target
+        $key = "$source -> $target"
+        if ($source -eq $target -or $written.ContainsKey($key)) { return }
+        $written[$key] = $true
+        $lines += "$key $(Format-Text $described.description) $(Format-Text $described.technology) $(Format-Text $GeneratedTag)"
     }
-    $script:ModelText.Links | ForEach-Object { $lines += "$($_.source) -> $($_.target) $(Format-Text $_.description) $(Format-Text $_.technology)" }
+    $script:ModelText.Links | ForEach-Object {
+        $source = Get-KeptId $_.source
+        $target = Get-KeptId $_.target
+        $key = "$source -> $target"
+        if ($source -eq $target -or $written.ContainsKey($key)) { return }
+        $written[$key] = $true
+        $lines += "$key $(Format-Text $_.description) $(Format-Text $_.technology)"
+    }
     return ($lines -join "`n") + "`n"
 }
 

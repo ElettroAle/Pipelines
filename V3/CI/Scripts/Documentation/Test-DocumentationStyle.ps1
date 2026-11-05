@@ -5,6 +5,8 @@
 # tipo di documento ha il suo profilo: le regole che valgono per lui e i titoli che il suo modello impone.
 # In una PR si giudicano le righe cambiate dall'ultimo giudizio di ogni file; con STYLE_FIX le correzioni
 # del modello, validate e rigiudicate in giri limitati, tornano sul ramo della PR un file alla volta.
+# STYLE_REFERENCE elenca i file che descrivono il sistema, per esempio un modello generato: il modello li
+# riceve come contesto per le regole che li citano, e una PR che li cambia fa rigiudicare tutte le sezioni.
 
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
 . "$PSScriptRoot/../Common/MarkdownText.ps1"
@@ -24,6 +26,7 @@ $maxRounds = if ($env:STYLE_MAX_ROUNDS) { [math]::Max(1, [int]$env:STYLE_MAX_ROU
 $maxFindings = if ("$env:STYLE_MAX_FINDINGS" -match '^-?\d+$') { [int]$env:STYLE_MAX_FINDINGS } else { 0 }
 $maximumWords = [int]$env:READABILITY_MAX_WORDS
 $abbreviations = @("$env:READABILITY_ABBREVIATIONS" -split ';' | ForEach-Object Trim | Where-Object { $_ })
+$referencePaths = @("$env:STYLE_REFERENCE" -split ';' | ForEach-Object { ($_.Trim() -replace '\\', '/').TrimEnd('/') } | Where-Object { $_ })
 
 $SectionFilePattern = '^\d+[_-].+\.md$'
 $JudgeScope = 'giudizio dello stile'
@@ -68,7 +71,8 @@ lettera, il motivo in una frase e la correzione:
   vuoto. Una voce nuova del glossario si aggiunge dopo la voce del glossario che la precede in ordine
   alfabetico, nella stessa forma delle altre voci.
 - none: la violazione non si corregge cambiando il testo; find e text restano vuoti.
-Una correzione non tocca diagrammi, blocchi di codice e commenti, non va a capo, rispetta tutte le
+Il MODELLO DI RIFERIMENTO, se c'è, descrive il sistema: è contesto per le regole che lo citano, non si
+giudica e non si corregge. Una correzione non tocca diagrammi, blocchi di codice e commenti, non va a capo, rispetta tutte le
 regole della guida. Una violazione in un titolo si corregge con replace sul titolo stesso: i rimandi a
 quel titolo si aggiornano da soli. {TITOLI} Una violazione in un diagramma si corregge nel
 testo che lo spiega, oppure è none. Una correzione deve togliere la violazione dall'unità che la
@@ -85,7 +89,20 @@ function Read-JudgeSetup {
     $guide = [IO.File]::ReadAllText($guidePath)
     $rules = Get-GuideRules $guide
     if (-not $rules) { return @{ Issue = New-Issue $JudgeScope 'guida senza regole' $guidePath } }
-    return @{ Guide = $guide; Rules = $rules }
+    return @{ Guide = $guide; Rules = $rules; Reference = Read-Reference }
+}
+
+function Get-ReferenceFiles {
+    foreach ($path in $referencePaths) {
+        if (Test-Path $path -PathType Container) { Get-ChildItem -Path $path -Recurse -File | Sort-Object FullName }
+        elseif (Test-Path $path -PathType Leaf) { Get-Item $path }
+    }
+}
+
+function Read-Reference {
+    $files = @(Get-ReferenceFiles)
+    if (-not $files) { return '' }
+    return (@($files | ForEach-Object { "=== $(ConvertTo-RepositoryPath $_.FullName) ===`n$([IO.File]::ReadAllText($_.FullName).TrimEnd())" }) -join "`n`n")
 }
 
 # Le regole sono i titoli di terzo livello delle parti delle regole della guida: comuni, delle sezioni,
@@ -159,6 +176,7 @@ function New-DocumentProfile([string]$Kind, $Setup) {
         Label              = if ($decision) { 'DECISIONE DA GIUDICARE' } else { 'SEZIONE DA GIUDICARE' }
         LockedHeadingLevel = if ($decision) { 2 } else { 1 }
         WholeOnGuide       = -not $decision
+        Reference          = if ($decision) { '' } else { $Setup.Reference }
         NamedByFile        = $decision
         Rules              = $rules
         System             = $Instructions.Replace('{TITOLI}', $titles) + (Remove-GuidePart $Setup.Guide $other)
@@ -193,7 +211,7 @@ function Get-ChangedLines([string[]]$Range) {
     $changed = @{}
     $file = $null
     $previous = ''
-    git -c core.quotePath=false diff -U0 --no-color --no-ext-diff --relative @Range -- $docsDirectory $decisionsDirectory $guidePath | ForEach-Object {
+    git -c core.quotePath=false diff -U0 --no-color --no-ext-diff --relative @Range -- $docsDirectory $decisionsDirectory $guidePath @referencePaths | ForEach-Object {
         if ($previous.StartsWith('--- ') -and $_ -match '^\+\+\+ (?:b/)?(.+?)\t?$') {
             $file = if ($Matches[1] -eq '/dev/null') { $null } else { $Matches[1] }
             if ($file -and -not $changed.ContainsKey($file)) { $changed[$file] = [Collections.Generic.HashSet[int]]::new() }
@@ -261,8 +279,9 @@ function Get-Judgements([string]$Range) {
     }
 }
 
-# Un documento si rigiudica tutto solo se cambiano le regole del suo tipo dal suo ultimo giudizio, o
-# dall'inizio della PR. Le decisioni non si rigiudicano mai tutte: il loro profilo ha WholeOnGuide falso.
+# Un documento si rigiudica tutto solo se cambiano le regole del suo tipo o i file di riferimento dal suo
+# ultimo giudizio, o dall'inizio della PR. Le decisioni non si rigiudicano mai tutte: il loro profilo ha
+# WholeOnGuide falso.
 function Get-FileScope($Scope, [string]$RelativePath, $Profile) {
     if (-not $Scope.PullRequest) { return @{ All = $true; Lines = $null; Pending = @(); Findings = @{} } }
     $judgement = $Scope.Judgements | Where-Object { $_.Clean -or $_.Done.Contains($RelativePath) } | Select-Object -First 1
@@ -281,8 +300,16 @@ function Get-FileScope($Scope, [string]$RelativePath, $Profile) {
         }
     }
     $since = if ($judgement) { $judgement.Commit } else { $Scope.MergeBase }
-    $all = $Profile.WholeOnGuide -and $lines.ContainsKey($Scope.Guide) -and (Get-RulesKeyAt $Scope $since $Profile.Kind) -cne $Profile.RulesKey
+    $guideChanged = $lines.ContainsKey($Scope.Guide) -and (Get-RulesKeyAt $Scope $since $Profile.Kind) -cne $Profile.RulesKey
+    $all = $Profile.WholeOnGuide -and ($guideChanged -or (Test-ReferenceChanged $lines))
     return @{ All = $all; Lines = $lines[$RelativePath]; Pending = $pending; Findings = $findings }
+}
+
+function Test-ReferenceChanged([hashtable]$Lines) {
+    foreach ($file in $Lines.Keys) {
+        if ($referencePaths | Where-Object { $file -eq $_ -or $file.StartsWith("$_/") }) { return $true }
+    }
+    return $false
 }
 
 function Get-RulesKeyAt($Scope, [string]$Commit, [string]$Kind) {
@@ -523,6 +550,10 @@ function Get-JudgeMessage($Document, $Context, [string]$FileName, [hashtable]$Re
     if ($Context.Glossary) {
         $parts.Add("GLOSSARIO DEL DOCUMENTO ($glossaryFileName)")
         $parts.Add((@(Get-Units $Context.Glossary | ForEach-Object { "[$($_.Number)] $(Get-UnitText $_)" }) -join "`n"))
+    }
+    if ($Context.Reference) {
+        $parts.Add('MODELLO DI RIFERIMENTO')
+        $parts.Add($Context.Reference)
     }
     $parts.Add("$($Context.Label) ($FileName)")
     $parts.Add((@(Get-Units $Document | ForEach-Object { $mark = if ($_.Marked) { '*' } else { '' }; "[$($_.Number)$mark] $(Get-UnitText $_)" }) -join "`n"))

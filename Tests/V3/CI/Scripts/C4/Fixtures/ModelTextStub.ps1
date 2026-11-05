@@ -6,7 +6,11 @@
 # una parte, una voce per stesura: omitElement toglie un elemento, extraRelationship aggiunge una
 # relazione, longDescription allunga la descrizione di un elemento, people, externalSystems e links si
 # aggiungono. La voce catalogue cambia la risposta al controllo del catalogo: identificativo e sameAs,
-# omit toglie le voci elencate; senza voce ogni identificativo resta distinto. status forza un codice
+# omit toglie le voci elencate; senza voce ogni identificativo resta distinto. La voce review cambia la
+# risposta alla revisione del modello: notInProduction, noEvidence, wrongQuote e drop elencano i sistemi
+# esterni e le relazioni da cambiare, names e sameAs danno nome e unione dei container; senza voce ogni
+# sistema esterno e' in produzione con la prima riga del primo file di configurazione, ogni relazione
+# resta e ogni container tiene il suo nome. status forza un codice
 # HTTP; throttle rifiuta con 429 e Retry-After di un secondo quel numero di richieste; fail-after rifiuta
 # con 503 ogni richiesta oltre quel numero, contato dall'ultimo azzeramento dello stato. Un rifiuto porta
 # sempre Retry-After. Le richieste ricevute restano in request-<n>.json.
@@ -50,6 +54,39 @@ function New-CatalogueAnswer([string]$User, $Spec) {
     return [ordered]@{ actors = $actors }
 }
 
+function Get-Section([string]$User, [string]$Title) {
+    $start = $User.IndexOf("$Title`n")
+    if ($start -lt 0) { return '' }
+    return ($User.Substring($start + $Title.Length + 1) -split "`n`n" | Select-Object -First 1)
+}
+
+function Get-FirstEvidence([string]$User) {
+    $start = $User.IndexOf("CONFIGURAZIONE DI PRODUZIONE:`n")
+    $match = [regex]::Match($User.Substring($start), '(?m)^=== (.+?) ===\r?\n(.+)$')
+    if (-not $match.Success) { return @() }
+    return @(@{ path = $match.Groups[1].Value; quote = $match.Groups[2].Value.Trim() })
+}
+
+function New-ReviewAnswer([string]$User, $Spec) {
+    $evidence = Get-FirstEvidence $User
+    $systems = @([regex]::Matches((Get-Section $User 'PERSONE E SISTEMI ESTERNI:'), '(?m)^- (\S+) \[sistema esterno\]') | ForEach-Object {
+            $id = $_.Groups[1].Value
+            $proof = if (@($Spec.noEvidence) -contains $id) { @() } elseif (@($Spec.wrongQuote) -contains $id) { @(@{ path = $evidence[0].path; quote = 'tratto che non esiste' }) } else { $evidence }
+            @{ id = $id; inProduction = (@($Spec.notInProduction) -notcontains $id); evidence = $proof; reason = "Motivo per $id." }
+        })
+    $links = @([regex]::Matches((Get-Section $User 'RELAZIONI CON PERSONE E SISTEMI ESTERNI:'), '(?m)^- (\S+) -> (\S+):') | ForEach-Object {
+            $key = "$($_.Groups[1].Value) -> $($_.Groups[2].Value)"
+            @{ source = $_.Groups[1].Value; target = $_.Groups[2].Value; keep = (@($Spec.drop) -notcontains $key); reason = "Motivo per $key." }
+        })
+    $containers = @([regex]::Matches((Get-Section $User 'CONTAINER DEL SISTEMA:'), '(?m)^- (\S+) = ') | ForEach-Object {
+            $id = $_.Groups[1].Value
+            $name = if ($Spec.names -and $Spec.names.PSObject.Properties[$id]) { $Spec.names.$id } else { '' }
+            $sameAs = if ($Spec.sameAs -and $Spec.sameAs.PSObject.Properties[$id]) { $Spec.sameAs.$id } else { '' }
+            @{ id = $id; name = $name; sameAs = $sameAs; reason = "Motivo per $id." }
+        })
+    return [ordered]@{ externalSystems = $systems; links = $links; containers = $containers }
+}
+
 $listener = [Net.HttpListener]::new()
 $listener.Prefixes.Add("$Endpoint/")
 $listener.Start()
@@ -83,7 +120,8 @@ while (-not (Test-Path $stopFile)) {
         $request = $body | ConvertFrom-Json
         $user = ($request.messages | Where-Object role -EQ 'user').content
         $catalogue = $user.Contains("CATALOGO DA CONTROLLARE:`n")
-        $unit = if ($catalogue) { 'catalogue' } else { [regex]::Match($user, 'PARTE DA DESCRIVERE: (\S+)').Groups[1].Value }
+        $review = $user.Contains("CONFIGURAZIONE DI PRODUZIONE:`n")
+        $unit = if ($catalogue) { 'catalogue' } elseif ($review) { 'review' } else { [regex]::Match($user, 'PARTE DA DESCRIVERE: (\S+)').Groups[1].Value }
         $draftsFile = Join-Path $State "drafts-$unit"
         $draft = if (Test-Path $draftsFile) { [int](Get-Content -Raw $draftsFile) } else { 0 }
         [IO.File]::WriteAllText($draftsFile, "$($draft + 1)")
@@ -91,7 +129,7 @@ while (-not (Test-Path $stopFile)) {
         $answers = if (Test-Path $answersFile) { Get-Content -Raw $answersFile | ConvertFrom-Json } else { $null }
         $specs = @($answers.$unit)
         $spec = if ($specs.Count) { $specs[[math]::Min($draft, $specs.Count - 1)] } else { $null }
-        $answer = if ($catalogue) { New-CatalogueAnswer $user $spec } else { New-Draft (Get-Structure $user) $spec }
+        $answer = if ($catalogue) { New-CatalogueAnswer $user $spec } elseif ($review) { New-ReviewAnswer $user $spec } else { New-Draft (Get-Structure $user) $spec }
         $content = $answer | ConvertTo-Json -Depth 10 -Compress
         $payload = @{ choices = @(@{ message = @{ role = 'assistant'; content = $content } }); usage = @{ prompt_tokens = 100; completion_tokens = 10 } } | ConvertTo-Json -Depth 6 -Compress
     }
