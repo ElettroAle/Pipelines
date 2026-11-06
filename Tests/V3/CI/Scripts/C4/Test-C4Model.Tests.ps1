@@ -18,7 +18,7 @@ BeforeAll {
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-model-$(New-Guid)"
 
     function Invoke-ModelCheck([System.Collections.IDictionary]$Docs, [hashtable]$Environment = @{}) {
-        $variables = @{ GATE_MODE = ''; DOCUMENT_LANGUAGE = '' }
+        $variables = @{ GATE_MODE = ''; DOCUMENT_LANGUAGE = ''; C4_PAGE_WIDTH = ''; C4_PAGE_HEIGHT = ''; C4_MIN_SCALE = '' }
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
         return Invoke-DocsScript $ScriptPath $Docs $variables
     }
@@ -288,6 +288,29 @@ Describe "Funzionalità: Testo del modello sulla parte generata dal codice" {
 
         It "E nomina l'elemento" {
             Get-Issues $res.Output | Where-Object { $_ -match $elemento } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+    }
+
+    Context "Scenario: vista che non entra leggibile nella pagina in nessuna disposizione" {
+        BeforeAll {
+            $res = Invoke-ModelCheck (New-ValidDocs) @{ C4_PAGE_WIDTH = '40'; C4_PAGE_HEIGHT = '40' }
+        }
+
+        It "Allora la verifica passa" {
+            Get-Issues $res.Output | Should -BeNullOrEmpty -Because ($res.Output)
+            $res.ExitCode | Should -Be 0
+        }
+
+        It "E un avviso nomina la vista con la misura del disegno piu' leggibile" {
+            ($res.Output -split "`n") | Where-Object { "$_" -match '^##vso\[task\.logissue type=warning\]modello C4: vista contesto: \d+x\d+ px in (tb|lr)(-stretto)?, scala 0\.\d\d \(minima 0\.60\), troppo piena per leggersi\s*$' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+    }
+
+    Context "Scenario: viste che si leggono" {
+        It "Allora il log ne da' la misura senza avvisi" {
+            $res = Invoke-ModelCheck (New-ValidDocs)
+            ($res.Output -split "`n") | Where-Object { "$_" -match '^vista contesto: \d+x\d+ px in (tb|lr)(-stretto)?, scala 1\.00 \(minima 0\.60\)\s*$' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+            ($res.Output -split "`n") | Where-Object { "$_" -match 'type=warning' } | Should -BeNullOrEmpty -Because ($res.Output)
         }
     }
 }

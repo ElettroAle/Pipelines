@@ -13,6 +13,11 @@
 # quelli. Il testo accettato si salva in model.text.json (GENERATED_DIRECTORY) e, con PROGRESS_BRANCH,
 # sul ramo, cosi' una pipeline fallita e rilanciata riparte dai container senza testo accettato. Il testo
 # di un container la cui struttura non cambia resta quello accettato.
+# Infine il modello rivede tutto il sistema insieme: tiene un sistema esterno solo se la configurazione
+# di produzione (C4_REVIEW_EVIDENCE, file sotto SOURCES_DIRECTORY) lo prova con un tratto citato alla
+# lettera, che si verifica nel file; toglie le relazioni con persone e sistemi esterni che non sono vere;
+# da' a ogni container il nome con cui lo si riconosce e unisce i container che sono copie di uno stesso.
+# La revisione si ripete solo quando cambiano la struttura o la configurazione di produzione.
 
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
 . "$PSScriptRoot/../Common/DocumentLanguage.ps1"
@@ -35,6 +40,7 @@ $MaxContextCharacters = if ($env:C4_TEXT_MAX_CONTEXT_CHARACTERS) { [int]$env:C4_
 $ProgressBranch = "$env:PROGRESS_BRANCH" -replace '^refs/heads/', ''
 $MaximumWords = [int]$env:READABILITY_MAX_WORDS
 $Abbreviations = @("$env:READABILITY_ABBREVIATIONS" -split ';' | ForEach-Object Trim | Where-Object { $_ })
+$EvidencePaths = @("$env:C4_REVIEW_EVIDENCE" -split ';' | ForEach-Object Trim | Where-Object { $_ })
 
 $TextScope = 'testo del modello C4'
 $TextFileName = 'model.text.json'
@@ -79,6 +85,23 @@ volta. Rispondi con una voce per ogni identificativo del catalogo, con sameAs:
 Una persona e un sistema esterno non sono mai la stessa cosa. Decidi da nomi, descrizioni e relazioni.
 '@
 
+$ReviewInstructions = @'
+Rivedi il modello C4 di tutto il sistema, scritto un container alla volta, perche' descriva il sistema
+come gira in produzione e sia coerente in ogni sua parte. Rispondi con una voce per ogni sistema
+esterno, per ogni relazione con persone e sistemi esterni e per ogni container, con il motivo in una
+frase:
+- externalSystems: inProduction vale true solo se la configurazione di produzione mostra che il sistema
+  si usa. evidence cita il file con il percorso dato nel messaggio e un tratto del file copiato alla
+  lettera che lo prova. Un sistema che compare solo nel codice, o con valori segnaposto o di esempio
+  nella configurazione, non e' in produzione.
+- links: keep vale false se la relazione non e' vera. Una persona usa solo le applicazioni con cui
+  interagisce direttamente, non quelle che un'altra applicazione del sistema chiama per lei.
+- containers: name e' il nome con cui chi lavora sulla piattaforma riconosce il container, unico nel
+  sistema; un nome gia' scelto nella revisione precedente resta, salvo che sia sbagliato. sameAs e'
+  l'identificativo di un altro container della stessa tecnologia quando i due sono copie della stessa
+  cosa (per esempio una risorsa per tenant), vuoto altrimenti; il container che resta ha sameAs vuoto.
+'@
+
 function New-TextSchema {
     $text = @{ type = 'string' }
     $relation = @{
@@ -114,12 +137,44 @@ function New-CatalogueSchema {
     return @{ type = 'object'; additionalProperties = $false; required = @('actors'); properties = @{ actors = @{ type = 'array'; items = $entry } } }
 }
 
+function New-ReviewSchema {
+    $text = @{ type = 'string' }
+    $quote = @{
+        type = 'object'; additionalProperties = $false; required = @('path', 'quote')
+        properties = @{ path = $text; quote = $text }
+    }
+    $system = @{
+        type = 'object'; additionalProperties = $false; required = @('id', 'inProduction', 'evidence', 'reason')
+        properties = @{ id = $text; inProduction = @{ type = 'boolean' }; evidence = @{ type = 'array'; items = $quote }; reason = $text }
+    }
+    $link = @{
+        type = 'object'; additionalProperties = $false; required = @('source', 'target', 'keep', 'reason')
+        properties = @{ source = $text; target = $text; keep = @{ type = 'boolean' }; reason = $text }
+    }
+    $container = @{
+        type = 'object'; additionalProperties = $false; required = @('id', 'name', 'sameAs', 'reason')
+        properties = @{ id = $text; name = $text; sameAs = $text; reason = $text }
+    }
+    return @{
+        type = 'object'; additionalProperties = $false; required = @('externalSystems', 'links', 'containers')
+        properties = @{
+            externalSystems = @{ type = 'array'; items = $system }
+            links           = @{ type = 'array'; items = $link }
+            containers      = @{ type = 'array'; items = $container }
+        }
+    }
+}
+
 function Get-TextPath {
     return Join-Path $GeneratedDirectory $TextFileName
 }
 
+function New-EmptyReview {
+    return [pscustomobject][ordered]@{ basis = ''; externalSystems = [pscustomobject]@{}; containers = [pscustomobject]@{} }
+}
+
 function New-EmptyText {
-    return [pscustomobject]@{ units = [pscustomobject]@{}; people = [pscustomobject]@{}; externalSystems = [pscustomobject]@{}; catalogueReviewed = $false }
+    return [pscustomobject]@{ units = [pscustomobject]@{}; people = [pscustomobject]@{}; externalSystems = [pscustomobject]@{}; catalogueReviewed = $false; review = New-EmptyReview }
 }
 
 function ConvertFrom-TextJson([string]$Json) {
@@ -128,6 +183,10 @@ function ConvertFrom-TextJson([string]$Json) {
         if (-not $text.$part) { $text | Add-Member -Force -NotePropertyName $part -NotePropertyValue ([pscustomobject]@{}) }
     }
     if ($null -eq $text.catalogueReviewed) { $text | Add-Member -Force -NotePropertyName catalogueReviewed -NotePropertyValue $false }
+    if (-not $text.review) { $text | Add-Member -Force -NotePropertyName review -NotePropertyValue (New-EmptyReview) }
+    foreach ($part in 'externalSystems', 'containers') {
+        if (-not $text.review.$part) { $text.review | Add-Member -Force -NotePropertyName $part -NotePropertyValue ([pscustomobject]@{}) }
+    }
     return $text
 }
 
@@ -716,6 +775,265 @@ function Invoke-CatalogueReview($Units, $Text, $Progress) {
     if ($ids) { Publish-Progress $Progress 'catalogue' }
 }
 
+#region Revisione del modello
+
+function Get-SourcesRoot {
+    if (-not (Test-Path $SourcesDirectory -PathType Container)) { return $null }
+    return (Resolve-Path $SourcesDirectory).Path
+}
+
+function Get-EvidenceName([string]$Root, [string]$Path) {
+    return [IO.Path]::GetRelativePath($Root, $Path) -replace '\\', '/'
+}
+
+function Get-EvidenceFiles {
+    $root = Get-SourcesRoot
+    if (-not $root) { return }
+    $seen = @{}
+    foreach ($path in $EvidencePaths) {
+        $items = @(Get-ChildItem -Path (Join-Path $root $path) -ErrorAction SilentlyContinue)
+        $files = @($items | Where-Object { -not $_.PSIsContainer }) + @($items | Where-Object PSIsContainer | ForEach-Object { Get-ChildItem -Path $_.FullName -Recurse -File })
+        $files | Sort-Object FullName | Where-Object { -not $seen.ContainsKey($_.FullName) } | ForEach-Object { $seen[$_.FullName] = $true; $_ }
+    }
+}
+
+# La revisione si ripete quando cambia la struttura di un container o la configurazione di produzione:
+# le sue decisioni tolgono voci dal testo, quindi la base non conta il testo.
+function Get-ReviewBasis($Units, $EvidenceFiles) {
+    $root = Get-SourcesRoot
+    $parts = @($Units | Sort-Object Id | ForEach-Object { "$($_.Id) $($_.Basis)" }) +
+        @($EvidenceFiles | ForEach-Object { "$(Get-EvidenceName $root $_.FullName)`n$(Get-Content -Raw $_.FullName)" })
+    $hash = [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($parts -join "`n`n"))
+    return [Convert]::ToHexString($hash).ToLowerInvariant()
+}
+
+function Get-ContainerOf($Units, [string]$ElementId) {
+    return $Units | Where-Object { $_.ElementIds -contains $ElementId } | Select-Object -First 1
+}
+
+function Get-TextLinks($Text) {
+    return @($Text.units.PSObject.Properties | Where-Object { $_.Value } | ForEach-Object { @($_.Value.links) } | Where-Object { $_ })
+}
+
+function Get-ExternalLinkElements($Text) {
+    $systems = @($Text.externalSystems.PSObject.Properties | ForEach-Object Name)
+    return @(Get-TextLinks $Text | ForEach-Object {
+            if ($systems -contains $_.target) { $_.source }
+            if ($systems -contains $_.source) { $_.target }
+        } | Sort-Object -Unique)
+}
+
+function Get-ElementSourceFiles($Unit, [string]$ElementId) {
+    $root = Get-SourceRoot $Unit
+    if (-not $root) { return }
+    $element = @($Unit.Container) + @($Unit.Container.components | Where-Object { $_ }) | Where-Object id -EQ $ElementId | Select-Object -First 1
+    foreach ($directory in @($element.sources | Where-Object { $_ })) {
+        $path = Join-Path $root $directory
+        if (-not (Test-Path $path -PathType Container)) { continue }
+        Get-ChildItem -Path $path -Recurse -File |
+            Where-Object { $SourceExtensions -contains $_.Extension -and $_.Name -notmatch $TestFilePattern } |
+            Where-Object { -not ($_.FullName.Substring($root.Length) -split '[\\/]' | Where-Object { $IgnoredDirectories -contains $_ }) } |
+            Sort-Object FullName
+    }
+}
+
+function Format-ReviewContainers($Units, $Text) {
+    return Format-List @($Units | ForEach-Object {
+            $name = if ($Text.review.containers.($_.Id).name) { $Text.review.containers.($_.Id).name } else { $_.Container.name }
+            $components = @($_.Container.components | Where-Object { $_ }).Count
+            "$($_.Id) = $name [$($_.Container.technology)] ($($_.Repository), nome nel codice $($_.Container.name), $components componenti): $($Text.units.($_.Id).elements.($_.Id))"
+        })
+}
+
+function Format-ContainerRelations($Units, $Text) {
+    $seen = @{}
+    return Format-List @(foreach ($unit in $Units) {
+            foreach ($relationship in $unit.Relationships) {
+                $source = Get-ContainerOf $Units $relationship.source
+                $target = Get-ContainerOf $Units $relationship.target
+                if (-not $source -or -not $target -or $source.Id -eq $target.Id) { continue }
+                $key = "$($source.Id) -> $($target.Id)"
+                if ($seen.ContainsKey($key)) { continue }
+                $seen[$key] = $true
+                "${key}: $($Text.units.($unit.Id).relationships.(Get-RelationshipKey $relationship).description)"
+            }
+        })
+}
+
+function Get-ReviewMessage($Units, $Text, $EvidenceFiles, [string[]]$Rejections) {
+    $root = Get-SourcesRoot
+    $catalogue = foreach ($part in $ActorParts) {
+        $kind = if ($part -eq 'people') { 'persona' } else { 'sistema esterno' }
+        $Text.$part.PSObject.Properties | ForEach-Object { "$($_.Name) [$kind] = $($_.Value.name): $($_.Value.description)" }
+    }
+    $links = @(Get-TextLinks $Text | ForEach-Object { "$(Get-RelationshipKey $_): $($_.description)" })
+    $evidence = if ($root) { Format-Files @($EvidenceFiles) $MaxContextCharacters { param($f) Get-EvidenceName $root $f.FullName } } else { '' }
+    $code = Format-Files @(foreach ($id in (Get-ExternalLinkElements $Text)) {
+            $unit = Get-ContainerOf $Units $id
+            if ($unit) { Get-ElementSourceFiles $unit $id }
+        }) $MaxSourceCharacters { param($f) Get-EvidenceName $root $f.FullName }
+    $message = @(
+        "LINGUA DEL DOCUMENTO: $($DocumentLanguage.TextLanguage)"
+        "CONTAINER DEL SISTEMA:`n$(Format-ReviewContainers $Units $Text)"
+        "RELAZIONI FRA I CONTAINER:`n$(Format-ContainerRelations $Units $Text)"
+        "PERSONE E SISTEMI ESTERNI:`n$(Format-List @($catalogue))"
+        "RELAZIONI CON PERSONE E SISTEMI ESTERNI:`n$(Format-List $links)"
+    )
+    if ($Rejections) { $message += "RISPOSTA PRECEDENTE RESPINTA, VOCI DA RISCRIVERE:`n$(Format-List $Rejections)" }
+    $message += "CONFIGURAZIONE DI PRODUZIONE:`n$(if ($evidence) { $evidence } else { '(nessuna)' })"
+    $message += "CODICE DEGLI ELEMENTI LEGATI A SISTEMI ESTERNI:`n$code"
+    return $message -join "`n`n"
+}
+
+function Get-NormalText([string]$Text) {
+    return ($Text -replace '\s+', ' ').Trim()
+}
+
+# Una prova vale se cita un file della configurazione di produzione e un tratto che vi compare.
+function Test-Evidence($Evidence, [hashtable]$EvidenceTexts) {
+    $quote = Get-NormalText $Evidence.quote
+    $path = "$($Evidence.path)".Trim() -replace '\\', '/'
+    return $quote -and $EvidenceTexts.ContainsKey($path) -and $EvidenceTexts[$path].Contains($quote)
+}
+
+function Get-SystemRejection($Entry, [hashtable]$EvidenceTexts) {
+    if (-not $Entry.inProduction) { return $null }
+    $proven = @($Entry.evidence | Where-Object { $_ -and (Test-Evidence $_ $EvidenceTexts) })
+    if (-not $proven) { return "sistema esterno in produzione senza una prova che compaia nella configurazione di produzione: $($Entry.id)" }
+    return $null
+}
+
+function Get-ContainerRejection($Entry, $Units, [hashtable]$Decided) {
+    $unit = $Units | Where-Object Id -EQ $Entry.id | Select-Object -First 1
+    $sameAs = "$($Entry.sameAs)".Trim()
+    if (-not $sameAs) { return $null }
+    $target = $Units | Where-Object Id -EQ $sameAs | Select-Object -First 1
+    if ($sameAs -eq $Entry.id) { return "container unito a se stesso: $($Entry.id)" }
+    if (-not $target) { return "container unito a un identificativo sconosciuto: $($Entry.id) -> $sameAs" }
+    if (@($unit.Container.components | Where-Object { $_ }).Count -or @($target.Container.components | Where-Object { $_ }).Count) { return "container con componenti unito a un altro: $($Entry.id) -> $sameAs" }
+    if ($target.Container.technology -ne $unit.Container.technology) { return "container unito a uno di un'altra tecnologia: $($Entry.id) -> $sameAs" }
+    if ($Decided.ContainsKey($sameAs) -and $Decided[$sameAs].sameAs) { return "container unito a uno che non resta: $($Entry.id) -> $sameAs" }
+    return $null
+}
+
+function Get-FinalName($Units, [hashtable]$Decided, [string]$Id) {
+    if ($Decided.ContainsKey($Id) -and $Decided[$Id].name) { return $Decided[$Id].name }
+    return ($Units | Where-Object Id -EQ $Id | Select-Object -First 1).Container.name
+}
+
+function Get-DuplicateNameRejections($Units, [hashtable]$Decided) {
+    $kept = @($Units | Where-Object { -not ($Decided.ContainsKey($_.Id) -and $Decided[$_.Id].sameAs) })
+    $kept | Group-Object { (Get-FinalName $Units $Decided $_.Id).ToLowerInvariant() } | Where-Object Count -GT 1 | ForEach-Object {
+        foreach ($unit in $_.Group) { [pscustomobject]@{ Key = "container:$($unit.Id)"; Reason = "nome di container non unico: $($unit.Id) = $(Get-FinalName $Units $Decided $unit.Id)" } }
+    }
+}
+
+function Merge-ReviewAnswer($Answer, $State, $Units, [hashtable]$EvidenceTexts) {
+    $rejections = [Collections.Generic.List[object]]::new()
+    foreach ($entry in @($Answer.externalSystems | Where-Object { $_ })) {
+        $key = "system:$($entry.id)"
+        if (-not $State.Expected.Contains($key) -or ($State.Decided.ContainsKey($key) -and -not $State.Pending.Contains($key))) { continue }
+        $reason = Get-SystemRejection $entry $EvidenceTexts
+        if ($reason) { $rejections.Add([pscustomobject]@{ Key = $key; Reason = $reason }) } else { $State.Decided[$key] = $entry }
+    }
+    foreach ($entry in @($Answer.links | Where-Object { $_ })) {
+        $key = "link:$(Get-RelationshipKey $entry)"
+        if (-not $State.Expected.Contains($key) -or ($State.Decided.ContainsKey($key) -and -not $State.Pending.Contains($key))) { continue }
+        $State.Decided[$key] = $entry
+    }
+    foreach ($entry in @($Answer.containers | Where-Object { $_ })) {
+        $key = "container:$($entry.id)"
+        if (-not $State.Expected.Contains($key) -or ($State.Decided.ContainsKey($key) -and -not $State.Pending.Contains($key))) { continue }
+        $entry.name = "$($entry.name)".Trim()
+        $State.Decided[$key] = $entry
+    }
+    $containers = @{}
+    $State.Decided.Keys | Where-Object { $_ -like 'container:*' } | ForEach-Object { $containers[$_.Substring(10)] = $State.Decided[$_] }
+    foreach ($id in @($containers.Keys)) {
+        $reason = Get-ContainerRejection $containers[$id] $Units $containers
+        if ($reason) { $rejections.Add([pscustomobject]@{ Key = "container:$id"; Reason = $reason }) }
+    }
+    Get-DuplicateNameRejections $Units $containers | ForEach-Object { $rejections.Add($_) }
+    foreach ($key in $State.Expected) {
+        if (-not $State.Decided.ContainsKey($key) -and -not ($rejections | Where-Object Key -EQ $key)) {
+            $rejections.Add([pscustomobject]@{ Key = $key; Reason = "voce senza risposta: $($key -replace '^[a-z]+:', '')" })
+        }
+    }
+    $rejections | ForEach-Object { [void]$State.Decided.Remove($_.Key) }
+    return @($rejections)
+}
+
+function New-ReviewState($Units, $Text) {
+    $expected = [Collections.Generic.HashSet[string]]::new()
+    $Text.externalSystems.PSObject.Properties | ForEach-Object { [void]$expected.Add("system:$($_.Name)") }
+    Get-TextLinks $Text | ForEach-Object { [void]$expected.Add("link:$(Get-RelationshipKey $_)") }
+    $Units | ForEach-Object { [void]$expected.Add("container:$($_.Id)") }
+    return @{ Expected = $expected; Decided = @{}; Pending = [Collections.Generic.HashSet[string]]::new() }
+}
+
+# Una voce che resta senza risposta valida dopo l'ultimo giro: un sistema esterno senza prova esce dal
+# modello, una relazione resta, un container tiene il nome del codice e non si unisce.
+function Set-ReviewDecisions($State, $Units, $Text) {
+    foreach ($key in $State.Expected) {
+        if ($State.Decided.ContainsKey($key)) { continue }
+        Add-Correction "revisione: voce lasciata com'era dopo $MaxDrafts giri: $($key -replace '^[a-z]+:', '')"
+    }
+    $systems = [ordered]@{}
+    $dropped = @(foreach ($property in @($Text.externalSystems.PSObject.Properties)) {
+            $decision = $State.Decided["system:$($property.Name)"]
+            if ($decision -and $decision.inProduction) {
+                $systems[$property.Name] = [ordered]@{ inProduction = $true; evidence = @($decision.evidence | Where-Object { $_ }); reason = "$($decision.reason)" }
+                continue
+            }
+            $reason = if ($decision) { $decision.reason } else { 'nessuna prova nella configurazione di produzione' }
+            Add-Correction "revisione: sistema esterno $($property.Name) tolto, non e' in produzione: $reason"
+            $property.Name
+        })
+    Remove-TextActors $Text $dropped
+    foreach ($unit in @($Text.units.PSObject.Properties.Value | Where-Object { $_ })) {
+        $unit.links = @($unit.links | Where-Object { $_ } | Where-Object {
+                $decision = $State.Decided["link:$(Get-RelationshipKey $_)"]
+                $keep = -not $decision -or $decision.keep
+                if (-not $keep) { Add-Correction "revisione: relazione $(Get-RelationshipKey $_) tolta: $($decision.reason)" }
+                $keep
+            })
+    }
+    $containers = [ordered]@{}
+    foreach ($unit in ($Units | Sort-Object Id)) {
+        $decision = $State.Decided["container:$($unit.Id)"]
+        $name = if ($decision -and $decision.name) { $decision.name } else { $unit.Container.name }
+        $sameAs = if ($decision) { "$($decision.sameAs)".Trim() } else { '' }
+        if ($sameAs) { Add-Correction "revisione: container $($unit.Id) unito a ${sameAs}: $($decision.reason)" }
+        $containers[$unit.Id] = [ordered]@{ name = $name; sameAs = $sameAs }
+    }
+    return [ordered]@{ externalSystems = $systems; containers = $containers }
+}
+
+function Invoke-ModelReview($Units, $Text, $Progress) {
+    $evidenceFiles = @(Get-EvidenceFiles)
+    $basis = Get-ReviewBasis $Units $evidenceFiles
+    if ($Text.review.basis -eq $basis) { return }
+    $root = Get-SourcesRoot
+    $evidenceTexts = @{}
+    $evidenceFiles | ForEach-Object { $evidenceTexts[(Get-EvidenceName $root $_.FullName)] = Get-NormalText (Get-Content -Raw $_.FullName) }
+    $state = New-ReviewState $Units $Text
+    $rejections = @()
+    for ($round = 1; $round -le $MaxDrafts; $round++) {
+        $answer = Invoke-Writer $ReviewInstructions (Get-ReviewMessage $Units $Text $evidenceFiles @($rejections | ForEach-Object Reason)) (New-ReviewSchema) 'c4_model_review'
+        $rejections = @(Merge-ReviewAnswer $answer $state $Units $evidenceTexts)
+        if (-not $rejections) { break }
+        $state.Pending = [Collections.Generic.HashSet[string]]::new([string[]]@($rejections | ForEach-Object Key))
+        Write-Host "Revisione $round del modello, voci da riscrivere: $(($rejections | ForEach-Object Reason) -join '; ')"
+    }
+    $decisions = Set-ReviewDecisions $state $Units $Text
+    Remove-StaleText $Text $Units
+    $Text.review = [pscustomobject][ordered]@{ basis = $basis; externalSystems = [pscustomobject]$decisions.externalSystems; containers = [pscustomobject]$decisions.containers }
+    Save-Text $Text
+    Publish-Progress $Progress 'review'
+}
+
+#endregion
+
 function Write-Corrections {
     if (-not $script:Corrections.Count) { return }
     $script:Corrections | ForEach-Object { Write-Host "##vso[task.logissue type=warning]Modello C4: $_" }
@@ -750,6 +1068,8 @@ function Get-TextIssues {
             try { Invoke-CatalogueReview $units $text $progress }
             catch { return New-Issue $TextScope 'catalogo di persone e sistemi esterni non controllato' $_.Exception.Message }
         }
+        try { Invoke-ModelReview $units $text $progress }
+        catch { return New-Issue $TextScope 'modello non rivisto' $_.Exception.Message }
     }
     finally {
         Remove-Progress $progress

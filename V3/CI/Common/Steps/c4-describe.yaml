@@ -8,6 +8,8 @@
 # (c4-read-*.yaml), il codice degli elementi, la guida di stile e i documenti di contesto. Un solo testo,
 # cosi' ogni persona, sistema esterno e applicazione compare una volta: dopo i container il modello
 # rilegge insieme il catalogo di persone e sistemi esterni e unisce le voci che indicano la stessa cosa.
+# Infine rivede tutto il modello: un sistema esterno resta solo con una prova citata da reviewEvidence,
+# la configurazione di produzione; toglie le relazioni non vere, nomina i container, unisce le copie.
 # Una stesura respinta non ferma la pipeline: cio' che la struttura non contiene si toglie e si elenca in
 # correctionsFile, i testi mancanti e le frasi troppo lunghe tornano al modello, che riscrive solo quelli
 # fino a maxDrafts stesure. Il testo accettato si salva in generatedDirectory e, con progressBranch, sul
@@ -38,6 +40,9 @@
 #   generatedDirectory  → cartella delle parti generate, relativa a workingDirectory (default: docs/architecture/c4/generated)
 #   guide               → guida di stile del documento (default: docs/STYLE.md)
 #   context             → file o cartelle di contesto del documento, Markdown (default: [docs/decisions])
+#   reviewEvidence      → file o cartelle della configurazione di produzione, relativi a sourcesDirectory
+#                         (<repository>/<percorso>, con caratteri jolly): le sole prove che tengono un
+#                         sistema esterno nel modello (default: nessuna, nessun sistema esterno resta)
 #   maxWords            → parole massime di una frase del testo, 0 senza limite (default: 0)
 #   abbreviations       → abbreviazioni con il punto che non chiudono una frase (default: nessuna)
 #   progressBranch      → ramo del repository del documento che porta il testo accettato (default: nessuno)
@@ -99,6 +104,10 @@ parameters:
     type: object
     default: ['docs/decisions']
 
+  - name: reviewEvidence
+    type: object
+    default: []
+
   - name: maxWords
     type: number
     default: 0
@@ -142,6 +151,7 @@ steps:
         GENERATED_DIRECTORY: ${{ parameters.generatedDirectory }}
         STYLE_GUIDE: ${{ parameters.guide }}
         C4_TEXT_CONTEXT: ${{ join(';', parameters.context) }}
+        C4_REVIEW_EVIDENCE: ${{ join(';', parameters.reviewEvidence) }}
         C4_TEXT_ENDPOINT: ${{ parameters.endpoint }}
         C4_TEXT_MODEL: ${{ parameters.model }}
         C4_TEXT_REASONING_EFFORT: ${{ parameters.reasoningEffort }}

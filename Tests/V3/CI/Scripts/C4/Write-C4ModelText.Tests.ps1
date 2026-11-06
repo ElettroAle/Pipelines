@@ -41,6 +41,7 @@ BeforeAll {
     $Engine = 'Contoso.Shop.AI'
     $Bff = 'Contoso.Shop.Bff.Web'
     $Guide = "# Guida di stile`n`n## Regole`n`n### Niente riempitivi`n`nUn'espressione che non aggiunge informazione si toglie.`n"
+    $Production = "sms_sender = `"+390000000`"`npayments_endpoint = `"https://pagamenti.example.com`"`n"
     $Decision = "# Canale eventi di sessione`n`n## Esito della decisione`n`nGli eventi viaggiano su Service Bus.`n"
 
     function Reset-Stub([hashtable]$Answers = @{}) {
@@ -68,6 +69,20 @@ BeforeAll {
         return @(Get-StubRequests | Where-Object { (Get-UserMessage $_) -match "PARTE DA DESCRIVERE: $Unit\b" })
     }
 
+    function Get-ReviewRequests {
+        return @(Get-StubRequests | Where-Object { (Get-UserMessage $_).Contains("CONFIGURAZIONE DI PRODUZIONE:`n") })
+    }
+
+    $Sms = @{ id = 'sms'; name = 'Gateway SMS'; description = 'Recapita gli SMS.'; technical = $false }
+    $Payments = @{ id = 'pagamenti'; name = 'Servizio pagamenti'; description = 'Incassa i pagamenti.'; technical = $false }
+    $SmsLink = @{ source = $Api; target = 'sms'; description = 'Invia gli SMS'; technology = 'HTTPS' }
+    $PaymentsLink = @{ source = $Api; target = 'pagamenti'; description = 'Chiede i pagamenti'; technology = 'HTTPS' }
+    $ApiExternals = @{ externalSystems = @($Sms, $Payments); links = @($SmsLink, $PaymentsLink) }
+
+    function Get-FirstReviewMessage {
+        return Get-UserMessage (Get-ReviewRequests | Select-Object -First 1)
+    }
+
     function Get-CatalogueRequests {
         return @(Get-StubRequests | Where-Object { (Get-UserMessage $_).Contains("CATALOGO DA CONTROLLARE:`n") })
     }
@@ -81,6 +96,7 @@ BeforeAll {
         $engineFiles = New-EngineRepository
         $engineFiles['source/Contoso.Shop.AI.Api/Program.cs'] = "app.MapPost(`"/conversations`", SendMessage);`n"
         $files = Add-Sources ([ordered]@{}) $Engine $engineFiles
+        $files["sources/$Engine/deploy/production.tfvars"] = $Production
         $files['docs/STYLE.md'] = $Guide
         $files['docs/decisions/0012-canale-eventi-di-sessione.md'] = $Decision
         return $files
@@ -111,6 +127,7 @@ BeforeAll {
             C4_TEXT_ENDPOINT = $StubEndpoint; C4_TEXT_MODEL = 'gpt-6-luna'; C4_TEXT_TOKEN = 'token-di-prova'; C4_TEXT_REASONING_EFFORT = ''
             C4_TEXT_MAX_DRAFTS = ''; C4_TEXT_CONTEXT = 'docs/decisions'; STYLE_GUIDE = 'docs/STYLE.md'; PROGRESS_BRANCH = ''
             READABILITY_MAX_WORDS = ''; READABILITY_ABBREVIATIONS = ''; GATE_MODE = ''; SYSTEM_ACCESSTOKEN = ''; C4_CORRECTIONS_FILE = 'corrections.md'
+            C4_REVIEW_EVIDENCE = "$Engine/deploy"
         }
         $Environment.Keys | ForEach-Object { $variables[$_] = $Environment[$_] }
         $steps = @(foreach ($repository in $Repositories) {
@@ -913,6 +930,242 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
 
         It "E la parte dell'applicazione che chiama dice cio' che passa sulla relazione" {
             $res.Generated['containers/contoso.shop.client.web.dsl'] | Should -Match "$client -> $Web ""Passa da $client a $Web"""
+        }
+    }
+
+    Context "Scenario: un sistema esterno che la configurazione di produzione non usa esce dal modello" {
+        BeforeAll {
+            Reset-Stub @{ $Api = @($ApiExternals); review = @(@{ notInProduction = @('pagamenti') }) }
+            $root = New-Workspace (New-DescribedEngine)
+            $res = Invoke-Text $root
+            $message = Get-FirstReviewMessage
+            Remove-Workspace $root
+        }
+
+        It "Allora la generazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E la revisione riceve la configurazione di produzione" {
+            $message | Should -Match "=== $([regex]::Escape($Engine))/deploy/production\.tfvars ===\r?\nsms_sender"
+        }
+
+        It "E la revisione riceve il codice dell'elemento legato ai sistemi esterni" {
+            $message | Should -Match 'CODICE DEGLI ELEMENTI LEGATI A SISTEMI ESTERNI:\s+=== Contoso\.Shop\.AI/Contoso\.Shop\.AI\.Api/'
+        }
+
+        It "E il contesto non dichiara il sistema esterno" {
+            $res.Generated['context.dsl'] | Should -Not -Match 'pagamenti ='
+        }
+
+        It "E la parte non ha la relazione con il sistema esterno" {
+            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Not -Match "$Api -> pagamenti"
+        }
+
+        It "E il sistema esterno usato in produzione resta" {
+            $res.Generated['context.dsl'] | Should -Match 'sms = softwareSystem "Gateway SMS"'
+        }
+
+        It "E il testo salva la prova del sistema esterno che resta" {
+            $res.Text.review.externalSystems.sms.evidence[0].path | Should -Be "$Engine/deploy/production.tfvars"
+        }
+
+        It "E le correzioni dicono perche' il sistema esterno e' uscito" {
+            $res.Corrections | Should -Match "sistema esterno pagamenti tolto, non e' in produzione: Motivo per pagamenti\."
+        }
+    }
+
+    Context "Scenario: un sistema esterno senza una prova nella configurazione esce dopo l'ultimo giro" {
+        BeforeAll {
+            Reset-Stub @{ $Api = @($ApiExternals); review = @(@{ noEvidence = @('pagamenti') }) }
+            $root = New-Workspace (New-DescribedEngine)
+            $res = Invoke-Text $root
+            $requests = @(Get-ReviewRequests)
+            Remove-Workspace $root
+        }
+
+        It "Allora la revisione si ripete fino all'ultimo giro" {
+            $requests.Count | Should -Be 3
+        }
+
+        It "E il giro successivo nomina la prova mancante" {
+            Get-UserMessage $requests[1] | Should -Match 'sistema esterno in produzione senza una prova che compaia nella configurazione di produzione: pagamenti'
+        }
+
+        It "E il sistema esterno esce dal modello" {
+            $res.Generated['context.dsl'] | Should -Not -Match 'pagamenti ='
+        }
+    }
+
+    Context "Scenario: una citazione che non compare nel file si respinge" {
+        BeforeAll {
+            Reset-Stub @{ $Api = @($ApiExternals); review = @(@{ wrongQuote = @('pagamenti') }, @{}) }
+            $root = New-Workspace (New-DescribedEngine)
+            $res = Invoke-Text $root
+            $requests = @(Get-ReviewRequests)
+            Remove-Workspace $root
+        }
+
+        It "Allora la revisione chiede un secondo giro" {
+            $requests.Count | Should -Be 2
+        }
+
+        It "E il sistema esterno con la prova giusta resta" {
+            $res.Generated['context.dsl'] | Should -Match 'pagamenti = softwareSystem "Servizio pagamenti"'
+        }
+    }
+
+    Context "Scenario: la revisione toglie la relazione di una persona con un'applicazione che non usa" {
+        BeforeAll {
+            $person = @{ id = 'cliente'; name = 'Cliente'; description = 'Scrive al negozio dal sito.'; technical = $false }
+            $apiLink = @{ source = 'cliente'; target = $Api; description = 'Invia i messaggi'; technology = 'HTTPS' }
+            $webLink = @{ source = 'cliente'; target = $Web; description = 'Apre la chat'; technology = 'HTTPS' }
+            Reset-Stub @{
+                $Api   = @(@{ people = @($person); links = @($apiLink) })
+                $Web   = @(@{ people = @($person); links = @($webLink) })
+                review = @(@{ drop = @("cliente -> $Api") })
+            }
+            $root = New-Workspace (New-DescribedSystem)
+            $res = Invoke-Text $root @($Engine, $Bff)
+            Remove-Workspace $root
+        }
+
+        It "Allora la generazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E la parte del Motore non ha la relazione della persona" {
+            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Not -Match "cliente -> $Api"
+        }
+
+        It "E la relazione con l'applicazione che la persona usa resta" {
+            $res.Generated['containers/contoso.shop.bff.web.dsl'] | Should -Match "cliente -> $Web `"Apre la chat`""
+        }
+    }
+
+    Context "Scenario: la revisione da' a un container il nome con cui lo si riconosce" {
+        BeforeAll {
+            Reset-Stub @{ review = @(@{ names = @{ $Api = 'AI.Api' } }) }
+            $root = New-Workspace (New-DescribedEngine)
+            $res = Invoke-Text $root
+            Remove-Workspace $root
+        }
+
+        It "Allora la parte scrive il container con quel nome" {
+            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Match "$Api = container `"AI\.Api`""
+        }
+
+        It "E il nome nel codice resta nella proprieta' del container" {
+            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Match '"Contoso\.Shop\.AI\.Api"'
+        }
+    }
+
+    Context "Scenario: due nomi uguali si respingono" {
+        BeforeAll {
+            Reset-Stub @{ review = @(@{ names = @{ $Api = 'Motore'; $Worker = 'Motore' } }, @{ names = @{ $Api = 'Motore'; $Worker = 'Lavori' } }) }
+            $root = New-Workspace (New-DescribedEngine)
+            $res = Invoke-Text $root
+            $requests = @(Get-ReviewRequests)
+            Remove-Workspace $root
+        }
+
+        It "Allora il secondo giro nomina il nome non unico" {
+            Get-UserMessage $requests[1] | Should -Match 'nome di container non unico'
+        }
+
+        It "E la parte usa i nomi del secondo giro" {
+            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Match "$Worker = container `"Lavori`""
+        }
+    }
+
+    Context "Scenario: la revisione unisce due container che sono copie della stessa risorsa" {
+        BeforeAll {
+            $language = 'contoso_shop_ai_language'
+            $copy = 'contoso_shop_ai_language_2'
+            $resources = [ordered]@{
+                manifests     = @()
+                containers    = @(
+                    [ordered]@{ id = $language; name = 'language'; codeName = 'language'; sources = @(); technology = 'Language'; properties = [ordered]@{}; components = @() }
+                    [ordered]@{ id = $copy; name = 'language-2'; codeName = 'language-2'; sources = @(); technology = 'Language'; properties = [ordered]@{}; components = @() }
+                )
+                relationships = @(
+                    [ordered]@{ source = $Api; target = $language }
+                    [ordered]@{ source = $Api; target = $copy }
+                    [ordered]@{ source = $Worker; target = $copy }
+                )
+                addresses     = @()
+                calls         = @()
+            }
+            Reset-Stub @{ review = @(@{ sameAs = @{ $copy = $language } }) }
+            $files = New-DescribedEngine
+            $files['fragments/contoso.shop.ai.resources.json'] = $resources | ConvertTo-Json -Depth 10
+            $root = New-Workspace $files
+            $res = Invoke-Text $root
+            Remove-Workspace $root
+            $dsl = $res.Generated['containers/contoso.shop.ai.dsl']
+        }
+
+        It "Allora la generazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E la copia non si scrive" {
+            $dsl | Should -Not -Match "$copy = container"
+        }
+
+        It "E le relazioni della copia passano al container che resta, senza doppioni" {
+            @($dsl -split "`n" | Where-Object { $_ -match "^$Api -> $language " }).Count | Should -Be 1
+        }
+
+        It "E la relazione dell'altra applicazione con la copia arriva al container che resta" {
+            $dsl | Should -Match "$Worker -> $language "
+        }
+
+        It "E nessuna relazione parte dalla copia o vi arriva" {
+            $dsl | Should -Not -Match "(^|
+)$copy -> |-> $copy "
+        }
+    }
+
+    Context "Scenario: un container con componenti non si unisce a un altro" {
+        BeforeAll {
+            Reset-Stub @{ review = @(@{ sameAs = @{ $Worker = $Api } }) }
+            $root = New-Workspace (New-DescribedEngine)
+            $res = Invoke-Text $root
+            $requests = @(Get-ReviewRequests)
+            Remove-Workspace $root
+        }
+
+        It "Allora il giro successivo nomina l'unione respinta" {
+            Get-UserMessage $requests[1] | Should -Match "container con componenti unito a un altro: $Worker -> $Api"
+        }
+
+        It "E i due container restano" {
+            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Match "$Worker = container"
+        }
+    }
+
+    Context "Scenario: la revisione non si ripete se struttura e configurazione non cambiano" {
+        BeforeAll {
+            Reset-Stub
+            $root = New-Workspace (New-DescribedEngine)
+            Invoke-Text $root | Out-Null
+            Reset-Stub
+            Invoke-Text $root | Out-Null
+            $unchanged = @(Get-ReviewRequests).Count
+            [IO.File]::AppendAllText((Join-Path $root "sources/$Engine/deploy/production.tfvars"), "sms_retries = 3`n")
+            Reset-Stub
+            Invoke-Text $root | Out-Null
+            $changed = @(Get-ReviewRequests).Count
+            Remove-Workspace $root
+        }
+
+        It "Allora la seconda generazione non chiede la revisione" {
+            $unchanged | Should -Be 0
+        }
+
+        It "E una configurazione di produzione cambiata la chiede di nuovo" {
+            $changed | Should -Be 1
         }
     }
 }

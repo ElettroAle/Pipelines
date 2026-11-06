@@ -21,6 +21,9 @@
 #   docsDirectory      → cartella delle sezioni del documento (default: docs/architecture)
 #   guide              → guida di stile del repository, istruzione del modello (default: docs/STYLE.md)
 #   glossary           → file del glossario in docsDirectory, contesto del giudizio e non giudicato (default: nessuno)
+#   reference          → file o cartelle che descrivono il sistema, ad esempio il modello generato: contesto
+#                        delle regole che li citano, e se una PR li cambia tutte le sezioni si rigiudicano
+#                        (default: nessuno)
 #   serviceConnection  → service connection Azure con il ruolo Cognitive Services OpenAI User [REQUIRED se mode non e' off]
 #   endpoint           → endpoint della risorsa Azure OpenAI, es. https://<nome>.openai.azure.com [REQUIRED se mode non e' off]
 #   model              → nome del deployment del modello [REQUIRED se mode non e' off]
@@ -52,6 +55,10 @@ parameters:
   - name: glossary
     type: string
     default: ''
+
+  - name: reference
+    type: object
+    default: []
 
   - name: serviceConnection
     type: string
@@ -120,6 +127,7 @@ steps:
         DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
         STYLE_GUIDE: ${{ parameters.guide }}
         DOCS_GLOSSARY: ${{ parameters.glossary }}
+        STYLE_REFERENCE: ${{ join(';', parameters.reference) }}
         TARGET_BRANCH: $(System.PullRequest.TargetBranch)
         SOURCE_BRANCH: $(System.PullRequest.SourceBranch)
         SYSTEM_ACCESSTOKEN: $(System.AccessToken)

@@ -217,7 +217,7 @@ Il titolo di una decisione nomina la scelta, senza sigle.
             $Root = Join-Path ([IO.Path]::GetTempPath()) "pester-style-$(New-Guid)"
             Write-Docs $Docs $Root
         }
-        $variables = @{ GATE_MODE = $Mode; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; TARGET_BRANCH = ''; SOURCE_BRANCH = ''; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_FIX = ''; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_JUDGE_SEED = ''; READABILITY_MAX_WORDS = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = '' }
+        $variables = @{ GATE_MODE = $Mode; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; TARGET_BRANCH = ''; SOURCE_BRANCH = ''; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_FIX = ''; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_JUDGE_SEED = ''; READABILITY_MAX_WORDS = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = ''; STYLE_REFERENCE = '' }
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
 
         Push-Location $Root
@@ -952,6 +952,31 @@ Describe "Test-DocumentationStyle — cosa si manda al modello" {
             Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main' } | Out-Null
             Remove-Item -Recurse -Force $root
             Get-JudgedFiles | Should -Be @('01-introduzione-e-obiettivi.md', '02-vincoli.md')
+        }
+
+        It "Giudica tutte le sezioni se cambia un file di riferimento" {
+            $root = New-PullRequestRepository -Base { param($d) $d['docs/architecture/model/context.dsl'] = "cliente = person `"Cliente`"`n" } `
+                -Change { param($d) $d['docs/architecture/model/context.dsl'] = "cittadino = person `"Cittadino`"`n" }
+            Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main'; STYLE_REFERENCE = 'docs/architecture/model' } | Out-Null
+            Remove-Item -Recurse -Force $root
+            Get-JudgedFiles | Should -Be @('01-introduzione-e-obiettivi.md', '02-vincoli.md')
+        }
+
+        It "Manda i file di riferimento con ogni sezione, come contesto prima della sezione" {
+            $root = New-PullRequestRepository -Base { param($d) $d['docs/architecture/model/context.dsl'] = "cliente = person `"Cliente`"`n" } `
+                -Change { param($d) Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' 'gira su Azure in Italia.' }
+            Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main'; STYLE_REFERENCE = 'docs/architecture/model' } | Out-Null
+            Remove-Item -Recurse -Force $root
+            $message = (Get-UserMessage (Get-StubRequests)[0]) -replace "`r`n", "`n"
+            $message | Should -BeLike "*MODELLO DI RIFERIMENTO`n`n=== docs/architecture/model/context.dsl ===`ncliente = person `"Cliente`"`n`nSEZIONE DA GIUDICARE (02-vincoli.md)*"
+        }
+
+        It "Non manda i file di riferimento con una decisione" {
+            $root = New-PullRequestRepository -Base { param($d) $d['docs/architecture/model/context.dsl'] = "cliente = person `"Cliente`"`n" } `
+                -Change { param($d) $d['docs/decisions/0002-nuova.md'] = $NewDecision }
+            Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main'; STYLE_REFERENCE = 'docs/architecture/model' } | Out-Null
+            Remove-Item -Recurse -Force $root
+            Get-UserMessage (Get-StubRequests)[0] | Should -Not -Match 'MODELLO DI RIFERIMENTO'
         }
 
         It "Giudica una decisione nuova" {

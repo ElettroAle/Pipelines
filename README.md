@@ -245,9 +245,9 @@ parametri di formato e senza condizioni sul formato.
 | `c4-read.yaml` | lo script passato con `scriptPath` | repository sorgente letto da un lettore nel frammento del modello C4 | C4 |
 | `c4-read-dotnet10.yaml` | `Read-C4DotNet10Model.ps1`, con `c4-read.yaml` | progetti .NET 10 di un repository sorgente letti nel frammento del modello C4 | C4, .NET 10 |
 | `c4-read-angular18.yaml` | `Read-C4Angular18Model.ps1`, con `c4-read.yaml` | applicazione Angular 18 di un repository sorgente letta nel frammento del modello C4 | C4, Angular 18 |
-| `c4-describe.yaml` | `Write-C4ModelText.ps1` | testo del modello C4 di tutto il sistema dai frammenti di tutti i repository sorgente, scritto da un modello Azure OpenAI, con un solo catalogo di persone e sistemi esterni | C4, Azure OpenAI |
+| `c4-describe.yaml` | `Write-C4ModelText.ps1` | testo del modello C4 di tutto il sistema dai frammenti di tutti i repository sorgente, scritto da un modello Azure OpenAI, con un solo catalogo di persone e sistemi esterni e una revisione di tutto il modello sulla configurazione di produzione | C4, Azure OpenAI |
 | `c4-generate.yaml` | `Export-C4CodeModel.ps1` | parte del modello C4 generata dai frammenti di un repository sorgente e dal testo del sistema, allineata al codice, e contesto con persone e sistemi esterni | C4 |
-| `c4-verify.yaml` | `Test-C4Model.ps1` | modello Structurizr valido e completo, testo del modello coerente con la parte generata, viste mostrate nelle sezioni | C4 |
+| `c4-verify.yaml` | `Test-C4Model.ps1` | modello Structurizr valido e completo, testo del modello coerente con la parte generata, viste mostrate nelle sezioni, misura della leggibilità di ogni vista | C4 |
 | `mermaid-verify.yaml` | `Test-MermaidDiagrams.ps1` | diagrammi Mermaid validi, nel documento e nelle decisioni | Mermaid |
 | `flows-verify.yaml` | `Test-DiagramFlows.ps1` | flussi fatti degli elementi del modello C4 e delle classi delle decisioni | C4, Mermaid |
 | `documentation-verify.yaml` | `Test-Documentation.ps1` | rimandi esistenti, soglie numeriche di leggibilità | nessun formato |
@@ -344,9 +344,15 @@ Modello C4 (`c4-verify.yaml`, `CI/Scripts/C4/Test-C4Model.ps1`):
   generato ha una descrizione, ogni relazione generata dice cosa passa, e fra due elementi generati
   nessuna relazione viene da fuori del codice, nemmeno per ripeterne una generata. Un riferimento a un elemento che nessuna
   parte contiene rende il modello non valido, e l'errore nomina l'identificativo.
-- **Requisiti.** Java 17 o successivo per la Structurizr CLI (versione fissata, SHA-256 verificato); lo
-  step lo prepara con `ensure-java.yaml`. Senza Java la verifica fallisce nominando il controllo non
-  eseguito.
+- Ogni vista si disegna come nella wiki (`CI/Scripts/C4/ViewImages.ps1`): dall'alto in basso e da sinistra
+  a destra, con gli spazi di default e stretti, e resta il disegno che si rimpicciolisce meno per entrare in
+  una pagina di `pageWidth` per `pageHeight` pixel (default 1200 per 1600). Il log ne dà misure,
+  disposizione e scala. Se anche quel disegno scende sotto `minScale` (default 0.6) un avviso segnala la
+  vista come troppo piena, senza fermare la verifica: una vista troppo piena si snellisce nel modello. La
+  direzione scritta nel modello è solo il punto di partenza.
+- **Requisiti.** Java 17 o successivo per la Structurizr CLI (versione fissata, SHA-256 verificato) e per
+  PlantUML, con i font di sistema; lo step li prepara con `ensure-java.yaml` e `ensure-fonts.yaml`. Senza
+  Java la verifica fallisce nominando il controllo non eseguito.
 
 Parte del modello C4 generata dal codice (`c4-read*.yaml`, `c4-describe.yaml` e `c4-generate.yaml`).
 Nessuna parte del modello si scrive a mano: la struttura nasce in modo deterministico dal codice, il
@@ -399,6 +405,16 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   persona o lo stesso sistema, e toglie un sistema esterno che è un container del sistema, passandone le
   relazioni al container. Una risposta respinta torna al modello fino a `maxDrafts` volte; una voce
   ancora respinta resta distinta.
+- **La revisione.** Infine il modello rivede tutto il sistema insieme, perché descriva ciò che gira in
+  produzione. Un sistema esterno resta solo se il modello cita un tratto di un file della configurazione
+  di produzione (`reviewEvidence`, percorsi `<repository>/<percorso>` sotto `sourcesDirectory`) e il
+  tratto compare davvero nel file; una relazione con una persona o un sistema esterno che non è vera si
+  toglie; ogni container prende il nome con cui lo si riconosce, unico nel sistema, e due container
+  senza componenti e della stessa tecnologia che sono copie della stessa cosa si uniscono: la copia non
+  si scrive e le sue relazioni passano al container che resta. Una risposta respinta torna al modello
+  fino a `maxDrafts` volte; un sistema esterno ancora senza prova esce dal modello. La revisione si
+  ripete solo quando cambiano la struttura o la configurazione di produzione, e le sue decisioni si
+  salvano con le prove in `model.text.json`.
 - **Il testo salvato e le correzioni.** Il testo accettato si salva in `model.text.json` nella cartella
   delle parti generate e, con `progressBranch`, sul ramo, un container alla volta: rilanciata, la
   pipeline riparte da ciò che non ha testo accettato. Il testo di un container la cui struttura non
@@ -574,7 +590,8 @@ pubblicazione:
   della decisione non cambia, l'avviso viene dallo stato.
 - I marcatori di vista diventano le immagini PNG delle viste C4: la Structurizr CLI le esporta in
   C4-PlantUML e PlantUML (versione fissata, SHA-256 verificato) le disegna con le librerie C4 interne e il
-  layout smetana, senza Graphviz e senza rete. Le immagini stanno in `.attachments/<wikiRoot>/<vista>.png`.
+  layout smetana, senza Graphviz e senza rete, nella disposizione che si legge meglio, come nella verifica
+  del modello. Le immagini stanno in `.attachments/<wikiRoot>/<vista>.png`.
   Con la proprieta' `c4plantuml.tags` delle viste, colori e forme vengono dagli stili del modello, che
   allora dichiara anche quelli di `Person`, `Software System`, `Container` e `Component`.
 - I blocchi ` ```mermaid ` diventano la sintassi della wiki `::: mermaid`. I link alle sezioni e alle
@@ -671,7 +688,7 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/C4/C4CodeModel.ps1` | Contratto del frammento del modello C4 generato, incluso dai lettori: file di progetto letti, container, componenti, relazioni, indirizzi di avvio e chiamati e il loro legame |
 | `CI/Scripts/C4/Read-C4DotNet10Model.ps1` | Lettore .NET 10 (`c4-read-dotnet10.yaml`): applicazioni come container, progetti di produzione come componenti, regole di .NET 10; un progetto di un'altra versione ferma la lettura |
 | `CI/Scripts/C4/Read-C4Angular18Model.ps1` | Lettore Angular 18 (`c4-read-angular18.yaml`): l'applicazione come container, cartelle di funzionalità e moduli di base come componenti; un workspace di un'altra versione ferma la lettura |
-| `CI/Scripts/C4/Write-C4ModelText.ps1` | Testo del modello C4 di tutto il sistema (`c4-describe.yaml`): stesure di un modello Azure OpenAI corrette in modo deterministico o rimandate al modello, catalogo unico di persone e sistemi esterni controllato dal modello, testo salvato un container alla volta e ripreso al rilancio, correzioni elencate |
+| `CI/Scripts/C4/Write-C4ModelText.ps1` | Testo del modello C4 di tutto il sistema (`c4-describe.yaml`): stesure di un modello Azure OpenAI corrette in modo deterministico o rimandate al modello, catalogo unico di persone e sistemi esterni controllato dal modello, revisione di tutto il modello con prove verificate nella configurazione di produzione, testo salvato un container alla volta e ripreso al rilancio, correzioni elencate |
 | `CI/Scripts/C4/Export-C4CodeModel.ps1` | Parte del modello C4 generata dai frammenti di un repository sorgente e dal testo del sistema (`c4-generate.yaml`), con il contesto delle persone e dei sistemi esterni: errore sui file di progetto che nessun lettore legge, confronto in modalità `check` |
 | `CI/Scripts/AzureRepos/Publish-PullRequest.ps1` | Porta su un ramo le cartelle che la pipeline ha scritto e apre una PR Azure Repos (`azureRepos-pull-request.yaml`), con completamento automatico, cancellazione del ramo e bozza a scelta: riparte dai commit già sul ramo, nessuna PR senza differenze, una PR attiva si aggiorna, descrizione completata da un file |
 | `CI/Scripts/Arc42/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |

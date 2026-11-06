@@ -3,13 +3,13 @@
 # Pubblica un documento arc42 nella wiki di progetto di Azure DevOps. Le sezioni diventano pagine
 # sotto WIKI_ROOT, nell'ordine dei loro numeri, e le decisioni diventano sottopagine della sezione 9.
 # Il nome di default di WIKI_ROOT e la colonna dello stato seguono la lingua del documento.
-# I marcatori di vista diventano le immagini dei diagrammi C4, disegnate con C4-PlantUML, e i link
-# puntano alle pagine. Si scrive nel repository git della wiki con un commit solo, che tocca soltanto
+# I marcatori di vista diventano le immagini dei diagrammi C4, disegnate con C4-PlantUML nella direzione
+# che si legge meglio (ViewImages.ps1), e i link puntano alle pagine. Si scrive nel repository git della wiki con un commit solo, che tocca soltanto
 # WIKI_ROOT, le sue immagini e la sua voce nell'ordine della radice: il resto della wiki resta com'e'.
 
 . "$PSScriptRoot/../Common/MarkdownText.ps1"
 . "$PSScriptRoot/../C4/Structurizr.ps1"
-. "$PSScriptRoot/PlantUml.ps1"
+. "$PSScriptRoot/../C4/ViewImages.ps1"
 
 $ErrorActionPreference = 'Stop'
 
@@ -325,7 +325,10 @@ function Get-Views {
 
 function Get-ViewImages([hashtable]$ShownViews) {
     if (-not $ShownViews.Count) { return @{} }
-    return ConvertTo-PlantUmlPng $ShownViews (Get-StructurizrJava)
+    $images = ConvertTo-ViewImages $ShownViews (Get-StructurizrJava)
+    $pngs = @{}
+    foreach ($key in $images.Keys) { $pngs[$key] = $images[$key].Png }
+    return $pngs
 }
 
 function Publish-Arc42Wiki {

@@ -9,6 +9,7 @@
 #
 # Riusato da:
 #   CI/Common/Steps/arc42-wiki-publish.yaml
+#   CI/Common/Steps/c4-verify.yaml
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
