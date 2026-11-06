@@ -97,7 +97,10 @@ frase:
 - links: keep vale false se la relazione non e' vera. Una persona usa solo le applicazioni con cui
   interagisce direttamente, non quelle che un'altra applicazione del sistema chiama per lei.
 - containers: name e' il nome con cui chi lavora sulla piattaforma riconosce il container, unico nel
-  sistema; un nome gia' scelto nella revisione precedente resta, salvo che sia sbagliato. sameAs e'
+  sistema; un nome gia' scelto nella revisione precedente resta, salvo che sia sbagliato. Un'applicazione
+  si chiama con la parte del suo nome nel codice che la distingue nel sistema, cioe' senza il prefisso
+  comune a tutte le applicazioni, anche se ha piu' di un progetto; una risorsa si chiama con cio' che fa
+  per il sistema, nella lingua del documento, mai con il nome tecnico della risorsa. sameAs e'
   l'identificativo di un altro container della stessa tecnologia quando i due sono copie della stessa
   cosa (per esempio una risorsa per tenant), vuoto altrimenti; il container che resta ha sameAs vuoto.
 '@
@@ -801,7 +804,7 @@ function Get-EvidenceFiles {
 # le sue decisioni tolgono voci dal testo, quindi la base non conta il testo.
 function Get-ReviewBasis($Units, $EvidenceFiles) {
     $root = Get-SourcesRoot
-    $parts = @($Units | Sort-Object Id | ForEach-Object { "$($_.Id) $($_.Basis)" }) +
+    $parts = @($ReviewInstructions) + @($Units | Sort-Object Id | ForEach-Object { "$($_.Id) $($_.Basis)" }) +
         @($EvidenceFiles | ForEach-Object { "$(Get-EvidenceName $root $_.FullName)`n$(Get-Content -Raw $_.FullName)" })
     $hash = [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($parts -join "`n`n"))
     return [Convert]::ToHexString($hash).ToLowerInvariant()
@@ -841,7 +844,8 @@ function Format-ReviewContainers($Units, $Text) {
     return Format-List @($Units | ForEach-Object {
             $name = if ($Text.review.containers.($_.Id).name) { $Text.review.containers.($_.Id).name } else { $_.Container.name }
             $components = @($_.Container.components | Where-Object { $_ }).Count
-            "$($_.Id) = $name [$($_.Container.technology)] ($($_.Repository), nome nel codice $($_.Container.name), $components componenti): $($Text.units.($_.Id).elements.($_.Id))"
+            $kind = if (Test-Application $_) { 'applicazione' } else { 'risorsa' }
+            "$($_.Id) = $name [$($_.Container.technology)] ($kind di $($_.Repository), nome nel codice $(Get-CodeName $_), $components componenti): $($Text.units.($_.Id).elements.($_.Id))"
         })
 }
 
@@ -916,6 +920,45 @@ function Get-ContainerRejection($Entry, $Units, [hashtable]$Decided) {
     return $null
 }
 
+function Test-Application($Unit) {
+    return @($Unit.Container.tags) -contains $DocumentLanguage.ApplicationTag
+}
+
+function Get-CodeName($Unit) {
+    if ($Unit.Container.codeName) { return "$($Unit.Container.codeName)" }
+    return "$($Unit.Container.name)"
+}
+
+function Get-NameKey([string]$Name) {
+    return ($Name.ToLowerInvariant() -replace '[^\p{L}\p{Nd}]', '')
+}
+
+# Il nome di un'applicazione la distingue nel sistema solo se contiene la parte del nome nel codice che
+# resta togliendo il prefisso comune a tutte le applicazioni: il lettore di un repository toglie solo il
+# prefisso comune ai suoi progetti, e due repository possono avere un'applicazione Web ciascuno.
+function Get-NameRejection($Entry, $Units) {
+    $unit = $Units | Where-Object Id -EQ $Entry.id | Select-Object -First 1
+    $name = "$($Entry.name)"
+    if (-not $unit -or -not $name) { return $null }
+    if (-not (Test-Application $unit)) {
+        if ((Get-NameKey $name) -eq (Get-NameKey (Get-CodeName $unit))) { return "risorsa chiamata con il suo nome tecnico invece che con cio' che fa: $($Entry.id) = $name" }
+        return $null
+    }
+    $applications = @($Units | Where-Object { Test-Application $_ } | ForEach-Object { Get-CodeName $_ })
+    if ($applications.Count -lt 2) { return $null }
+    $distinctive = Remove-CommonPrefix (Get-CodeName $unit) $applications
+    if (-not $distinctive -or (Get-NameKey $name).Contains((Get-NameKey $distinctive))) { return $null }
+    return "nome di applicazione che non la distingue nel sistema: $($Entry.id) = $name, dal codice $(Get-CodeName $unit) deve contenere $distinctive"
+}
+
+# Senza una risposta valida un'applicazione si chiama con la parte del nome nel codice che la distingue
+# nel sistema, una risorsa con il nome del lettore.
+function Get-DefaultName($Unit, $Units) {
+    $applications = @($Units | Where-Object { Test-Application $_ } | ForEach-Object { Get-CodeName $_ })
+    if (-not (Test-Application $Unit) -or $applications.Count -lt 2) { return $Unit.Container.name }
+    return Remove-CommonPrefix (Get-CodeName $Unit) $applications
+}
+
 function Get-FinalName($Units, [hashtable]$Decided, [string]$Id) {
     if ($Decided.ContainsKey($Id) -and $Decided[$Id].name) { return $Decided[$Id].name }
     return ($Units | Where-Object Id -EQ $Id | Select-Object -First 1).Container.name
@@ -951,6 +994,7 @@ function Merge-ReviewAnswer($Answer, $State, $Units, [hashtable]$EvidenceTexts) 
     $State.Decided.Keys | Where-Object { $_ -like 'container:*' } | ForEach-Object { $containers[$_.Substring(10)] = $State.Decided[$_] }
     foreach ($id in @($containers.Keys)) {
         $reason = Get-ContainerRejection $containers[$id] $Units $containers
+        if (-not $reason) { $reason = Get-NameRejection $containers[$id] $Units }
         if ($reason) { $rejections.Add([pscustomobject]@{ Key = "container:$id"; Reason = $reason }) }
     }
     Get-DuplicateNameRejections $Units $containers | ForEach-Object { $rejections.Add($_) }
@@ -972,7 +1016,7 @@ function New-ReviewState($Units, $Text) {
 }
 
 # Una voce che resta senza risposta valida dopo l'ultimo giro: un sistema esterno senza prova esce dal
-# modello, una relazione resta, un container tiene il nome del codice e non si unisce.
+# modello, una relazione resta, un container prende il nome di default e non si unisce.
 function Set-ReviewDecisions($State, $Units, $Text) {
     foreach ($key in $State.Expected) {
         if ($State.Decided.ContainsKey($key)) { continue }
@@ -1001,7 +1045,7 @@ function Set-ReviewDecisions($State, $Units, $Text) {
     $containers = [ordered]@{}
     foreach ($unit in ($Units | Sort-Object Id)) {
         $decision = $State.Decided["container:$($unit.Id)"]
-        $name = if ($decision -and $decision.name) { $decision.name } else { $unit.Container.name }
+        $name = if ($decision -and $decision.name) { $decision.name } else { Get-DefaultName $unit $Units }
         $sameAs = if ($decision) { "$($decision.sameAs)".Trim() } else { '' }
         if ($sameAs) { Add-Correction "revisione: container $($unit.Id) unito a ${sameAs}: $($decision.reason)" }
         $containers[$unit.Id] = [ordered]@{ name = $name; sameAs = $sameAs }

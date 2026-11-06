@@ -411,9 +411,13 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   tratto compare davvero nel file; una relazione con una persona o un sistema esterno che non è vera si
   toglie; ogni container prende il nome con cui lo si riconosce, unico nel sistema, e due container
   senza componenti e della stessa tecnologia che sono copie della stessa cosa si uniscono: la copia non
-  si scrive e le sue relazioni passano al container che resta. Una risposta respinta torna al modello
-  fino a `maxDrafts` volte; un sistema esterno ancora senza prova esce dal modello. La revisione si
-  ripete solo quando cambiano la struttura o la configurazione di produzione, e le sue decisioni si
+  si scrive e le sue relazioni passano al container che resta. Il nome di un'applicazione contiene la
+  parte del nome nel codice che resta togliendo il prefisso comune a tutte le applicazioni del sistema
+  (con `Contoso.Shop.AI.Api` e `Contoso.Shop.Bff.Web`, `AI.Api` e `Bff.Web`); una risorsa si chiama con
+  ciò che fa, mai con il suo nome tecnico. Una risposta respinta torna al modello fino a `maxDrafts`
+  volte; un sistema esterno ancora senza prova esce dal modello, un'applicazione ancora senza un nome
+  valido prende quella parte del nome nel codice. La revisione si ripete solo quando cambiano la
+  struttura, la configurazione di produzione o le istruzioni della revisione, e le sue decisioni si
   salvano con le prove in `model.text.json`.
 - **Il testo salvato e le correzioni.** Il testo accettato si salva in `model.text.json` nella cartella
   delle parti generate e, con `progressBranch`, sul ramo, un container alla volta: rilanciata, la
