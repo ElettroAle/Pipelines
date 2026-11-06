@@ -16,7 +16,7 @@
 # Infine il modello rivede tutto il sistema insieme: tiene un sistema esterno solo se la configurazione
 # di produzione (C4_REVIEW_EVIDENCE, file sotto SOURCES_DIRECTORY) lo prova con un tratto citato alla
 # lettera, che si verifica nel file; toglie le relazioni con persone e sistemi esterni che non sono vere;
-# da' a ogni container il nome con cui lo si riconosce e unisce i container che sono copie di uno stesso.
+# da' a ogni risorsa il nome di cio' che fa e unisce i container che sono copie di uno stesso.
 # La revisione si ripete solo quando cambiano la struttura o la configurazione di produzione.
 
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
@@ -96,11 +96,10 @@ frase:
   nella configurazione, non e' in produzione.
 - links: keep vale false se la relazione non e' vera. Una persona usa solo le applicazioni con cui
   interagisce direttamente, non quelle che un'altra applicazione del sistema chiama per lei.
-- containers: name e' il nome con cui chi lavora sulla piattaforma riconosce il container, unico nel
-  sistema; un nome gia' scelto nella revisione precedente resta, salvo che sia sbagliato. Un'applicazione
-  si chiama con la parte del suo nome nel codice che la distingue nel sistema, cioe' senza il prefisso
-  comune a tutte le applicazioni, anche se ha piu' di un progetto; una risorsa si chiama con cio' che fa
-  per il sistema, nella lingua del documento, mai con il nome tecnico della risorsa. sameAs e'
+- containers: un'applicazione ha gia' il suo nome, che viene dal codice: name lo ripete. Una risorsa
+  si chiama con cio' che fa per il sistema, nella lingua del documento, mai con il nome tecnico della
+  risorsa, con un nome unico nel sistema; un nome gia' scelto nella revisione precedente resta, salvo
+  che sia sbagliato. sameAs e'
   l'identificativo di un altro container della stessa tecnologia quando i due sono copie della stessa
   cosa (per esempio una risorsa per tenant), vuoto altrimenti; il container che resta ha sameAs vuoto.
 '@
@@ -314,6 +313,13 @@ function Get-Units($Fragments) {
             Basis         = Get-Basis $entry.Container $own
         }
     }
+    Set-ApplicationNames @($containers.Container)
+}
+
+# Il nome di un'applicazione si cambia dopo la base del suo testo: il testo non dipende dal nome.
+function Set-ApplicationNames($Containers) {
+    $names = Get-C4ApplicationNames $Containers
+    $Containers | Where-Object { $names.ContainsKey("$($_.id)") } | ForEach-Object { $_.name = $names["$($_.id)"] }
 }
 
 function Get-Basis($Container, $Relationships) {
@@ -842,7 +848,7 @@ function Get-ElementSourceFiles($Unit, [string]$ElementId) {
 
 function Format-ReviewContainers($Units, $Text) {
     return Format-List @($Units | ForEach-Object {
-            $name = if ($Text.review.containers.($_.Id).name) { $Text.review.containers.($_.Id).name } else { $_.Container.name }
+            $name = Get-ReviewedName $_ $Text.review.containers.($_.Id)
             $components = @($_.Container.components | Where-Object { $_ }).Count
             $kind = if (Test-Application $_) { 'applicazione' } else { 'risorsa' }
             "$($_.Id) = $name [$($_.Container.technology)] ($kind di $($_.Repository), nome nel codice $(Get-CodeName $_), $components componenti): $($Text.units.($_.Id).elements.($_.Id))"
@@ -933,35 +939,22 @@ function Get-NameKey([string]$Name) {
     return ($Name.ToLowerInvariant() -replace '[^\p{L}\p{Nd}]', '')
 }
 
-# Il nome di un'applicazione la distingue nel sistema solo se contiene la parte del nome nel codice che
-# resta togliendo il prefisso comune a tutte le applicazioni: il lettore di un repository toglie solo il
-# prefisso comune ai suoi progetti, e due repository possono avere un'applicazione Web ciascuno.
 function Get-NameRejection($Entry, $Units) {
     $unit = $Units | Where-Object Id -EQ $Entry.id | Select-Object -First 1
     $name = "$($Entry.name)"
-    if (-not $unit -or -not $name) { return $null }
-    if (-not (Test-Application $unit)) {
-        if ((Get-NameKey $name) -eq (Get-NameKey (Get-CodeName $unit))) { return "risorsa chiamata con il suo nome tecnico invece che con cio' che fa: $($Entry.id) = $name" }
-        return $null
-    }
-    $applications = @($Units | Where-Object { Test-Application $_ } | ForEach-Object { Get-CodeName $_ })
-    if ($applications.Count -lt 2) { return $null }
-    $distinctive = Remove-CommonPrefix (Get-CodeName $unit) $applications
-    if (-not $distinctive -or (Get-NameKey $name).Contains((Get-NameKey $distinctive))) { return $null }
-    return "nome di applicazione che non la distingue nel sistema: $($Entry.id) = $name, dal codice $(Get-CodeName $unit) deve contenere $distinctive"
+    if (-not $unit -or -not $name -or (Test-Application $unit)) { return $null }
+    if ((Get-NameKey $name) -ne (Get-NameKey (Get-CodeName $unit))) { return $null }
+    return "risorsa chiamata con il suo nome tecnico invece che con cio' che fa: $($Entry.id) = $name"
 }
 
-# Senza una risposta valida un'applicazione si chiama con la parte del nome nel codice che la distingue
-# nel sistema, una risorsa con il nome del lettore.
-function Get-DefaultName($Unit, $Units) {
-    $applications = @($Units | Where-Object { Test-Application $_ } | ForEach-Object { Get-CodeName $_ })
-    if (-not (Test-Application $Unit) -or $applications.Count -lt 2) { return $Unit.Container.name }
-    return Remove-CommonPrefix (Get-CodeName $Unit) $applications
+# Il nome di un'applicazione viene dal codice; la revisione nomina le risorse.
+function Get-ReviewedName($Unit, $Decision) {
+    if (-not (Test-Application $Unit) -and $Decision -and $Decision.name) { return "$($Decision.name)" }
+    return $Unit.Container.name
 }
 
 function Get-FinalName($Units, [hashtable]$Decided, [string]$Id) {
-    if ($Decided.ContainsKey($Id) -and $Decided[$Id].name) { return $Decided[$Id].name }
-    return ($Units | Where-Object Id -EQ $Id | Select-Object -First 1).Container.name
+    return Get-ReviewedName ($Units | Where-Object Id -EQ $Id | Select-Object -First 1) $Decided[$Id]
 }
 
 function Get-DuplicateNameRejections($Units, [hashtable]$Decided) {
@@ -1016,7 +1009,7 @@ function New-ReviewState($Units, $Text) {
 }
 
 # Una voce che resta senza risposta valida dopo l'ultimo giro: un sistema esterno senza prova esce dal
-# modello, una relazione resta, un container prende il nome di default e non si unisce.
+# modello, una relazione resta, un container tiene il suo nome e non si unisce.
 function Set-ReviewDecisions($State, $Units, $Text) {
     foreach ($key in $State.Expected) {
         if ($State.Decided.ContainsKey($key)) { continue }
@@ -1045,7 +1038,7 @@ function Set-ReviewDecisions($State, $Units, $Text) {
     $containers = [ordered]@{}
     foreach ($unit in ($Units | Sort-Object Id)) {
         $decision = $State.Decided["container:$($unit.Id)"]
-        $name = if ($decision -and $decision.name) { $decision.name } else { Get-DefaultName $unit $Units }
+        $name = Get-ReviewedName $unit $decision
         $sameAs = if ($decision) { "$($decision.sameAs)".Trim() } else { '' }
         if ($sameAs) { Add-Correction "revisione: container $($unit.Id) unito a ${sameAs}: $($decision.reason)" }
         $containers[$unit.Id] = [ordered]@{ name = $name; sameAs = $sameAs }

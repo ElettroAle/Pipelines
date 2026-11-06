@@ -10,7 +10,7 @@
 # descrizioni degli elementi, cio' che passa sulle relazioni e le relazioni con persone e sistemi
 # esterni. Persone e sistemi esterni stanno in context.dsl, da includere nel modello prima del sistema:
 # il testo e' uno solo, quindi ogni repository scrive lo stesso contesto.
-# La revisione del testo da' a ogni container il suo nome e unisce le copie: una copia non si scrive.
+# La revisione del testo da' a ogni risorsa il suo nome e unisce le copie: una copia non si scrive.
 # Un indirizzo che un container del repository chiama in locale si lega con i frammenti di tutto il
 # sistema: se non vi si avvia nessun container, o piu' d'uno, la generazione si ferma.
 # Le viste dei componenti dei container della parte stanno in GENERATED_DIRECTORY/views/<repository>.dsl:
@@ -108,6 +108,7 @@ function Get-KeptContainers($Containers) {
 }
 
 function Get-ContainerName($Container) {
+    if ($script:ApplicationNames.ContainsKey($Container.id)) { return $script:ApplicationNames[$Container.id] }
     if ($script:ModelText.Names.ContainsKey($Container.id)) { return $script:ModelText.Names[$Container.id] }
     return $Container.name
 }
@@ -227,6 +228,7 @@ function Get-GenerationIssues {
     if (-not @($fragments.Content.containers).Count) { return New-Issue $Repository 'nessuna applicazione riconosciuta' $SourceDirectory }
 
     $script:ModelText = Get-PartText $text $fragments
+    $script:ApplicationNames = Get-C4ApplicationNames @(Read-FragmentContents | ForEach-Object { @($_.containers) })
     $name = $Repository.ToLowerInvariant()
     $outputs = [ordered]@{ "containers/$name.dsl" = Format-Model $fragments; "views/$name.dsl" = Format-Views $fragments; 'context.dsl' = Format-Context }
     & $ModeActions[$Mode] $outputs

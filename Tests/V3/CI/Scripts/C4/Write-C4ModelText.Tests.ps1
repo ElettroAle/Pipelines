@@ -35,6 +35,7 @@ BeforeAll {
     $Api = 'contoso_shop_ai_api'
     $Worker = 'contoso_shop_ai_worker'
     $Language = 'contoso_shop_ai_language'
+    $Speech = 'contoso_shop_ai_speech'
     $Web = 'contoso_shop_bff_web'
     $Utils = 'contoso_shop_ai_api__contoso_shop_ai_utils'
     $UseCase = 'contoso_shop_ai_api__contoso_shop_ai_usecase_writtenconversations'
@@ -101,6 +102,16 @@ BeforeAll {
         $files['docs/STYLE.md'] = $Guide
         $files['docs/decisions/0012-canale-eventi-di-sessione.md'] = $Decision
         return $files
+    }
+
+    function New-ResourcesFragment([string[]]$Ids) {
+        return [ordered]@{
+            manifests     = @()
+            containers    = @($Ids | ForEach-Object { [ordered]@{ id = $_; name = 'lang-shop-prod'; codeName = 'lang-shop-prod'; sources = @(); technology = 'Language'; properties = [ordered]@{}; components = @() } })
+            relationships = @($Ids | ForEach-Object { [ordered]@{ source = $Api; target = $_ } })
+            addresses     = @()
+            calls         = @()
+        } | ConvertTo-Json -Depth 10
     }
 
     function New-DescribedSystem {
@@ -276,7 +287,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E manda i container degli altri repository del sistema" {
-            Get-UserMessage $apiRequest | Should -Match "ALTRI CONTAINER DEL SISTEMA:\n(- .+\n)*- $Web = Web \(Contoso\.Shop\.Bff\.Web\)"
+            Get-UserMessage $apiRequest | Should -Match "ALTRI CONTAINER DEL SISTEMA:\n(- .+\n)*- $Web = Bff\.Web \(Contoso\.Shop\.Bff\.Web\)"
         }
 
         It "E chiede una risposta con lo schema del testo" {
@@ -610,7 +621,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
             $message = Get-UserMessage $catalogueRequests[0]
             $message | Should -Match '- acquirente \[persona\] = Acquirente del negozio'
             $message | Should -Match '- cliente \[persona\] = Cliente'
-            $message | Should -Match "- $Web = Web \(Contoso\.Shop\.Bff\.Web\)"
+            $message | Should -Match "- $Web = Bff\.Web \(Contoso\.Shop\.Bff\.Web\)"
         }
 
         It "E il controllo chiede la risposta con lo schema del catalogo" {
@@ -1044,27 +1055,69 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
     }
 
-    Context "Scenario: la revisione da' a un container il nome con cui lo si riconosce" {
+    Context "Scenario: un'applicazione si chiama dal codice, non dalla revisione" {
         BeforeAll {
-            Reset-Stub @{ review = @(@{ names = @{ $Api = 'AI.Api' } }) }
+            Reset-Stub @{ review = @(@{ names = @{ $Api = 'Motore AI' } }) }
             $root = New-Workspace (New-DescribedEngine)
             $res = Invoke-Text $root
+            $requests = @(Get-ReviewRequests)
             Remove-Workspace $root
         }
 
-        It "Allora la parte scrive il container con quel nome" {
-            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Match "$Api = container `"AI\.Api`""
+        It "Allora la parte scrive l'applicazione con il nome nel codice senza il prefisso comune alle applicazioni" {
+            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Match "$Api = container `"Api`""
         }
 
         It "E il nome nel codice resta nella proprieta' del container" {
             $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Match '"Contoso\.Shop\.AI\.Api"'
         }
+
+        It "E la revisione non torna sul nome" {
+            $requests.Count | Should -Be 1
+        }
+    }
+
+    Context "Scenario: l'unica applicazione del sistema tiene il nome del codice" {
+        BeforeAll {
+            Reset-Stub @{ review = @(@{ names = @{ $Web = 'Motore' } }) }
+            $root = New-Workspace (New-DescribedSystem)
+            $res = Invoke-Text $root @($Bff)
+            Remove-Workspace $root
+        }
+
+        It "Allora la parte non usa il nome dato dalla revisione" {
+            $res.Generated['containers/contoso.shop.bff.web.dsl'] | Should -Match "$Web = container `"Web`""
+        }
+    }
+
+    Context "Scenario: le applicazioni di repository diversi si chiamano senza il prefisso comune a tutte" {
+        BeforeAll {
+            Reset-Stub @{ review = @(@{ names = @{ $Web = 'Web' } }) }
+            $root = New-Workspace (New-DescribedSystem)
+            $res = Invoke-Text $root @($Engine, $Bff)
+            $requests = @(Get-ReviewRequests)
+            Remove-Workspace $root
+        }
+
+        It "Allora l'applicazione del BFF si chiama con la parte che la distingue nel sistema" {
+            $res.Generated['containers/contoso.shop.bff.web.dsl'] | Should -Match "$Web = container `"Bff\.Web`""
+        }
+
+        It "E cosi' le applicazioni degli altri repository" {
+            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Match "$Api = container `"AI\.Api`""
+        }
+
+        It "E la revisione vede le applicazioni con quei nomi" {
+            Get-UserMessage $requests[0] | Should -Match "$Web = Bff\.Web \[[^\]]+\] \(applicazione di "
+        }
     }
 
     Context "Scenario: due nomi uguali si respingono" {
         BeforeAll {
-            Reset-Stub @{ review = @(@{ names = @{ $Api = 'Api'; $Worker = 'Api' } }, @{ names = @{ $Api = 'Api'; $Worker = 'Worker dei lavori' } }) }
-            $root = New-Workspace (New-DescribedEngine)
+            Reset-Stub @{ review = @(@{ names = @{ $Language = 'Lingua'; $Speech = 'Lingua' } }, @{ names = @{ $Language = 'Lingua'; $Speech = 'Voce' } }) }
+            $files = New-DescribedEngine
+            $files['fragments/contoso.shop.ai.resources.json'] = New-ResourcesFragment @($Language, $Speech)
+            $root = New-Workspace $files
             $res = Invoke-Text $root
             $requests = @(Get-ReviewRequests)
             Remove-Workspace $root
@@ -1075,42 +1128,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la parte usa i nomi del secondo giro" {
-            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Match "$Worker = container `"Worker dei lavori`""
-        }
-    }
-
-    Context "Scenario: il nome di un'applicazione non la distingue nel sistema" {
-        BeforeAll {
-            Reset-Stub @{ review = @(@{ names = @{ $Web = 'Web' } }, @{ names = @{ $Web = 'BFF.Web' } }) }
-            $root = New-Workspace (New-DescribedSystem)
-            $res = Invoke-Text $root @($Engine, $Bff)
-            $requests = @(Get-ReviewRequests)
-            Remove-Workspace $root
-        }
-
-        It "Allora il giro successivo nomina il nome e la parte del codice che deve contenere" {
-            Get-UserMessage $requests[1] | Should -Match "nome di applicazione che non la distingue nel sistema: $Web = Web, dal codice Contoso\.Shop\.Bff\.Web deve contenere Bff\.Web"
-        }
-
-        It "E la parte usa il nome che la distingue" {
-            $res.Generated['containers/contoso.shop.bff.web.dsl'] | Should -Match "$Web = container `"BFF\.Web`""
-        }
-    }
-
-    Context "Scenario: nessun giro da' a un'applicazione un nome che la distingue" {
-        BeforeAll {
-            Reset-Stub @{ review = @(@{ names = @{ $Web = 'Web' } }) }
-            $root = New-Workspace (New-DescribedSystem)
-            $res = Invoke-Text $root @($Engine, $Bff)
-            Remove-Workspace $root
-        }
-
-        It "Allora l'applicazione si chiama con il nome nel codice senza il prefisso comune a tutte le applicazioni" {
-            $res.Generated['containers/contoso.shop.bff.web.dsl'] | Should -Match "$Web = container `"Bff\.Web`""
-        }
-
-        It "E cosi' le applicazioni senza un nome dalla revisione" {
-            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Match "$Api = container `"AI\.Api`""
+            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Match "$Speech = container `"Voce`""
         }
     }
 
@@ -1118,13 +1136,7 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         BeforeAll {
             Reset-Stub @{ review = @(@{ names = @{ $Language = 'lang-shop-prod' } }, @{ names = @{ $Language = 'Riconoscimento della lingua' } }) }
             $files = New-DescribedEngine
-            $files['fragments/contoso.shop.ai.resources.json'] = [ordered]@{
-                manifests     = @()
-                containers    = @([ordered]@{ id = $Language; name = 'lang-shop-prod'; codeName = 'lang-shop-prod'; sources = @(); technology = 'Language'; properties = [ordered]@{}; components = @() })
-                relationships = @([ordered]@{ source = $Api; target = $Language })
-                addresses     = @()
-                calls         = @()
-            } | ConvertTo-Json -Depth 10
+            $files['fragments/contoso.shop.ai.resources.json'] = New-ResourcesFragment @($Language)
             $root = New-Workspace $files
             $res = Invoke-Text $root
             $requests = @(Get-ReviewRequests)
