@@ -7,7 +7,10 @@
 # deployment, componenti dei container con il tag delle applicazioni, nessun elemento con il tag
 # tecnico nelle viste di contesto, marcatori di vista nelle sezioni. Tag e marcatore seguono
 # DOCUMENT_LANGUAGE (document-language.yaml): in italiano Applicazione, Tecnico e
-# <!-- vista: chiave -->. La Structurizr CLI richiede Java 17.
+# <!-- vista: chiave -->. Ogni vista si disegna con PlantUML come nella wiki, nelle due direzioni e con
+# spazi stretti: il log da' la misura del disegno che si legge meglio, e un avviso, che non ferma la
+# verifica, segnala la vista che anche cosi' scende sotto la scala minima.
+# La Structurizr CLI e PlantUML richiedono Java 17 e i font di sistema.
 #
 # Riusato da:
 #   il consumer, nel parametro diagramSteps di CI/Agnostic/quality-arc42.yaml e
@@ -18,6 +21,9 @@
 #   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
 #   docsDirectory      → cartella delle sezioni del documento (default: quella dichiarata da
 #                        document-directories.yaml, altrimenti docs/architecture)
+#   pageWidth          → larghezza in pixel della pagina in cui una vista deve entrare (default: 1200)
+#   pageHeight         → altezza in pixel della pagina (default: 1600)
+#   minScale           → scala sotto cui una vista ridotta alla pagina e' segnalata come troppo piena (default: 0.6)
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -32,6 +38,18 @@ parameters:
     type: string
     default: ''
 
+  - name: pageWidth
+    type: number
+    default: 1200
+
+  - name: pageHeight
+    type: number
+    default: 1600
+
+  - name: minScale
+    type: string
+    default: '0.6'
+
   - name: templatesDirectory
     type: string
     default: '$(Pipeline.Workspace)/pipeline-templates'
@@ -41,6 +59,7 @@ parameters:
 steps:
   - ${{ if ne(parameters.mode, 'off') }}:
     - template: ensure-java.yaml
+    - template: ensure-fonts.yaml
 
   - task: PowerShell@2
     displayName: 'C4 model (${{ parameters.mode }})'
@@ -50,5 +69,8 @@ steps:
       pwsh: true
     env:
       GATE_MODE: ${{ parameters.mode }}
+      C4_PAGE_WIDTH: ${{ parameters.pageWidth }}
+      C4_PAGE_HEIGHT: ${{ parameters.pageHeight }}
+      C4_MIN_SCALE: ${{ parameters.minScale }}
       ${{ if ne(parameters.docsDirectory, '') }}:
         DOCS_DIRECTORY: ${{ parameters.docsDirectory }}

@@ -247,7 +247,7 @@ parametri di formato e senza condizioni sul formato.
 | `c4-read-angular18.yaml` | `Read-C4Angular18Model.ps1`, con `c4-read.yaml` | applicazione Angular 18 di un repository sorgente letta nel frammento del modello C4 | C4, Angular 18 |
 | `c4-describe.yaml` | `Write-C4ModelText.ps1` | testo del modello C4 di tutto il sistema dai frammenti di tutti i repository sorgente, scritto da un modello Azure OpenAI, con un solo catalogo di persone e sistemi esterni e una revisione di tutto il modello sulla configurazione di produzione | C4, Azure OpenAI |
 | `c4-generate.yaml` | `Export-C4CodeModel.ps1` | parte del modello C4 generata dai frammenti di un repository sorgente e dal testo del sistema, allineata al codice, e contesto con persone e sistemi esterni | C4 |
-| `c4-verify.yaml` | `Test-C4Model.ps1` | modello Structurizr valido e completo, testo del modello coerente con la parte generata, viste mostrate nelle sezioni | C4 |
+| `c4-verify.yaml` | `Test-C4Model.ps1` | modello Structurizr valido e completo, testo del modello coerente con la parte generata, viste mostrate nelle sezioni, misura della leggibilità di ogni vista | C4 |
 | `mermaid-verify.yaml` | `Test-MermaidDiagrams.ps1` | diagrammi Mermaid validi, nel documento e nelle decisioni | Mermaid |
 | `flows-verify.yaml` | `Test-DiagramFlows.ps1` | flussi fatti degli elementi del modello C4 e delle classi delle decisioni | C4, Mermaid |
 | `documentation-verify.yaml` | `Test-Documentation.ps1` | rimandi esistenti, soglie numeriche di leggibilità | nessun formato |
@@ -344,9 +344,15 @@ Modello C4 (`c4-verify.yaml`, `CI/Scripts/C4/Test-C4Model.ps1`):
   generato ha una descrizione, ogni relazione generata dice cosa passa, e fra due elementi generati
   nessuna relazione viene da fuori del codice, nemmeno per ripeterne una generata. Un riferimento a un elemento che nessuna
   parte contiene rende il modello non valido, e l'errore nomina l'identificativo.
-- **Requisiti.** Java 17 o successivo per la Structurizr CLI (versione fissata, SHA-256 verificato); lo
-  step lo prepara con `ensure-java.yaml`. Senza Java la verifica fallisce nominando il controllo non
-  eseguito.
+- Ogni vista si disegna come nella wiki (`CI/Scripts/C4/ViewImages.ps1`): dall'alto in basso e da sinistra
+  a destra, con gli spazi di default e stretti, e resta il disegno che si rimpicciolisce meno per entrare in
+  una pagina di `pageWidth` per `pageHeight` pixel (default 1200 per 1600). Il log ne dà misure,
+  disposizione e scala. Se anche quel disegno scende sotto `minScale` (default 0.6) un avviso segnala la
+  vista come troppo piena, senza fermare la verifica: una vista troppo piena si snellisce nel modello. La
+  direzione scritta nel modello è solo il punto di partenza.
+- **Requisiti.** Java 17 o successivo per la Structurizr CLI (versione fissata, SHA-256 verificato) e per
+  PlantUML, con i font di sistema; lo step li prepara con `ensure-java.yaml` e `ensure-fonts.yaml`. Senza
+  Java la verifica fallisce nominando il controllo non eseguito.
 
 Parte del modello C4 generata dal codice (`c4-read*.yaml`, `c4-describe.yaml` e `c4-generate.yaml`).
 Nessuna parte del modello si scrive a mano: la struttura nasce in modo deterministico dal codice, il
@@ -584,7 +590,8 @@ pubblicazione:
   della decisione non cambia, l'avviso viene dallo stato.
 - I marcatori di vista diventano le immagini PNG delle viste C4: la Structurizr CLI le esporta in
   C4-PlantUML e PlantUML (versione fissata, SHA-256 verificato) le disegna con le librerie C4 interne e il
-  layout smetana, senza Graphviz e senza rete. Le immagini stanno in `.attachments/<wikiRoot>/<vista>.png`.
+  layout smetana, senza Graphviz e senza rete, nella disposizione che si legge meglio, come nella verifica
+  del modello. Le immagini stanno in `.attachments/<wikiRoot>/<vista>.png`.
   Con la proprieta' `c4plantuml.tags` delle viste, colori e forme vengono dagli stili del modello, che
   allora dichiara anche quelli di `Person`, `Software System`, `Container` e `Component`.
 - I blocchi ` ```mermaid ` diventano la sintassi della wiki `::: mermaid`. I link alle sezioni e alle

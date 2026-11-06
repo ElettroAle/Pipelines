@@ -4,12 +4,14 @@
 # del documento: modello valido, viste di contesto, dei container e di deployment, una vista dei
 # componenti per ogni container con il tag delle applicazioni, ogni vista mostrata in una sezione
 # con il marcatore di vista, ogni marcatore rivolto a una vista esistente e nessun elemento con il tag
-# tecnico nelle viste di contesto. Tag e marcatore seguono la lingua del documento: in italiano
+# tecnico nelle viste di contesto. Di ogni vista si scrive la misura del disegno che si legge meglio
+# (ViewImages.ps1), con un avviso se resta troppo piena. Tag e marcatore seguono la lingua del documento: in italiano
 # Applicazione, Tecnico e <!-- vista: chiave -->.
 
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
 . "$PSScriptRoot/../Common/MarkdownText.ps1"
 . "$PSScriptRoot/Structurizr.ps1"
+. "$PSScriptRoot/ViewImages.ps1"
 
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
 $WorkspaceDsl = Join-Path $docsDirectory 'c4/workspace.dsl'
@@ -101,6 +103,18 @@ function Test-ViewMarkers([string[]]$ViewKeys, $Sections, $Workspace) {
     }
 }
 
+# La leggibilita' non ferma la verifica: il disegno scelto e' gia' il piu' leggibile, e una vista che
+# resta troppo piena si segnala perche' si snellisca il modello.
+function Write-ViewMeasures([string]$Workspace) {
+    try { $images = ConvertTo-ViewImages (Export-StructurizrC4PlantUml $Workspace) (Get-StructurizrJava) }
+    catch { Write-Host "##vso[task.logissue type=warning]${ModelScope}: leggibilita' non misurata ($($_.Exception.Message))"; return }
+    foreach ($key in ($images.Keys | Sort-Object)) {
+        $measure = "vista ${key}: $(Format-ViewMeasure $images[$key])"
+        if (Test-ViewReadable $images[$key]) { Write-Host $measure }
+        else { Write-Host "##vso[task.logissue type=warning]${ModelScope}: $measure, troppo piena per leggersi" }
+    }
+}
+
 function Get-ModelIssues {
     if (-not (Test-Path $WorkspaceDsl -PathType Leaf)) { return New-Issue $ModelScope 'modello mancante' $WorkspaceDsl }
     try { $export = Export-StructurizrWorkspace (Resolve-Path $WorkspaceDsl).Path }
@@ -118,6 +132,7 @@ function Get-ModelIssues {
     Test-RelationshipsOnlyFromCode $elements
     Test-ViewsShown $viewKeys $sections $export.Workspace
     Test-ViewMarkers $viewKeys $sections $export.Workspace
+    Write-ViewMeasures (Resolve-Path $WorkspaceDsl).Path
 }
 
 Invoke-Verification { Get-ModelIssues } "Modello C4 in $WorkspaceDsl valido" 'Verifica del modello C4 disattivata'
