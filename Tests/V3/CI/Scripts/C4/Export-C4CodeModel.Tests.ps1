@@ -125,6 +125,23 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         }
     }
 
+    Context "Scenario: un'applicazione si chiama senza il prefisso comune a tutte le applicazioni del sistema" {
+        BeforeAll {
+            $client = Invoke-C4Reader (New-ClientRepository) 'Contoso.Shop.Client.Web' 'angular18'
+            $fragments = @{ 'contoso.shop.client.web.angular18.json' = @($client.Fragments.Values)[0] }
+            $res = Invoke-C4Generation (New-BffRepository) 'Contoso.Shop.Bff.Web' @('dotnet10') -Fragments $fragments
+            $dsl = $res.Generated['containers/contoso.shop.bff.web.dsl']
+        }
+
+        It "Allora l'applicazione del BFF si chiama Bff.Web" {
+            Get-ElementLine $dsl 'container' 'Bff.Web' | Should -Not -BeNullOrEmpty -Because $dsl
+        }
+
+        It "E i suoi componenti tengono il nome senza il prefisso comune del repository" {
+            Get-ElementLine $dsl 'component' 'Web.BusinessLogic' | Should -Not -BeNullOrEmpty -Because $dsl
+        }
+    }
+
     Context "Schema dello scenario: elementi nati dall'applicazione Angular" {
         BeforeAll {
             $res = Invoke-Generation (New-ClientRepository) 'Contoso.Shop.Client.Web'

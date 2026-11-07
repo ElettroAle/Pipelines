@@ -409,11 +409,12 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   produzione. Un sistema esterno resta solo se il modello cita un tratto di un file della configurazione
   di produzione (`reviewEvidence`, percorsi `<repository>/<percorso>` sotto `sourcesDirectory`) e il
   tratto compare davvero nel file; una relazione con una persona o un sistema esterno che non è vera si
-  toglie; ogni container prende il nome con cui lo si riconosce, unico nel sistema, e due container
-  senza componenti e della stessa tecnologia che sono copie della stessa cosa si uniscono: la copia non
-  si scrive e le sue relazioni passano al container che resta. Una risposta respinta torna al modello
-  fino a `maxDrafts` volte; un sistema esterno ancora senza prova esce dal modello. La revisione si
-  ripete solo quando cambiano la struttura o la configurazione di produzione, e le sue decisioni si
+  toglie; ogni risorsa prende un nome unico nel sistema che dice ciò che fa, mai il suo nome tecnico, e
+  due container senza componenti e della stessa tecnologia che sono copie della stessa cosa si uniscono:
+  la copia non si scrive e le sue relazioni passano al container che resta. Il nome di un'applicazione
+  non lo dà la revisione (vedi **Nomi**). Una risposta respinta torna al modello fino a `maxDrafts`
+  volte; un sistema esterno ancora senza prova esce dal modello. La revisione si ripete solo quando
+  cambiano la struttura, la configurazione di produzione o le istruzioni della revisione, e le sue decisioni si
   salvano con le prove in `model.text.json`.
 - **Il testo salvato e le correzioni.** Il testo accettato si salva in `model.text.json` nella cartella
   delle parti generate e, con `progressBranch`, sul ramo, un container alla volta: rilanciata, la
@@ -479,7 +480,9 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   proxy che non è un file JSON leggibile, o un target che non è un indirizzo, ferma la lettura.
 - **Nomi.** Il nome nel codice senza il prefisso comune ai progetti del repository, a segmenti interi e
   più corto di ogni nome. L'identificativo si ricava dal nome completo, così un repository nomina gli
-  elementi degli altri senza leggerli.
+  elementi degli altri senza leggerli. Nel modello di tutto il sistema un'applicazione si chiama con il
+  nome nel codice senza il prefisso comune a tutte le applicazioni (con `Contoso.Shop.AI.Api` e
+  `Contoso.Shop.Bff.Web`, `AI.Api` e `Bff.Web`): il lettore vede un solo repository.
 - Con `generationMode: check` il file del documento si confronta con quello che la generazione produce:
   una differenza nomina il file.
 

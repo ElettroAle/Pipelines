@@ -43,6 +43,17 @@ function Remove-CommonPrefix([string]$Name, [string[]]$Names) {
     return (($Name -split '\.') | Select-Object -Skip (Get-CommonPrefixLength $Names)) -join '.'
 }
 
+# Un lettore vede un solo repository e toglie il prefisso comune ai suoi progetti: nel sistema
+# un'applicazione si chiama con il nome nel codice senza il prefisso comune a tutte le applicazioni.
+function Get-C4ApplicationNames($Containers) {
+    $names = @{}
+    $applications = @($Containers | Where-Object { $_ -and $_.codeName -and @($_.tags) -contains $DocumentLanguage.ApplicationTag })
+    if ($applications.Count -lt 2) { return $names }
+    $codeNames = @($applications | ForEach-Object { "$($_.codeName)" })
+    $applications | ForEach-Object { $names["$($_.id)"] = Remove-CommonPrefix "$($_.codeName)" $codeNames }
+    return $names
+}
+
 function Get-SourceIssues {
     if (-not $Repository) { return New-Issue 'generazione del modello C4' 'repository sorgente non dichiarato' 'SOURCE_REPOSITORY' }
     if (-not (Test-Path $SourceDirectory -PathType Container)) { return New-Issue $Repository 'repository sorgente assente' $SourceDirectory }
