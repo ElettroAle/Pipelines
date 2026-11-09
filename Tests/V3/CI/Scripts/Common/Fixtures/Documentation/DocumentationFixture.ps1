@@ -121,10 +121,10 @@ Il BFF chiede all'API del Motore di aprire una sessione. L'API del Motore rispon
 
 ```mermaid
 sequenceDiagram
-    participant B as BFF
-    participant M as API del Motore
-    B->>M: apre la sessione
-    M-->>B: codice della sessione
+    participant bff as BFF
+    participant motore as API del Motore
+    bff->>motore: apre la sessione
+    motore-->>bff: codice della sessione
 ```
 '@
     $docs['docs/architecture/07_deployment_view.md'] = New-Section 'Deployment View' 'dove girano le applicazioni?' @'
