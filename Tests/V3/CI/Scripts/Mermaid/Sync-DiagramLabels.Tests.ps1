@@ -53,7 +53,7 @@ BeforeAll {
             & $Change $docs
             Write-Docs $docs $root
             Invoke-Git add -A | Out-Null
-            Invoke-Git commit -q -m change | Out-Null
+            Invoke-Git commit -q --allow-empty -m change | Out-Null
             Invoke-Git push -q origin feature | Out-Null
             Invoke-Git fetch -q origin | Out-Null
             Invoke-Git checkout -q --detach origin/main | Out-Null
