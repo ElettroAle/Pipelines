@@ -7,7 +7,8 @@
 .DESCRIPTION
     Ogni scenario parte dal documento valido della fixture condivisa, con un flusso fatto di un
     diagramma a livello dei container e di un dettaglio con i componenti nei riquadri dei loro
-    container, e una decisione con la struttura e il flusso nel codice, e vi introduce un solo
+    container, i partecipanti con l'identificativo del modello C4 come alias e il suo nome come
+    etichetta, e una decisione con la struttura e il flusso nel codice, e vi introduce un solo
     difetto. Lo script gira come in pipeline: richiede Java 17 o successivo per la Structurizr CLI e
     Node.js per il parser Mermaid, installati in cache condivise da tutti gli scenari.
 #>
@@ -21,16 +22,16 @@ BeforeAll {
     $RuntimeView = 'docs/architecture/06_runtime_view.md'
     $WorkspaceDsl = 'docs/architecture/c4/workspace.dsl'
     $Decision = 'docs/decisions/0002-sessioni.md'
-    $ContainerDiagram = "    participant B as BFF`n    participant M as API del Motore`n    B->>M: apre la sessione`n    M-->>B: codice della sessione"
+    $ContainerDiagram = "    participant bff as BFF`n    participant motore as API del Motore`n    bff->>motore: apre la sessione`n    motore-->>bff: codice della sessione"
     $DetailDiagram = @'
     box BFF
-        participant P as Proxy
+        participant proxy as Proxy
     end
     box API del Motore
-        participant S as Sessioni
+        participant sessioni as Sessioni
     end
-    P->>S: apre la sessione
-    S-->>P: codice della sessione
+    proxy->>sessioni: apre la sessione
+    sessioni-->>proxy: codice della sessione
 '@ -replace "`r`n", "`n"
 
     function New-FlowDocs {
@@ -107,13 +108,15 @@ Describe "Funzionalità: Flussi coerenti con la struttura" {
     }
 
     Context "Schema dello scenario: flusso del documento che la struttura non dichiara (<Difetto>)" -ForEach @(
-        @{ Difetto = 'un partecipante che il modello C4 non dichiara'; Old = 'participant S as Sessioni'; New = 'participant S as Modello'; Issue = '^Runtime View: partecipante fuori dal modello C4 \(06_runtime_view\.md:\d+ Modello\)$' }
-        @{ Difetto = 'un componente fuori da ogni riquadro'; Old = "    box BFF`n        participant P as Proxy`n    end"; New = '    participant P as Proxy'; Issue = '^Runtime View: componente fuori da ogni riquadro \(06_runtime_view\.md:\d+ Proxy\)$' }
+        @{ Difetto = 'un partecipante che il modello C4 non dichiara'; Old = '        participant sessioni as Sessioni'; New = "        participant sessioni as Sessioni`n        participant modello as Modello"; Issue = '^Runtime View: partecipante fuori dal modello C4 \(06_runtime_view\.md:\d+ modello Modello\)$' }
+        @{ Difetto = 'un partecipante scritto per nome'; Old = "participant bff as BFF`n    participant motore as API del Motore`n    bff->>motore"; New = "participant B as BFF`n    participant motore as API del Motore`n    B->>motore"; Issue = '^Runtime View: partecipante fuori dal modello C4 \(06_runtime_view\.md:\d+ B BFF\)$' }
+        @{ Difetto = "un'etichetta diversa dal nome nel modello C4"; Old = 'participant sessioni as Sessioni'; New = 'participant sessioni as Sessioni del Motore'; Issue = '^Runtime View: etichetta diversa dal nome nel modello C4 \(06_runtime_view\.md:\d+ sessioni Sessioni del Motore, nel modello Sessioni\)$' }
+        @{ Difetto = 'un componente fuori da ogni riquadro'; Old = "    box BFF`n        participant proxy as Proxy`n    end"; New = '    participant proxy as Proxy'; Issue = '^Runtime View: componente fuori da ogni riquadro \(06_runtime_view\.md:\d+ Proxy\)$' }
         @{ Difetto = 'un componente nel riquadro di un altro container'; Old = 'box API del Motore'; New = 'box Worker'; Issue = '^Runtime View: componente fuori dal riquadro del suo container \(06_runtime_view\.md:\d+ Sessioni nel riquadro Worker\)$' }
         @{ Difetto = 'un riquadro che non è un container del modello C4'; Old = 'box API del Motore'; New = 'box Motore'; Issue = '^Runtime View: riquadro fuori dai container del modello C4 \(06_runtime_view\.md:\d+ Motore\)$' }
-        @{ Difetto = 'un container intero e i suoi componenti'; Old = '    P->>S: apre la sessione'; New = "    participant B as BFF`n    P->>S: apre la sessione"; Issue = '^Runtime View: container intero e con i suoi componenti \(06_runtime_view\.md:\d+ BFF\)$' }
-        @{ Difetto = 'una chiamata fra container senza relazione nel modello C4'; Old = 'participant M as API del Motore'; New = 'participant M as Worker'; Issue = '^Runtime View: chiamata senza relazione nel modello C4 \(06_runtime_view\.md:\d+ BFF -> Worker\)$' }
-        @{ Difetto = 'una chiamata fra componenti senza relazione nel modello C4'; Old = "    box API del Motore`n        participant S as Sessioni"; New = "    box Worker`n        participant S as Coda"; Issue = '^Runtime View: chiamata senza relazione nel modello C4 \(06_runtime_view\.md:\d+ Proxy -> Coda\)$' }
+        @{ Difetto = 'un container intero e i suoi componenti'; Old = '    proxy->>sessioni: apre la sessione'; New = "    participant bff as BFF`n    proxy->>sessioni: apre la sessione"; Issue = '^Runtime View: container intero e con i suoi componenti \(06_runtime_view\.md:\d+ BFF\)$' }
+        @{ Difetto = 'una chiamata fra container senza relazione nel modello C4'; Old = '    bff->>motore: apre la sessione'; New = "    participant worker as Worker`n    bff->>motore: apre la sessione`n    bff->>worker: accoda"; Issue = '^Runtime View: chiamata senza relazione nel modello C4 \(06_runtime_view\.md:\d+ BFF -> Worker\)$' }
+        @{ Difetto = 'una chiamata fra componenti senza relazione nel modello C4'; Old = '    proxy->>sessioni: apre la sessione'; New = "    proxy->>sessioni: apre la sessione`n    sessioni->>proxy: richiama"; Issue = '^Runtime View: chiamata senza relazione nel modello C4 \(06_runtime_view\.md:\d+ Sessioni -> Proxy\)$' }
     ) {
         BeforeAll {
             $docs = New-FlowDocs
@@ -150,7 +153,9 @@ Describe "Funzionalità: Flussi coerenti con la struttura" {
         BeforeAll {
             $docs = New-FlowDocs
             Edit-Docs $docs $WorkspaceDsl '        proxy -> sessioni "apre la sessione"' '        proxy -> motore "apre la sessione"'
-            Edit-Docs $docs $RuntimeView "    box API del Motore`n        participant S as Sessioni`n    end" '    participant S as API del Motore'
+            Edit-Docs $docs $RuntimeView "    box API del Motore`n        participant sessioni as Sessioni`n    end" '    participant motore as API del Motore'
+            Edit-Docs $docs $RuntimeView 'proxy->>sessioni' 'proxy->>motore'
+            Edit-Docs $docs $RuntimeView 'sessioni-->>proxy' 'motore-->>proxy'
             $res = Invoke-FlowCheck $docs
         }
 
@@ -163,7 +168,7 @@ Describe "Funzionalità: Flussi coerenti con la struttura" {
     Context "Scenario: risposte e chiamate a sé non si controllano" {
         BeforeAll {
             $docs = New-FlowDocs
-            Edit-Docs $docs $RuntimeView '    S-->>P: codice della sessione' "    S->>S: crea il codice`n    S-->>P: codice della sessione"
+            Edit-Docs $docs $RuntimeView '    sessioni-->>proxy: codice della sessione' "    sessioni->>sessioni: crea il codice`n    sessioni-->>proxy: codice della sessione"
             $res = Invoke-FlowCheck $docs
         }
 
@@ -225,22 +230,22 @@ Describe "Test-DiagramFlows — partecipanti, riquadri, decisioni e strumenti" {
         $docs = New-FlowDocs
         Edit-Docs $docs $WorkspaceDsl "                coda = component `"Coda`"`n            }" "                coda = component `"Coda`"`n            }`n            archivio = container `"Archivio`" `"Dati`" `"Cosmos DB`" `"Archivio`""
         Edit-Docs $docs $WorkspaceDsl '        utente -> client "usa"' "        utente -> client `"usa`"`n        motore -> archivio `"salva`""
-        Edit-Docs $docs $RuntimeView '    participant B as BFF' "    actor U as Utente`n    participant C as Client`n    participant A as Archivio`n    participant B as BFF"
-        Edit-Docs $docs $RuntimeView '    M-->>B: codice della sessione' "    M->>A: salva`n    U->>C: usa`n    M-->>B: codice della sessione"
+        Edit-Docs $docs $RuntimeView '    participant bff as BFF' "    actor utente as Utente`n    participant client as Client`n    participant archivio as Archivio`n    participant bff as BFF"
+        Edit-Docs $docs $RuntimeView '    motore-->>bff: codice della sessione' "    motore->>archivio: salva`n    utente->>client: usa`n    motore-->>bff: codice della sessione"
         $res = Invoke-FlowCheck $docs
         Get-Issues $res.Output | Should -BeNullOrEmpty -Because ($res.Output)
         $res.ExitCode | Should -Be 0
     }
 
-    It "Due istanze dello stesso componente si riconoscono per nome" {
+    It "Due istanze dello stesso componente si riconoscono dall'identificativo con il numero dell'istanza" {
         $docs = New-FlowDocs
-        Edit-Docs $docs $RuntimeView '        participant P as Proxy' "        participant P as Proxy`n        participant P2 as Proxy"
-        Edit-Docs $docs $RuntimeView '    S-->>P: codice della sessione' "    S-->>P: codice della sessione`n    P2->>S: apre un'altra sessione"
+        Edit-Docs $docs $RuntimeView '        participant proxy as Proxy' "        participant proxy as Proxy`n        participant proxy~2 as Proxy"
+        Edit-Docs $docs $RuntimeView '    sessioni-->>proxy: codice della sessione' "    sessioni-->>proxy: codice della sessione`n    proxy~2->>sessioni: apre un'altra sessione"
         $res = Invoke-FlowCheck $docs
         Get-Issues $res.Output | Should -BeNullOrEmpty -Because ($res.Output)
     }
 
-    It "Un componente con il nome di un componente di un altro container si riconosce dal riquadro" {
+    It "Un componente con il nome di un componente di un altro container si riconosce dall'identificativo" {
         $docs = New-FlowDocs
         Edit-Docs $docs $WorkspaceDsl '                coda = component "Coda"' "                coda = component `"Coda`"`n                sessioniWorker = component `"Sessioni`""
         $res = Invoke-FlowCheck $docs
@@ -248,12 +253,12 @@ Describe "Test-DiagramFlows — partecipanti, riquadri, decisioni e strumenti" {
         $res.ExitCode | Should -Be 0
     }
 
-    It "Un nome che il modello C4 dà a due elementi fuori dai riquadri fallisce come ambiguo" {
+    It "Due elementi con lo stesso nome si distinguono per identificativo" {
         $docs = New-FlowDocs
         Edit-Docs $docs $WorkspaceDsl '        utente = person "Utente"' "        utente = person `"Utente`"`n        omonimo = person `"BFF`""
         $res = Invoke-FlowCheck $docs
-        $res.ExitCode | Should -Be 1
-        Get-Issue $res '^Runtime View: partecipante ambiguo nel modello C4 \(06_runtime_view\.md:\d+ BFF\)$' | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        Get-Issues $res.Output | Should -BeNullOrEmpty -Because ($res.Output)
+        $res.ExitCode | Should -Be 0
     }
 
     It "Un diagramma senza un titolo proprio appartiene al flusso del titolo che lo precede" {
@@ -299,7 +304,7 @@ Describe "Test-DiagramFlows — partecipanti, riquadri, decisioni e strumenti" {
 
     It "Lascia alla verifica dei diagrammi Mermaid un diagramma non valido" {
         $docs = New-FlowDocs
-        Edit-Docs $docs $RuntimeView 'P->>S: apre la sessione' 'P->>: apre la sessione'
+        Edit-Docs $docs $RuntimeView 'proxy->>sessioni: apre la sessione' 'proxy->>: apre la sessione'
         $res = Invoke-FlowCheck $docs
         Get-Issues $res.Output | Should -BeNullOrEmpty -Because ($res.Output)
     }
@@ -312,7 +317,7 @@ Describe "Test-DiagramFlows — partecipanti, riquadri, decisioni e strumenti" {
 
     It "In modalità off non verifica" {
         $docs = New-FlowDocs
-        Edit-Docs $docs $RuntimeView 'participant S as Sessioni' 'participant S as Modello'
+        Edit-Docs $docs $RuntimeView 'participant sessioni as Sessioni' 'participant sessioni as Modello'
         $res = Invoke-FlowCheck $docs @{ GATE_MODE = 'off' }
         $res.ExitCode | Should -Be 0
         Get-Issues $res.Output | Should -BeNullOrEmpty

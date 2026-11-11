@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Flussi coerenti con la struttura che lo stesso documento dichiara. Ogni flusso delle sezioni ha un
-# diagramma di sequenza a livello dei container; nei dettagli un componente sta nel riquadro del suo
-# container, e ogni chiamata fra due partecipanti diversi e' una relazione del modello C4. Una
+# diagramma di sequenza a livello dei container; un partecipante e' un elemento del modello C4 per il
+# suo identificativo e ne porta il nome (DiagramModel.ps1), nei dettagli un componente sta nel riquadro
+# del suo container, e ogni chiamata fra due elementi diversi e' una relazione del modello C4. Una
 # decisione con la struttura nel codice ha anche il flusso nel codice, con un diagramma di sequenza
 # fatto delle classi del suo diagramma delle classi.
 
@@ -10,6 +11,7 @@
 . "$PSScriptRoot/../Common/MarkdownText.ps1"
 . "$PSScriptRoot/../C4/Structurizr.ps1"
 . "$PSScriptRoot/Mermaid.ps1"
+. "$PSScriptRoot/DiagramModel.ps1"
 
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
 $decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }
@@ -49,94 +51,55 @@ function Get-SequenceDiagrams([object[]]$Diagrams) {
     return @($Diagrams | Where-Object { $_.Parsed.type -eq 'sequence' })
 }
 
-function New-ModelIndex($Workspace) {
-    $byName = @{}
-    $containers = @{}
-    $componentNames = [System.Collections.Generic.HashSet[string]]::new()
-    $relations = [System.Collections.Generic.HashSet[string]]::new()
-    $addElement = {
-        param($Element)
-        if (-not $byName.ContainsKey($Element.name)) { $byName[$Element.name] = @() }
-        $byName[$Element.name] += $Element.id
-    }
-    $elements = [System.Collections.Generic.List[object]]::new()
-    foreach ($person in @($Workspace.model.people | Where-Object { $_ })) { & $addElement $person; $elements.Add($person) }
-    foreach ($system in @($Workspace.model.softwareSystems | Where-Object { $_ })) {
-        & $addElement $system; $elements.Add($system)
-        foreach ($container in @($system.containers | Where-Object { $_ })) {
-            & $addElement $container; $elements.Add($container)
-            $components = @{}
-            foreach ($component in @($container.components | Where-Object { $_ })) {
-                $components[$component.name] = $component.id
-                [void]$componentNames.Add($component.name)
-                $elements.Add($component)
-            }
-            $containers[$container.id] = $components
-        }
-    }
-    foreach ($relation in @($elements | ForEach-Object { @($_.relationships) } | Where-Object { $_ })) { [void]$relations.Add("$($relation.sourceId)>$($relation.destinationId)") }
-    return [pscustomobject]@{ ByName = $byName; Containers = $containers; ComponentNames = $componentNames; Relations = $relations }
-}
-
-function Get-BoxComponents([string]$Box, $Model) {
-    $ids = @($Model.ByName[$Box] | Where-Object { $_ -and $Model.Containers.ContainsKey($_) })
-    if ($ids.Count -eq 1) { return $Model.Containers[$ids[0]] }
-}
-
-function Resolve-Participant([string]$Name, [string]$Box, $Model) {
-    if ($Box) {
-        $components = Get-BoxComponents $Box $Model
-        if ($components) { return $components[$Name] }
-        return
-    }
-    $ids = @($Model.ByName[$Name])
-    if ($ids.Count -eq 1) { return $ids[0] }
-}
-
 function Get-Placements($Diagram) {
-    return @($Diagram.Parsed.placements | Where-Object { $_ } | Sort-Object name, box -Unique)
+    return @($Diagram.Parsed.placements | Where-Object { $_ })
+}
+
+function Get-Location($Diagram) {
+    return "$($Diagram.Section.File.Name):$($Diagram.Line)"
 }
 
 function Test-Boxes($Diagram, $Model, [string]$Location) {
     foreach ($box in @(Get-Placements $Diagram | Where-Object box | ForEach-Object box | Select-Object -Unique)) {
-        if (-not (Get-BoxComponents $box $Model)) { New-Issue $Diagram.Section.Title 'riquadro fuori dai container del modello C4' "$Location $box" }
+        if (-not (Get-ContainerNamed $box $Model)) { New-Issue $Diagram.Section.Title 'riquadro fuori dai container del modello C4' "$Location $box" }
     }
 }
 
 function Test-Participant($Placement, $Diagram, $Model, [string]$Location) {
-    $known = $Model.ByName.ContainsKey($Placement.name) -or $Model.ComponentNames.Contains($Placement.name)
-    if (-not $known) { return New-Issue $Diagram.Section.Title 'partecipante fuori dal modello C4' "$Location $($Placement.name)" }
-    if ($Placement.box) {
-        $components = Get-BoxComponents $Placement.box $Model
-        if ($components -and -not $components.ContainsKey($Placement.name)) { New-Issue $Diagram.Section.Title 'componente fuori dal riquadro del suo container' "$Location $($Placement.name) nel riquadro $($Placement.box)" }
+    $id = Resolve-ElementId $Placement.id $Model
+    if (-not $id) { return New-Issue $Diagram.Section.Title 'partecipante fuori dal modello C4' "$Location $(@($Placement.id, $Placement.name) | Select-Object -Unique)" }
+    $element = $Model.Elements[$id]
+    if ($Placement.name -cne $element.Name) { New-Issue $Diagram.Section.Title 'etichetta diversa dal nome nel modello C4' "$Location $($Placement.id) $($Placement.name), nel modello $($element.Name)" }
+    if ($element.Kind -ne 'component') {
+        if ($Placement.box) { New-Issue $Diagram.Section.Title 'componente fuori dal riquadro del suo container' "$Location $($Placement.name) nel riquadro $($Placement.box)" }
         return
     }
-    $ids = @($Model.ByName[$Placement.name])
-    if (-not $ids) { New-Issue $Diagram.Section.Title 'componente fuori da ogni riquadro' "$Location $($Placement.name)" }
-    elseif ($ids.Count -gt 1) { New-Issue $Diagram.Section.Title 'partecipante ambiguo nel modello C4' "$Location $($Placement.name)" }
+    if (-not $Placement.box) { return New-Issue $Diagram.Section.Title 'componente fuori da ogni riquadro' "$Location $($Placement.name)" }
+    $box = Get-ContainerNamed $Placement.box $Model
+    if ($box -and $box -cne $element.Container) { New-Issue $Diagram.Section.Title 'componente fuori dal riquadro del suo container' "$Location $($Placement.name) nel riquadro $($Placement.box)" }
 }
 
-function Test-WholeAndDecomposed($Diagram, [string]$Location) {
-    $placements = Get-Placements $Diagram
-    $boxes = @($placements | Where-Object box | ForEach-Object box | Select-Object -Unique)
-    @($placements | Where-Object { -not $_.box -and $boxes -contains $_.name } | ForEach-Object name | Select-Object -Unique) |
-        ForEach-Object { New-Issue $Diagram.Section.Title 'container intero e con i suoi componenti' "$Location $_" }
+function Test-WholeAndDecomposed($Diagram, $Model, [string]$Location) {
+    $ids = @(Get-Placements $Diagram | ForEach-Object { Resolve-ElementId $_.id $Model } | Where-Object { $_ })
+    $decomposed = @($ids | ForEach-Object { $Model.Elements[$_].Container } | Where-Object { $_ } | Select-Object -Unique)
+    @($ids | Where-Object { $decomposed -ccontains $_ } | Select-Object -Unique) |
+        ForEach-Object { New-Issue $Diagram.Section.Title 'container intero e con i suoi componenti' "$Location $($Model.Elements[$_].Name)" }
 }
 
 function Test-Participants($Diagram, $Model) {
-    $location = "$($Diagram.Section.File.Name):$($Diagram.Line)"
+    $location = Get-Location $Diagram
     Test-Boxes $Diagram $Model $location
     foreach ($placement in (Get-Placements $Diagram)) { Test-Participant $placement $Diagram $Model $location }
-    Test-WholeAndDecomposed $Diagram $location
+    Test-WholeAndDecomposed $Diagram $Model $location
 }
 
 function Test-Calls($Diagram, $Model) {
-    $location = "$($Diagram.Section.File.Name):$($Diagram.Line)"
+    $location = Get-Location $Diagram
     foreach ($call in @($Diagram.Parsed.calls)) {
-        if (-not $call -or ($call.from -eq $call.to -and $call.fromBox -eq $call.toBox)) { continue }
-        $source = Resolve-Participant $call.from $call.fromBox $Model
-        $destination = Resolve-Participant $call.to $call.toBox $Model
-        if (-not $source -or -not $destination) { continue }
+        if (-not $call) { continue }
+        $source = Resolve-ElementId $call.fromId $Model
+        $destination = Resolve-ElementId $call.toId $Model
+        if (-not $source -or -not $destination -or $source -ceq $destination) { continue }
         if (-not $Model.Relations.Contains("$source>$destination")) { New-Issue $Diagram.Section.Title 'chiamata senza relazione nel modello C4' "$location $($call.from) -> $($call.to)" }
     }
 }

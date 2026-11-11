@@ -7,7 +7,12 @@
 # (c4/workspace.dsl), nei dettagli ogni componente sta nel riquadro del suo container e ogni
 # chiamata e' una relazione del modello; una decisione con la parte della struttura nel codice ha la
 # parte del flusso nel codice, con un diagramma di sequenza fatto delle classi del suo diagramma delle
-# classi. I nomi delle parti seguono DOCUMENT_LANGUAGE (document-language.yaml).
+# classi. I nomi delle parti seguono DOCUMENT_LANGUAGE (document-language.yaml). Un partecipante e'
+# un elemento del modello per il suo identificativo, l'alias, e ne porta il nome come etichetta.
+# In modalita' fix, in una PR, i diagrammi si allineano prima al modello
+# (V3/CI/Scripts/Mermaid/Sync-DiagramLabels.ps1): le righe cambiate tornano sul ramo della PR con un
+# commit dell'identita' della build, che deve poter contribuire al repository, e la verifica riparte
+# dalla build di quel commit.
 # Richiede Java 17 per la Structurizr CLI e Node.js per il parser Mermaid.
 #
 # Riusato da:
@@ -16,7 +21,8 @@
 #
 # Parametri
 # ─────────
-#   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
+#   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default) |
+#                        'fix' (in una PR allinea i diagrammi al modello, poi verifica come enforce)
 #   docsDirectory      → cartella delle sezioni del documento (default: quella dichiarata da
 #                        document-directories.yaml, altrimenti docs/architecture)
 #   decisionsDirectory → cartella degli ADR (default: quella dichiarata da document-directories.yaml,
@@ -30,7 +36,7 @@ parameters:
   - name: mode
     type: string
     default: 'enforce'
-    values: ['off', 'warn', 'enforce']
+    values: ['off', 'warn', 'enforce', 'fix']
 
   - name: docsDirectory
     type: string
@@ -59,6 +65,20 @@ steps:
       inputs:
         version: ${{ parameters.nodeVersion }}
 
+  - ${{ if eq(parameters.mode, 'fix') }}:
+    - task: PowerShell@2
+      displayName: 'Diagram participants aligned with the C4 model'
+      inputs:
+        filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Mermaid/Sync-DiagramLabels.ps1'
+        workingDirectory: '$(Build.SourcesDirectory)'
+        pwsh: true
+      env:
+        GATE_MODE: enforce
+        SOURCE_BRANCH: $(System.PullRequest.SourceBranch)
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+        ${{ if ne(parameters.docsDirectory, '') }}:
+          DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
+
   - task: PowerShell@2
     displayName: 'Diagram flows (${{ parameters.mode }})'
     inputs:
@@ -66,7 +86,7 @@ steps:
       workingDirectory: '$(Build.SourcesDirectory)'
       pwsh: true
     env:
-      GATE_MODE: ${{ parameters.mode }}
+      GATE_MODE: ${{ replace(parameters.mode, 'fix', 'enforce') }}
       ${{ if ne(parameters.docsDirectory, '') }}:
         DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
       ${{ if ne(parameters.decisionsDirectory, '') }}:

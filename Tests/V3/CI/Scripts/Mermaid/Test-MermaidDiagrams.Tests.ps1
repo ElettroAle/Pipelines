@@ -45,9 +45,9 @@ Describe "Funzionalità: Verifica dei diagrammi Mermaid" {
     Context "Scenario: un diagramma di sequenza con sintassi non valida" {
         BeforeAll {
             $docs = New-ValidDocs
-            Edit-Docs $docs 'docs/architecture/06_runtime_view.md' 'B->>M: apre la sessione' 'B->>: apre la sessione'
+            Edit-Docs $docs 'docs/architecture/06_runtime_view.md' 'bff->>motore: apre la sessione' 'bff->>: apre la sessione'
             $res = Invoke-DiagramCheck $docs
-            $line = Get-LineNumber $docs['docs/architecture/06_runtime_view.md'] 'B->>: apre la sessione'
+            $line = Get-LineNumber $docs['docs/architecture/06_runtime_view.md'] 'bff->>: apre la sessione'
         }
 
         It "Allora la verifica fallisce" {
@@ -114,7 +114,7 @@ Describe "Test-MermaidDiagrams — strumenti e modalità" {
 
     It "In modalità off non verifica" {
         $docs = New-ValidDocs
-        Edit-Docs $docs 'docs/architecture/06_runtime_view.md' 'B->>M: apre la sessione' 'B->>: apre la sessione'
+        Edit-Docs $docs 'docs/architecture/06_runtime_view.md' 'bff->>motore: apre la sessione' 'bff->>: apre la sessione'
         $res = Invoke-DiagramCheck $docs @{ GATE_MODE = 'off' }
         $res.ExitCode | Should -Be 0
         Get-Issues $res.Output | Should -BeNullOrEmpty

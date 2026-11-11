@@ -190,8 +190,27 @@ Richiede Java 17 o successivo e Node.js, come `Test-C4Model.Tests.ps1` e `Test-M
 
 | Suite | Scenario testato |
 |---|---|
-| Flussi coerenti con la struttura | Flussi coerenti; partecipante fuori dal modello C4, container applicativo al posto dei suoi componenti, chiamata senza relazione; risposte e chiamate a sé non controllate; decisione senza flusso, flusso senza diagramma di sequenza, partecipante fuori dal diagramma delle classi; diagramma degli stati in più; decisione senza struttura |
-| Partecipanti, decisioni e strumenti | Persone e container senza componenti ammessi; due istanze dello stesso componente; nome ambiguo; modello mancante; decisione chiusa e modello delle decisioni ignorati; parti nella lingua del documento; diagramma non valido lasciato a `mermaid-verify`; senza Node.js; `off` |
+| Flussi coerenti con la struttura | Flussi coerenti; partecipante fuori dal modello C4, partecipante scritto per nome, etichetta diversa dal nome nel modello, container applicativo al posto dei suoi componenti, chiamata senza relazione; risposte e chiamate a sé non controllate; decisione senza flusso, flusso senza diagramma di sequenza, partecipante fuori dal diagramma delle classi; diagramma degli stati in più; decisione senza struttura |
+| Partecipanti, decisioni e strumenti | Persone e container senza componenti ammessi; due istanze dello stesso componente; due elementi con lo stesso nome distinti per identificativo; modello mancante; decisione chiusa e modello delle decisioni ignorati; parti nella lingua del documento; diagramma non valido lasciato a `mermaid-verify`; senza Node.js; `off` |
+
+#### `Sync-DiagramLabels.Tests.ps1`
+
+Richiede Java 17 o successivo e Node.js, come `Test-DiagramFlows.Tests.ps1`. La PR è un origin locale con il
+commit di merge come copia di lavoro.
+
+| Suite | Scenario testato |
+|---|---|
+| Diagrammi allineati al modello C4 | Rinomina propagata sul ramo della PR con un commit `[skip ci]` e verifica fermata; diagramma scritto per nome migrato con il modello del ramo base; diagramma già allineato invariato |
+| Fuori da una PR e modalità off | Nessun cambiamento fuori da una PR; `off` |
+
+#### `DiagramModel.Tests.ps1`
+
+Richiede Node.js; il modello C4 è l'export JSON di Structurizr costruito in memoria.
+
+| Suite | Scenario testato |
+|---|---|
+| Diagrammi che riconoscono gli elementi per identificativo | Rinomina propagata all'etichetta; migrazione per nome con il modello del ramo base, messaggi e note compresi; riquadro con il nome del container dei componenti; elemento sconosciuto lasciato com'è |
+| Identificativi, istanze e partecipanti impliciti | Indice per identificativo del DSL e relazioni; istanze con la tilde; partecipante solo nei messaggi dichiarato dopo l'intestazione; alias contenuto in un altro; righe di testo libero dei blocchi; diagramma già allineato identico |
 
 #### `Test-Documentation.Tests.ps1`
 
