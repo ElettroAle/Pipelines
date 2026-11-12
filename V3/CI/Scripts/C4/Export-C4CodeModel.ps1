@@ -78,16 +78,36 @@ function Get-TextIssues($Text) {
     if (-not $Text.Readable) { New-Issue $Repository 'testo del modello non leggibile' $TextFileName }
 }
 
+# Un sistema esterno che la revisione non trova in produzione, e una relazione che la revisione toglie,
+# restano nel testo ma non entrano nel modello.
+function Get-ExcludedSystems($Review) {
+    return @($Review.externalSystems.PSObject.Properties | Where-Object { $_.Value -and $_.Value.inProduction -eq $false } | ForEach-Object Name)
+}
+
+function Test-ReviewedLink($Link, $Review, [string[]]$Excluded) {
+    if ($Excluded -contains $Link.source -or $Excluded -contains $Link.target) { return $false }
+    $decision = $Review.links."$($Link.source) -> $($Link.target)"
+    return -not ($decision -and $decision.keep -eq $false)
+}
+
+function Get-ReviewedSystems($Systems, [string[]]$Excluded) {
+    $kept = [pscustomobject]@{}
+    $Systems.PSObject.Properties | Where-Object { $Excluded -notcontains $_.Name } | ForEach-Object { $kept | Add-Member -NotePropertyName $_.Name -NotePropertyValue $_.Value }
+    return $kept
+}
+
 # Una relazione la descrive il container da cui parte, che puo' stare in un altro repository: il testo
 # delle relazioni si cerca in tutto il sistema, le relazioni con persone e sistemi esterni solo nei
 # container di questo repository.
 function Get-PartText($Text, $Fragments) {
     $ownIds = @($Fragments.Content.containers | Where-Object { $_ } | ForEach-Object id)
-    $part = @{ Elements = @{}; Relationships = @{}; Links = @(); People = $Text.Content.people; ExternalSystems = $Text.Content.externalSystems; Names = @{}; SameAs = @{} }
+    $review = $Text.Content.review
+    $excluded = Get-ExcludedSystems $review
+    $part = @{ Elements = @{}; Relationships = @{}; Links = @(); People = $Text.Content.people; ExternalSystems = Get-ReviewedSystems $Text.Content.externalSystems $excluded; Names = @{}; SameAs = @{} }
     foreach ($unit in @($Text.Content.units.PSObject.Properties | Where-Object { $_.Value })) {
         $unit.Value.elements.PSObject.Properties | ForEach-Object { $part.Elements[$_.Name] = $_.Value }
         $unit.Value.relationships.PSObject.Properties | ForEach-Object { $part.Relationships[$_.Name] = $_.Value }
-        if ($ownIds -contains $unit.Name) { $part.Links += @($unit.Value.links | Where-Object { $_ }) }
+        if ($ownIds -contains $unit.Name) { $part.Links += @($unit.Value.links | Where-Object { $_ -and (Test-ReviewedLink $_ $review $excluded) }) }
     }
     foreach ($container in @($Text.Content.review.containers.PSObject.Properties | Where-Object { $_.Value })) {
         if ($container.Value.name) { $part.Names[$container.Name] = $container.Value.name }

@@ -415,7 +415,9 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   non lo dà la revisione (vedi **Nomi**). Una risposta respinta torna al modello fino a `maxDrafts`
   volte; un sistema esterno ancora senza prova esce dal modello. La revisione si ripete solo quando
   cambiano la struttura, la configurazione di produzione o le istruzioni della revisione, e le sue decisioni si
-  salvano con le prove in `model.text.json`.
+  salvano con le prove in `model.text.json`. Un sistema esterno escluso e una relazione tolta restano nel
+  testo e non entrano nel modello: la revisione successiva li giudica di nuovo, così un'esclusione
+  sbagliata si corregge appena la configurazione di produzione ne porta la prova.
 - **Il testo salvato e le correzioni.** Il testo accettato si salva in `model.text.json` nella cartella
   delle parti generate e, con `progressBranch`, sul ramo, un container alla volta: rilanciata, la
   pipeline riparte da ciò che non ha testo accettato. Il testo di un container la cui struttura non

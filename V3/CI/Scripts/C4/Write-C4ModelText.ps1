@@ -172,7 +172,7 @@ function Get-TextPath {
 }
 
 function New-EmptyReview {
-    return [pscustomobject][ordered]@{ basis = ''; externalSystems = [pscustomobject]@{}; containers = [pscustomobject]@{} }
+    return [pscustomobject][ordered]@{ basis = ''; externalSystems = [pscustomobject]@{}; links = [pscustomobject]@{}; containers = [pscustomobject]@{} }
 }
 
 function New-EmptyText {
@@ -186,7 +186,7 @@ function ConvertFrom-TextJson([string]$Json) {
     }
     if ($null -eq $text.catalogueReviewed) { $text | Add-Member -Force -NotePropertyName catalogueReviewed -NotePropertyValue $false }
     if (-not $text.review) { $text | Add-Member -Force -NotePropertyName review -NotePropertyValue (New-EmptyReview) }
-    foreach ($part in 'externalSystems', 'containers') {
+    foreach ($part in 'externalSystems', 'links', 'containers') {
         if (-not $text.review.$part) { $text.review | Add-Member -Force -NotePropertyName $part -NotePropertyValue ([pscustomobject]@{}) }
     }
     return $text
@@ -1009,31 +1009,31 @@ function New-ReviewState($Units, $Text) {
 }
 
 # Una voce che resta senza risposta valida dopo l'ultimo giro: un sistema esterno senza prova esce dal
-# modello, una relazione resta, un container tiene il suo nome e non si unisce.
+# modello, una relazione resta, un container tiene il suo nome e non si unisce. Le decisioni restano
+# accanto al testo, che non perde nulla: una revisione successiva rigiudica anche le voci escluse.
 function Set-ReviewDecisions($State, $Units, $Text) {
     foreach ($key in $State.Expected) {
         if ($State.Decided.ContainsKey($key)) { continue }
         Add-Correction "revisione: voce lasciata com'era dopo $MaxDrafts giri: $($key -replace '^[a-z]+:', '')"
     }
     $systems = [ordered]@{}
-    $dropped = @(foreach ($property in @($Text.externalSystems.PSObject.Properties)) {
-            $decision = $State.Decided["system:$($property.Name)"]
-            if ($decision -and $decision.inProduction) {
-                $systems[$property.Name] = [ordered]@{ inProduction = $true; evidence = @($decision.evidence | Where-Object { $_ }); reason = "$($decision.reason)" }
-                continue
-            }
-            $reason = if ($decision) { $decision.reason } else { 'nessuna prova nella configurazione di produzione' }
-            Add-Correction "revisione: sistema esterno $($property.Name) tolto, non e' in produzione: $reason"
-            $property.Name
-        })
-    Remove-TextActors $Text $dropped
-    foreach ($unit in @($Text.units.PSObject.Properties.Value | Where-Object { $_ })) {
-        $unit.links = @($unit.links | Where-Object { $_ } | Where-Object {
-                $decision = $State.Decided["link:$(Get-RelationshipKey $_)"]
-                $keep = -not $decision -or $decision.keep
-                if (-not $keep) { Add-Correction "revisione: relazione $(Get-RelationshipKey $_) tolta: $($decision.reason)" }
-                $keep
-            })
+    foreach ($property in @($Text.externalSystems.PSObject.Properties)) {
+        $decision = $State.Decided["system:$($property.Name)"]
+        if ($decision -and $decision.inProduction) {
+            $systems[$property.Name] = [ordered]@{ inProduction = $true; evidence = @($decision.evidence | Where-Object { $_ }); reason = "$($decision.reason)" }
+            continue
+        }
+        $reason = if ($decision) { "$($decision.reason)" } else { 'nessuna prova nella configurazione di produzione' }
+        $systems[$property.Name] = [ordered]@{ inProduction = $false; evidence = @(); reason = $reason }
+        Add-Correction "revisione: sistema esterno $($property.Name) tolto, non e' in produzione: $reason"
+    }
+    $links = [ordered]@{}
+    foreach ($link in @(Get-TextLinks $Text)) {
+        $key = Get-RelationshipKey $link
+        $decision = $State.Decided["link:$key"]
+        if (-not $decision -or $decision.keep -or $links.Contains($key)) { continue }
+        $links[$key] = [ordered]@{ keep = $false; reason = "$($decision.reason)" }
+        Add-Correction "revisione: relazione $key tolta: $($decision.reason)"
     }
     $containers = [ordered]@{}
     foreach ($unit in ($Units | Sort-Object Id)) {
@@ -1043,7 +1043,7 @@ function Set-ReviewDecisions($State, $Units, $Text) {
         if ($sameAs) { Add-Correction "revisione: container $($unit.Id) unito a ${sameAs}: $($decision.reason)" }
         $containers[$unit.Id] = [ordered]@{ name = $name; sameAs = $sameAs }
     }
-    return [ordered]@{ externalSystems = $systems; containers = $containers }
+    return [ordered]@{ externalSystems = $systems; links = $links; containers = $containers }
 }
 
 function Invoke-ModelReview($Units, $Text, $Progress) {
@@ -1064,7 +1064,7 @@ function Invoke-ModelReview($Units, $Text, $Progress) {
     }
     $decisions = Set-ReviewDecisions $state $Units $Text
     Remove-StaleText $Text $Units
-    $Text.review = [pscustomobject][ordered]@{ basis = $basis; externalSystems = [pscustomobject]$decisions.externalSystems; containers = [pscustomobject]$decisions.containers }
+    $Text.review = [pscustomobject][ordered]@{ basis = $basis; externalSystems = [pscustomobject]$decisions.externalSystems; links = [pscustomobject]$decisions.links; containers = [pscustomobject]$decisions.containers }
     Save-Text $Text
     Publish-Progress $Progress 'review'
 }

@@ -985,6 +985,44 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         It "E le correzioni dicono perche' il sistema esterno e' uscito" {
             $res.Corrections | Should -Match "sistema esterno pagamenti tolto, non e' in produzione: Motivo per pagamenti\."
         }
+
+        It "E il testo conserva il sistema esterno con la decisione della revisione" {
+            $res.Text.externalSystems.pagamenti.name | Should -Be 'Servizio pagamenti'
+            $res.Text.review.externalSystems.pagamenti.inProduction | Should -Be $false
+        }
+
+        It "E il testo conserva la relazione con il sistema esterno" {
+            @($res.Text.units.$Api.links | Where-Object target -EQ 'pagamenti') | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context "Scenario: un sistema esterno escluso torna quando la configurazione di produzione lo prova" {
+        BeforeAll {
+            Reset-Stub @{ $Api = @($ApiExternals); review = @(@{ notInProduction = @('pagamenti') }) }
+            $root = New-Workspace (New-DescribedEngine)
+            $first = Invoke-Text $root
+            [IO.File]::AppendAllText((Join-Path $root "sources/$Engine/deploy/production.tfvars"), "payments_retries = 3`n")
+            Reset-Stub
+            $res = Invoke-Text $root
+            $requests = @(Get-ReviewRequests)
+            Remove-Workspace $root
+        }
+
+        It "Allora la prima generazione esclude il sistema esterno" {
+            $first.Generated['context.dsl'] | Should -Not -Match 'pagamenti ='
+        }
+
+        It "E la revisione successiva giudica di nuovo il sistema esterno escluso" {
+            Get-UserMessage $requests[0] | Should -Match '(?m)^- pagamenti \[sistema esterno\]'
+        }
+
+        It "E il contesto dichiara di nuovo il sistema esterno" {
+            $res.Generated['context.dsl'] | Should -Match 'pagamenti = softwareSystem "Servizio pagamenti"'
+        }
+
+        It "E la parte ha di nuovo la relazione con il sistema esterno" {
+            $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Match "$Api -> pagamenti ""Chiede i pagamenti"""
+        }
     }
 
     Context "Scenario: un sistema esterno senza una prova nella configurazione esce dopo l'ultimo giro" {
@@ -1048,6 +1086,11 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
 
         It "E la parte del Motore non ha la relazione della persona" {
             $res.Generated['containers/contoso.shop.ai.dsl'] | Should -Not -Match "cliente -> $Api"
+        }
+
+        It "E il testo conserva la relazione con la decisione della revisione" {
+            @($res.Text.units.$Api.links | Where-Object source -EQ 'cliente') | Should -Not -BeNullOrEmpty
+            $res.Text.review.links."cliente -> $Api".keep | Should -Be $false
         }
 
         It "E la relazione con l'applicazione che la persona usa resta" {
