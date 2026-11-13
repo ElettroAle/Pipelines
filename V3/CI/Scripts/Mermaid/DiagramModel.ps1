@@ -4,7 +4,7 @@
 # identificativo nel DSL, l'alias del partecipante; l'etichetta e' il nome che il modello gli da' e
 # cambia con il modello senza cambiare l'identita'. Una seconda istanza dello stesso elemento
 # nello stesso diagramma ha l'alias <identificativo>~<numero>: la tilde non compare negli
-# identificativi del DSL. Usato da Test-DiagramFlows.ps1 e Sync-DiagramLabels.ps1.
+# identificativi del DSL. Usato da DiagramFlows.ps1 e Sync-DiagramLabels.ps1.
 
 $DslIdentifierProperty = 'structurizr.dsl.identifier'
 $InstanceSeparator = '~'

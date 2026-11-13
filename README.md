@@ -249,7 +249,7 @@ parametri di formato e senza condizioni sul formato.
 | `c4-generate.yaml` | `Export-C4CodeModel.ps1` | parte del modello C4 generata dai frammenti di un repository sorgente e dal testo del sistema, allineata al codice, e contesto con persone e sistemi esterni | C4 |
 | `c4-verify.yaml` | `Test-C4Model.ps1` | modello Structurizr valido e completo, testo del modello coerente con la parte generata, viste mostrate nelle sezioni, misura della leggibilità di ogni vista | C4 |
 | `mermaid-verify.yaml` | `Test-MermaidDiagrams.ps1` | diagrammi Mermaid validi, nel documento e nelle decisioni | Mermaid |
-| `flows-verify.yaml` | `Test-DiagramFlows.ps1`, con `Sync-DiagramLabels.ps1` in modalità `fix` | flussi fatti degli elementi del modello C4, riconosciuti per identificativo, e delle classi delle decisioni; in una PR, diagrammi allineati ai nomi del modello | C4, Mermaid |
+| `flows-verify.yaml` | `Test-DiagramFlows.ps1`, con `Sync-DiagramLabels.ps1` e, con `endpoint`, `Repair-DiagramFlows.ps1` in modalità `fix` | flussi fatti degli elementi del modello C4, riconosciuti per identificativo, e delle classi delle decisioni; in una PR, diagrammi allineati ai nomi del modello e riparati da un modello linguistico quando il modello C4 toglie o aggiunge elementi | C4, Mermaid |
 | `documentation-verify.yaml` | `Test-Documentation.ps1` | rimandi esistenti, soglie numeriche di leggibilità | nessun formato |
 | `documentation-style.yaml` | `Test-DocumentationStyle.ps1` | giudizio dello stile con la guida del repository | nessun formato |
 
@@ -507,6 +507,16 @@ Flussi (`flows-verify.yaml`, `CI/Scripts/Mermaid/Test-DiagramFlows.ps1`):
   prende come alias il suo identificativo. Le righe cambiate tornano sul ramo della PR in un commit, e la
   verifica riparte dalla build di quel commit. Un elemento che nessun modello riconosce resta com'è e lo
   segnala la verifica.
+- **Riparazione.** Con `endpoint`, in modalità `fix`, in una PR, `CI/Scripts/Mermaid/Repair-DiagramFlows.ps1`
+  ripara poi con un modello Azure OpenAI le sezioni che la verifica respinge ancora, ad esempio per un
+  elemento tolto dal modello C4 o per una chiamata che il modello fa passare per altri elementi. Il modello
+  linguistico riceve il modello C4, i rilievi e la sezione, e risponde con i diagrammi riscritti e le frasi
+  che li descrivono; la verifica dei flussi accetta la stesura o la rimanda con i rilievi rimasti, fino a
+  `maxDrafts` stesure, poi la sezione resta com'è e la verifica la segnala. Ogni sezione accettata va in un
+  commit sul ramo di appoggio `flows-repair/<commit della PR>` e tutti i commit tornano sul ramo della PR a
+  fine giro; se il job si interrompe, la build dopo li porta sul ramo della PR senza chiamare il modello.
+  Le decisioni non si riparano. Nessuna regola del documento vive nella pipeline: decidono i rilievi della
+  verifica e il modello C4.
 - **Sezioni.** Un flusso è un titolo di secondo livello con diagrammi di sequenza: ha almeno un diagramma a
   livello dei container, cioè senza riquadri, i cui partecipanti sono container, persone o sistemi del
   modello C4. I diagrammi di dettaglio mettono ogni componente nel riquadro
@@ -709,6 +719,8 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/Arc42/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |
 | `CI/Scripts/Mermaid/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni e delle decisioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
 | `CI/Scripts/Mermaid/Test-DiagramFlows.ps1` | Flussi coerenti con la struttura (`flows-verify.yaml`): partecipanti e chiamate dei diagrammi di sequenza contro il modello C4, per identificativo, flusso delle decisioni contro le classi della loro struttura |
+| `CI/Scripts/Mermaid/DiagramFlows.ps1` | Controlli dei flussi condivisi da `Test-DiagramFlows.ps1` e `Repair-DiagramFlows.ps1`: ogni rilievo porta il file della sezione che lo contiene |
+| `CI/Scripts/Mermaid/Repair-DiagramFlows.ps1` | Diagrammi riparati con un modello Azure OpenAI (`flows-verify.yaml` in modalità `fix` con `endpoint`): sezioni respinte dalla verifica dei flussi riscritte dal modello linguistico e accettate dalla stessa verifica, ramo di appoggio, ripresa di una riparazione interrotta, commit sul ramo della PR |
 | `CI/Scripts/Mermaid/Sync-DiagramLabels.ps1` | Diagrammi allineati al modello C4 (`flows-verify.yaml` in modalità `fix`): alias e etichette dei partecipanti e nomi dei riquadri dal modello, migrazione dei partecipanti scritti per nome con il modello del ramo base, commit sul ramo della PR |
 | `CI/Scripts/Mermaid/DiagramModel.ps1` | Elementi del modello C4 per identificativo del DSL, partecipanti e riquadri dei diagrammi di sequenza riconosciuti e riscritti con i nomi del modello |
 | `CI/Scripts/Documentation/Test-Documentation.ps1` | Controlli comuni a ogni documento (`documentation-verify.yaml`): rimandi esistenti, soglie numeriche di leggibilità |
