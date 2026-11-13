@@ -23,7 +23,7 @@ Tests/
     │   ├── Arc42/              # Test-Arc42Document, Publish-Arc42Wiki, PlantUml
     │   ├── C4/                 # Lettori, testo, scrittore e verifica del modello C4
     │   │   └── Fixtures/       # Repository sorgente finti, lettore del consumer, finto modello del testo
-    │   ├── Mermaid/            # Test-MermaidDiagrams, Test-DiagramFlows
+    │   ├── Mermaid/            # Test-MermaidDiagrams, Test-DiagramFlows, Sync-DiagramLabels, Repair-DiagramFlows
     │   ├── Documentation/      # Test-Documentation, Test-DocumentationStyle
     │   ├── Release/            # GitCliff, Set-Versioning, Verify-SemVer, New-ReleaseNotes, Test-PublishedArtifact
     │   │   └── Fixtures/       # valid-commits.txt, invalid-commits.txt, usati da Verify-SemVer.Tests
@@ -202,6 +202,17 @@ commit di merge come copia di lavoro.
 |---|---|
 | Diagrammi allineati al modello C4 | Rinomina propagata sul ramo della PR con un commit `[skip ci]` e verifica fermata; diagramma scritto per nome migrato con il modello del ramo base; diagramma già allineato invariato |
 | Fuori da una PR e modalità off | Nessun cambiamento fuori da una PR; `off` |
+
+#### `Repair-DiagramFlows.Tests.ps1`
+
+Richiede Java 17 o successivo e Node.js, come `Test-DiagramFlows.Tests.ps1`. La PR è un origin locale con il
+commit di merge come copia di lavoro; il modello linguistico è un endpoint locale che risponde con le stesure
+registrate e conserva le richieste.
+
+| Suite | Scenario testato |
+|---|---|
+| Diagrammi riallineati dall'AI | Chiamata senza relazione riparata passando per il modello, con il testo e un commit `[skip ci]` sul ramo della PR; elemento tolto dal modello; stesura scartata rimandata con i motivi; stesure esaurite senza pubblicare; ripresa dal ramo di appoggio senza chiamare il modello; documento in regola e fuori da una PR senza chiamate |
+| Stesure che non si applicano | Frase da sostituire che non compare una volta sola; riga senza diagramma |
 
 #### `DiagramModel.Tests.ps1`
 
