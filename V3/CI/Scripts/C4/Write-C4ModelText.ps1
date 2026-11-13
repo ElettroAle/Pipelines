@@ -316,10 +316,10 @@ function Get-Units($Fragments) {
     Set-ApplicationNames @($containers.Container)
 }
 
-# Il nome di un'applicazione si cambia dopo la base del suo testo: il testo non dipende dal nome.
+# Il nome di un'applicazione e dei suoi componenti si cambia dopo la base del suo testo: il testo non dipende dal nome.
 function Set-ApplicationNames($Containers) {
     $names = Get-C4ApplicationNames $Containers
-    $Containers | Where-Object { $names.ContainsKey("$($_.id)") } | ForEach-Object { $_.name = $names["$($_.id)"] }
+    @($Containers) + @($Containers | ForEach-Object { @($_.components) }) | Where-Object { $_ -and $names.ContainsKey("$($_.id)") } | ForEach-Object { $_.name = $names["$($_.id)"] }
 }
 
 function Get-Basis($Container, $Relationships) {

@@ -142,6 +142,59 @@ function Add-ImplicitDeclarations([string[]]$Lines, [System.Collections.IDiction
     return @($Lines[0..$header]) + $declarations + @($Lines | Select-Object -Skip ($header + 1))
 }
 
+# Una freccia piena fra due alias; l'alias non finisce con il trattino, che e' della freccia.
+$CallPattern = '^(?<lead>\s*)(?<from>[^\s:]*[^\s:-])(?<arrow>->>|->|-x|-\))(?<activation>[+-]?)(?<to>[^\s:]+?)\s*:(?<text>.*)$'
+
+# L'unico elemento attraverso cui il modello porta da un elemento all'altro: un componente starebbe
+# fuori dal riquadro del suo container, un container con i suoi componenti nel diagramma comparirebbe
+# intero e scomposto, quindi non fanno da passaggio.
+function Get-Intermediate([string]$From, [string]$To, [string[]]$Present, $Model) {
+    $found = @($Model.Elements.Values | Where-Object {
+            $_.Kind -ne 'component' -and $_.Id -cne $From -and $_.Id -cne $To -and
+            $Model.Relations.Contains("$From>$($_.Id)") -and $Model.Relations.Contains("$($_.Id)>$To")
+        } | Where-Object { $id = $_.Id; -not @($Present | Where-Object { $Model.Elements[$_].Container -ceq $id }) })
+    if ($found.Count -eq 1) { return $found[0] }
+}
+
+function Get-DeclarationIndex([string[]]$Lines, [string]$Alias) {
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        if ($Lines[$i] -match $DeclarationPattern -and $Matches['alias'] -ceq $Alias) { return $i }
+    }
+    return [array]::FindIndex($Lines, [Predicate[string]] { param($line) $line -match '^\s*sequenceDiagram\b' })
+}
+
+# Una chiamata senza relazione nel modello, che il modello fa passare per un solo elemento, diventa due
+# chiamate attraverso quell'elemento, dichiarato subito dopo chi chiama; le altre restano e la verifica
+# dei flussi le segnala.
+function Add-Intermediates([string[]]$Lines, $Head) {
+    $result = [System.Collections.Generic.List[string]]::new([string[]]$Lines)
+    $aliasOf = @{}
+    foreach ($line in $Lines) {
+        if ($line -match $DeclarationPattern) { $id = Resolve-ElementId $Matches['alias'] $Head; if ($id -and -not $aliasOf.ContainsKey($id)) { $aliasOf[$id] = $Matches['alias'] } }
+    }
+    for ($i = 0; $i -lt $result.Count; $i++) {
+        if ($result[$i] -match $FreeTextPattern -or $result[$i] -notmatch $CallPattern) { continue }
+        $call = $Matches
+        $from = Resolve-ElementId $call['from'] $Head
+        $to = Resolve-ElementId $call['to'] $Head
+        if (-not $from -or -not $to -or $from -ceq $to -or $Head.Relations.Contains("$from>$to")) { continue }
+        $middle = Get-Intermediate $from $to @($aliasOf.Keys) $Head
+        if (-not $middle) { continue }
+        $result[$i] = "$($call['lead'])$($call['from'])$($call['arrow'])$($middle.Id):$($call['text'])"
+        $result.Insert($i + 1, "$($call['lead'])$($middle.Id)$($call['arrow'])$($call['activation'])$($call['to']):$($call['text'])")
+        if (-not $aliasOf.ContainsKey($middle.Id)) {
+            $at = Get-DeclarationIndex @($result) $call['from']
+            $indent = if ($at -ge 0 -and $result[$at] -match '^(\s+)') { $Matches[1] } else { '    ' }
+            $kind = if ($middle.Kind -eq 'person') { 'actor' } else { 'participant' }
+            $result.Insert($at + 1, "$indent$kind $($middle.Id) as $($middle.Name)")
+            $aliasOf[$middle.Id] = $middle.Id
+            $i++
+        }
+        $i++
+    }
+    return @($result)
+}
+
 # Il testo del diagramma con gli alias e le etichette del modello Head; il modello Base riconosce i
 # partecipanti scritti con un nome che Head non ha piu'.
 function Get-AlignedDiagram([string]$Text, $Parsed, $Head, $Base) {
@@ -156,5 +209,6 @@ function Get-AlignedDiagram([string]$Text, $Parsed, $Head, $Base) {
         elseif ($line -match $FreeTextPattern) { $line }
         else { Get-AlignedReferences $line $aliases $renamePattern }
     }
-    return ((Add-ImplicitDeclarations @($lines) $aliases @($declared) $Head) -join "`n")
+    $declaredLines = Add-ImplicitDeclarations @($lines) $aliases @($declared) $Head
+    return ((Add-Intermediates @($declaredLines) $Head) -join "`n")
 }

@@ -131,14 +131,24 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
             $fragments = @{ 'contoso.shop.client.web.angular18.json' = @($client.Fragments.Values)[0] }
             $res = Invoke-C4Generation (New-BffRepository) 'Contoso.Shop.Bff.Web' @('dotnet10') -Fragments $fragments
             $dsl = $res.Generated['containers/contoso.shop.bff.web.dsl']
+            $bffFragment = @{ 'contoso.shop.bff.web.dotnet10.json' = Get-BffFragment @() }
+            $clientDsl = (Invoke-C4Generation (New-ClientRepository) 'Contoso.Shop.Client.Web' @('angular18') -Fragments $bffFragment).Generated['containers/contoso.shop.client.web.dsl']
         }
 
         It "Allora l'applicazione del BFF si chiama Bff.Web" {
             Get-ElementLine $dsl 'container' 'Bff.Web' | Should -Not -BeNullOrEmpty -Because $dsl
         }
 
-        It "E i suoi componenti tengono il nome senza il prefisso comune del repository" {
-            Get-ElementLine $dsl 'component' 'Web.BusinessLogic' | Should -Not -BeNullOrEmpty -Because $dsl
+        It "E i suoi componenti .NET si chiamano con la stessa regola delle applicazioni" {
+            Get-ElementLine $dsl 'component' 'Bff.Web.BusinessLogic' | Should -Not -BeNullOrEmpty -Because $dsl
+        }
+
+        It "E il progetto che avvia l'applicazione si chiama come l'applicazione" {
+            Get-ElementLine $dsl 'component' 'Bff.Web' | Should -Not -BeNullOrEmpty -Because $dsl
+        }
+
+        It "E un componente Angular tiene il nome della sua cartella" {
+            Get-ElementLine $clientDsl 'component' 'settings' | Should -Not -BeNullOrEmpty -Because $clientDsl
         }
     }
 
@@ -459,12 +469,12 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
             $res.ExitCode | Should -Be 0 -Because ($res.Output)
         }
 
-        It "E il modello contiene la relazione dal container ""Client.Web"" al container ""Web"" di ""Contoso.Shop.Bff.Web""" {
-            $dsl | Should -Match '(?m)^contoso_shop_client_web -> contoso_shop_bff_web ' -Because $dsl
+        It "E il modello contiene la relazione dal container ""Client.Web"" al progetto che avvia ""Contoso.Shop.Bff.Web""" {
+            $dsl | Should -Match '(?m)^contoso_shop_client_web -> contoso_shop_bff_web__contoso_shop_bff_web ' -Because $dsl
         }
 
         It "E la relazione compare una volta sola" {
-            @($dsl -split "`n" | Where-Object { $_ -match '^contoso_shop_client_web -> contoso_shop_bff_web ' }).Count | Should -Be 1
+            @($dsl -split "`n" | Where-Object { $_ -match '^contoso_shop_client_web -> contoso_shop_bff_web__contoso_shop_bff_web ' }).Count | Should -Be 1
         }
     }
 

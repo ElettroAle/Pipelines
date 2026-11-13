@@ -121,6 +121,37 @@ sequenceDiagram
             $aligned | Should -MatchExactly '(?m)^    contoso_bff_web->>X: salva$'
         }
     }
+
+    Context "Scenario: una chiamata che il modello fa passare per un solo elemento si spezza attraverso quell'elemento" {
+        BeforeAll {
+            $text = "sequenceDiagram`n    actor cittadino as Cittadino`n    participant contoso_ai_api as AI.Api`n    cittadino->>+contoso_ai_api: apre la sessione`n    contoso_ai_api-->>-cittadino: sessione aperta"
+            $aligned = Get-Aligned $text $Head
+        }
+
+        It "Allora l'elemento in mezzo entra nel diagramma subito dopo chi chiama" {
+            $aligned | Should -MatchExactly '(?m)^    actor cittadino as Cittadino\n    participant contoso_bff_web as Bff\.Web\n    participant contoso_ai_api as AI\.Api$'
+        }
+
+        It "E la chiamata passa per l'elemento in mezzo, con lo stesso testo" {
+            $aligned | Should -MatchExactly '(?m)^    cittadino->>contoso_bff_web: apre la sessione\n    contoso_bff_web->>\+contoso_ai_api: apre la sessione$'
+        }
+
+        It "E la risposta resta com'era" {
+            $aligned | Should -MatchExactly '(?m)^    contoso_ai_api-->>-cittadino: sessione aperta$'
+        }
+    }
+
+    Context "Scenario: una chiamata il cui passaggio comparirebbe intero e scomposto resta com'e'" {
+        BeforeAll {
+            $text = "sequenceDiagram`n    actor cittadino as Cittadino`n    box Bff.Web`n        participant contoso_bff_web__routes as Web`n    end`n    participant contoso_ai_api as AI.Api`n    cittadino->>contoso_ai_api: apre la sessione"
+            $aligned = Get-Aligned $text $Head
+        }
+
+        It "Allora la chiamata senza relazione resta, e la segnala la verifica dei flussi" {
+            $aligned | Should -MatchExactly '(?m)^    cittadino->>contoso_ai_api: apre la sessione$'
+            $aligned | Should -Not -Match 'participant contoso_bff_web as'
+        }
+    }
 }
 
 Describe "DiagramModel — identificativi, istanze e partecipanti impliciti" {

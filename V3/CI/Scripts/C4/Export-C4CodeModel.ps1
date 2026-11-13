@@ -56,7 +56,7 @@ function Get-UnreadManifestIssues($Fragments) {
 
 function Get-OwnCalls($Fragments) {
     $ownIds = @($Fragments.Content.containers | Where-Object { $_ } | ForEach-Object id)
-    return @(Resolve-C4Calls @(Read-FragmentContents) | Where-Object { $ownIds -contains $_.Call.container })
+    return @(Resolve-C4Calls @(Read-FragmentContents) | Where-Object { $ownIds -contains $_.Call.element })
 }
 
 function Get-CallIssues($Calls) {
@@ -133,6 +133,11 @@ function Get-ContainerName($Container) {
     return $Container.name
 }
 
+function Get-ComponentName($Component) {
+    if ($script:ApplicationNames.ContainsKey($Component.id)) { return $script:ApplicationNames[$Component.id] }
+    return $Component.name
+}
+
 function Format-Text([string]$Text) {
     return '"' + (($Text -replace '\s+', ' ').Trim() -replace '"', '\"') + '"'
 }
@@ -147,7 +152,7 @@ function Format-Container($Container, [string]$Indent) {
     $lines = @("$Indent$($Container.id) = container $(Format-Text (Get-ContainerName $Container)) $(Format-Text $script:ModelText.Elements[$Container.id]) $(Format-Text $Container.technology) $(Format-Text ($tags -join ',')) {")
     $lines += Format-Properties $Container "$Indent    "
     foreach ($component in $Container.components) {
-        $lines += "$Indent    $($component.id) = component $(Format-Text $component.name) $(Format-Text $script:ModelText.Elements[$component.id]) $(Format-Text $component.technology) $(Format-Text $GeneratedTag) {"
+        $lines += "$Indent    $($component.id) = component $(Format-Text (Get-ComponentName $component)) $(Format-Text $script:ModelText.Elements[$component.id]) $(Format-Text $component.technology) $(Format-Text $GeneratedTag) {"
         $lines += Format-Properties $component "$Indent        "
         $lines += "$Indent    }"
     }

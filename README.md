@@ -470,7 +470,8 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   progetti che compone. Le dichiarazioni si leggono dai file `.cs`, all'inizio della riga. I
   servizi Azure con cui un'applicazione parla non vengono dalle librerie: li dice l'infrastruttura. Gli
   indirizzi di avvio sono gli `applicationUrl` dei profili in `Properties/launchSettings.json`
-  dell'applicazione; un file che non si legge, o un indirizzo senza schema `http` o `https`, ferma la
+  dell'applicazione e appartengono al componente del progetto che la avvia: la relazione dal proxy di
+  un'altra applicazione arriva a quel componente, e il container la riceve come relazione implicita; un file che non si legge, o un indirizzo senza schema `http` o `https`, ferma la
   lettura.
 - **Angular 18** (`c4-read-angular18.yaml`). Il `package.json` del workspace dipende da `@angular/core`
   18 (`^18.x`, `~18.x` o `18.x`); un'altra versione, un intervallo che va oltre la 18 o nessuna
@@ -484,7 +485,9 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   più corto di ogni nome. L'identificativo si ricava dal nome completo, così un repository nomina gli
   elementi degli altri senza leggerli. Nel modello di tutto il sistema un'applicazione si chiama con il
   nome nel codice senza il prefisso comune a tutte le applicazioni (con `Contoso.Shop.AI.Api` e
-  `Contoso.Shop.Bff.Web`, `AI.Api` e `Bff.Web`): il lettore vede un solo repository.
+  `Contoso.Shop.Bff.Web`, `AI.Api` e `Bff.Web`): il lettore vede un solo repository. Con la stessa regola
+  si chiama ogni componente il cui nome nel codice comincia con quel prefisso (`Bff.Web.BusinessLogic`);
+  un componente Angular tiene il nome della sua cartella.
 - Con `generationMode: check` il file del documento si confronta con quello che la generazione produce:
   una differenza nomina il file.
 
@@ -504,7 +507,9 @@ Flussi (`flows-verify.yaml`, `CI/Scripts/Mermaid/Test-DiagramFlows.ps1`):
   allinea prima i diagrammi delle sezioni al modello: ogni partecipante prende come etichetta il nome del
   modello e ogni riquadro il nome del container dei suoi componenti; un partecipante scritto con un nome
   si riconosce dal nome, nel modello della PR o, se quel nome non c'è più, nel modello del ramo base, e
-  prende come alias il suo identificativo. Le righe cambiate tornano sul ramo della PR in un commit, e la
+  prende come alias il suo identificativo. Una chiamata senza relazione nel modello, che il modello fa
+  passare per un solo elemento che non è un componente e non ha componenti nel diagramma, diventa due
+  chiamate attraverso quell'elemento, dichiarato subito dopo chi chiama. Le righe cambiate tornano sul ramo della PR in un commit, e la
   verifica riparte dalla build di quel commit. Un elemento che nessun modello riconosce resta com'è e lo
   segnala la verifica.
 - **Sezioni.** Un flusso è un titolo di secondo livello con diagrammi di sequenza: ha almeno un diagramma a
@@ -709,7 +714,7 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/Arc42/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |
 | `CI/Scripts/Mermaid/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni e delle decisioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
 | `CI/Scripts/Mermaid/Test-DiagramFlows.ps1` | Flussi coerenti con la struttura (`flows-verify.yaml`): partecipanti e chiamate dei diagrammi di sequenza contro il modello C4, per identificativo, flusso delle decisioni contro le classi della loro struttura |
-| `CI/Scripts/Mermaid/Sync-DiagramLabels.ps1` | Diagrammi allineati al modello C4 (`flows-verify.yaml` in modalità `fix`): alias e etichette dei partecipanti e nomi dei riquadri dal modello, migrazione dei partecipanti scritti per nome con il modello del ramo base, commit sul ramo della PR |
+| `CI/Scripts/Mermaid/Sync-DiagramLabels.ps1` | Diagrammi allineati al modello C4 (`flows-verify.yaml` in modalità `fix`): alias e etichette dei partecipanti e nomi dei riquadri dal modello, chiamate spezzate attraverso l'unico elemento per cui il modello le fa passare, migrazione dei partecipanti scritti per nome con il modello del ramo base, commit sul ramo della PR |
 | `CI/Scripts/Mermaid/DiagramModel.ps1` | Elementi del modello C4 per identificativo del DSL, partecipanti e riquadri dei diagrammi di sequenza riconosciuti e riscritti con i nomi del modello |
 | `CI/Scripts/Documentation/Test-Documentation.ps1` | Controlli comuni a ogni documento (`documentation-verify.yaml`): rimandi esistenti, soglie numeriche di leggibilità |
 | `CI/Scripts/Documentation/Test-DocumentationStyle.ps1` | Giudizio dello stile di un documento (`documentation-style.yaml`) con un modello Azure OpenAI che riceve la guida di stile del repository come istruzioni |

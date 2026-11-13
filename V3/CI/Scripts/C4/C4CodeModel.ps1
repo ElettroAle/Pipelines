@@ -44,13 +44,18 @@ function Remove-CommonPrefix([string]$Name, [string[]]$Names) {
 }
 
 # Un lettore vede un solo repository e toglie il prefisso comune ai suoi progetti: nel sistema
-# un'applicazione si chiama con il nome nel codice senza il prefisso comune a tutte le applicazioni.
+# un'applicazione si chiama con il nome nel codice senza il prefisso comune a tutte le applicazioni,
+# e cosi' ogni componente il cui nome nel codice comincia con quel prefisso.
 function Get-C4ApplicationNames($Containers) {
     $names = @{}
     $applications = @($Containers | Where-Object { $_ -and $_.codeName -and @($_.tags) -contains $DocumentLanguage.ApplicationTag })
     if ($applications.Count -lt 2) { return $names }
     $codeNames = @($applications | ForEach-Object { "$($_.codeName)" })
-    $applications | ForEach-Object { $names["$($_.id)"] = Remove-CommonPrefix "$($_.codeName)" $codeNames }
+    $length = Get-CommonPrefixLength $codeNames
+    $prefix = if ($length) { ((("$($codeNames[0])" -split '\.') | Select-Object -First $length) -join '.') + '.' } else { '' }
+    $applications | ForEach-Object { $names["$($_.id)"] = "$($_.codeName)".Substring($prefix.Length) }
+    @($applications | ForEach-Object { @($_.components) }) | Where-Object { $_ -and $prefix -and "$($_.codeName)".StartsWith($prefix) } |
+        ForEach-Object { $names["$($_.id)"] = "$($_.codeName)".Substring($prefix.Length) }
     return $names
 }
 
@@ -87,8 +92,8 @@ function ConvertTo-Address([string]$Url) {
     return "$($uri.Scheme)://$($uri.Host):$($uri.Port)"
 }
 
-function New-C4Address([string]$Container, [string]$Address, [string]$Source) {
-    return [ordered]@{ container = $Container; address = $Address; source = $Source }
+function New-C4Address([string]$Element, [string]$Address, [string]$Source) {
+    return [ordered]@{ element = $Element; address = $Address; source = $Source }
 }
 
 # Un frammento che non si legge lo segnala la generazione del suo repository.
@@ -98,16 +103,16 @@ function Read-FragmentContents {
     }
 }
 
-# Ogni indirizzo chiamato con i container che vi si avviano.
+# Ogni indirizzo chiamato con gli elementi che vi si avviano.
 function Resolve-C4Calls($Contents) {
     $addresses = @($Contents | ForEach-Object { @($_.addresses) } | Where-Object { $_ })
     foreach ($call in @($Contents | ForEach-Object { @($_.calls) } | Where-Object { $_ })) {
-        $targets = @($addresses | Where-Object address -EQ $call.address | ForEach-Object container | Sort-Object -Unique)
+        $targets = @($addresses | Where-Object address -EQ $call.address | ForEach-Object element | Sort-Object -Unique)
         [pscustomobject]@{ Call = $call; Targets = $targets }
     }
 }
 
 function Get-C4CallRelationships($ResolvedCalls) {
-    return @($ResolvedCalls | Where-Object { $_.Targets.Count -eq 1 } | ForEach-Object { New-C4Relationship $_.Call.container $_.Targets[0] } |
+    return @($ResolvedCalls | Where-Object { $_.Targets.Count -eq 1 } | ForEach-Object { New-C4Relationship $_.Call.element $_.Targets[0] } |
             Sort-Object { "$($_.source) -> $($_.target)" } -Unique)
 }

@@ -937,11 +937,11 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la relazione la descrive l'applicazione che chiama" {
-            Get-UserMessage $clientRequests[0] | Should -Match """target"":\s*""$Web"""
+            Get-UserMessage $clientRequests[0] | Should -Match """target"":\s*""${Web}__$Web"""
         }
 
         It "E la parte dell'applicazione che chiama dice cio' che passa sulla relazione" {
-            $res.Generated['containers/contoso.shop.client.web.dsl'] | Should -Match "$client -> $Web ""Passa da $client a $Web"""
+            $res.Generated['containers/contoso.shop.client.web.dsl'] | Should -Match "$client -> ${Web}__$Web ""Passa da $client a ${Web}__$Web"""
         }
     }
 

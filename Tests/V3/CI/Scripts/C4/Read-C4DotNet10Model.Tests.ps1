@@ -228,8 +228,8 @@ Describe "Lettore .NET 10 del modello C4" {
             $res.ExitCode | Should -Be 0 -Because ($res.Output)
         }
 
-        It "E il frammento dichiara ogni indirizzo dell'applicazione una volta sola" {
-            @($res.Fragment.addresses | ForEach-Object { "$($_.container) $($_.address)" }) | Should -Be @('contoso_shop_bff_web http://localhost:5000', 'contoso_shop_bff_web https://localhost:5001')
+        It "E il frammento dichiara ogni indirizzo una volta sola, sul progetto che avvia l'applicazione" {
+            @($res.Fragment.addresses | ForEach-Object { "$($_.element) $($_.address)" }) | Should -Be @('contoso_shop_bff_web__contoso_shop_bff_web http://localhost:5000', 'contoso_shop_bff_web__contoso_shop_bff_web https://localhost:5001')
         }
 
         It "E ogni indirizzo nomina il file che lo dichiara" {

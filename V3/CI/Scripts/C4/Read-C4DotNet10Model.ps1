@@ -251,7 +251,7 @@ function Get-ApplicationAddresses($Application) {
     $settings = Read-LaunchSettings $Application
     if (-not $settings) { return }
     $containerId = ConvertTo-Identifier $Application.Name
-    $settings.Urls | ForEach-Object { ConvertTo-Address $_ } | Sort-Object -Unique | ForEach-Object { New-C4Address $containerId $_ $settings.Source }
+    $settings.Urls | ForEach-Object { ConvertTo-Address $_ } | Sort-Object -Unique | ForEach-Object { New-C4Address (Get-ComponentId $containerId $Application) $_ $settings.Source }
 }
 
 function Get-UnsupportedVersionIssues($Projects) {

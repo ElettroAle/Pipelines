@@ -91,7 +91,7 @@ Describe "Lettore Angular 18 del modello C4" {
         }
 
         It "E il frammento dichiara l'indirizzo chiamato dall'applicazione una volta sola" {
-            @($res.Fragment.calls | ForEach-Object { "$($_.container) $($_.address)" }) | Should -Be @('contoso_shop_client_web https://localhost:5001')
+            @($res.Fragment.calls | ForEach-Object { "$($_.element) $($_.address)" }) | Should -Be @('contoso_shop_client_web https://localhost:5001')
         }
 
         It "E l'indirizzo nomina il file del proxy" {
