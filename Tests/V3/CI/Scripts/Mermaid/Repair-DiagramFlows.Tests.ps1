@@ -210,7 +210,7 @@ Describe "Funzionalità: Diagrammi riallineati dall'AI quando il modello C4 camb
             $user = Get-UserMessage $requests[0]
             $user | Should -MatchExactly '(?m)^- client -> bff$'
             $user | Should -MatchExactly '(?m)^- bff \| BFF \| container$'
-            $user | Should -MatchExactly 'chiamata senza relazione nel modello C4 \(06_runtime_view\.md:\d+ client -> motore\)'
+            $user | Should -MatchExactly 'chiamata senza relazione nel modello C4 \(06_runtime_view\.md:\d+ Client -> API del Motore\)'
         }
 
         It "E la verifica si ferma per ripartire dal commit della riparazione, senza ramo di appoggio" {
@@ -262,7 +262,7 @@ Describe "Funzionalità: Diagrammi riallineati dall'AI quando il modello C4 camb
             $requests.Count | Should -Be 2 -Because $res.Output
             $rejected = (Get-UserMessage $requests[1]) -split 'Motivi dello scarto:', 2
             $rejected[0] | Should -MatchExactly 'STESURA SCARTATA'
-            $rejected[1] | Should -MatchExactly '(?m)^- Runtime View: chiamata senza relazione nel modello C4 \(06_runtime_view\.md:\d+ client -> motore\)$'
+            $rejected[1] | Should -MatchExactly '(?m)^- Runtime View: chiamata senza relazione nel modello C4 \(06_runtime_view\.md:\d+ Client -> API del Motore\)$'
         }
 
         It "E la stesura accettata arriva sul ramo della PR" {
