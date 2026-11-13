@@ -69,14 +69,16 @@ stages:
         displayName: 'Publish ${{ parameters.docsDirectory }} to the wiki'
         pool: ${{ parameters.pool }}
         steps:
-          - checkout: ${{ parameters.checkoutRepository }}
-            path: s
-
+          # The checkout moved to s deletes the default folders the agent creates under s for the other
+          # repositories, so it comes last: an earlier one would make the others clone again with a warning.
           - checkout: infrastructure
             path: pipeline-templates
 
           - checkout: ${{ parameters.wikiRepository }}
             path: wiki
+
+          - checkout: ${{ parameters.checkoutRepository }}
+            path: s
 
           - template: ../Common/Steps/document-language.yaml
             parameters:

@@ -97,15 +97,17 @@ jobs:
             df -h /
           displayName: 'Free disk space'
 
-      - checkout: ${{ parameters.checkoutRepository }}
-        fetchDepth: 0
-        ${{ if eq(parameters.checkoutPipelineTemplates, true) }}:
-          path: s
-
+      # The checkout moved to s deletes the default folders the agent creates under s for the other
+      # repositories, so it comes last: an earlier one would make the others clone again with a warning.
       - ${{ if eq(parameters.checkoutPipelineTemplates, true) }}:
         - checkout: infrastructure
           path: pipeline-templates
           fetchDepth: 1
+
+      - checkout: ${{ parameters.checkoutRepository }}
+        fetchDepth: 0
+        ${{ if eq(parameters.checkoutPipelineTemplates, true) }}:
+          path: s
 
       - template: ../Steps/gitleaks.yaml
         parameters:
