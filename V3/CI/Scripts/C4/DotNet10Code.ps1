@@ -93,10 +93,14 @@ function Test-InOwnProject([string]$File, [string]$Root, [string[]]$NestedRoots)
     return -not ($inIgnored -or $inNested)
 }
 
-function Get-ProjectCode($Project) {
+function Get-ProjectFiles($Project) {
     $root = Split-Path $Project.Path
     $nestedRoots = @(Get-ChildItem -Path $root -Recurse -File -Filter '*.csproj' | ForEach-Object { Split-Path $_.FullName } | Where-Object { $_ -ne $root })
-    return @(Get-ChildItem -Path $root -Recurse -File -Filter '*.cs' | Where-Object { Test-InOwnProject $_.FullName $root $nestedRoots } | ForEach-Object { Get-CodeWithoutComments $_ })
+    return @(Get-ChildItem -Path $root -Recurse -File -Filter '*.cs' | Where-Object { Test-InOwnProject $_.FullName $root $nestedRoots })
+}
+
+function Get-ProjectCode($Project) {
+    return @(Get-ProjectFiles $Project | ForEach-Object { Get-CodeWithoutComments $_ })
 }
 
 # Stringhe e caratteri tolti prima di contare le graffe: una graffa in un testo non apre un blocco.
@@ -130,11 +134,11 @@ function Get-DeclaredTypes([string]$Code) {
     }
 }
 
-# I tipi dichiarati dai progetti che non sono di test, con il nome completo e il nome della classe.
+# I tipi dichiarati dai progetti che non sono di test, con il nome completo, il nome della classe e il file.
 function Get-ProductionTypes($Projects) {
     foreach ($project in @($Projects.Values | Where-Object { $_.Kind -ne $TestKind })) {
-        foreach ($code in (Get-ProjectCode $project)) {
-            Get-DeclaredTypes $code | ForEach-Object { [pscustomobject]@{ FullName = $_; Name = ($_ -split '\.')[-1]; Project = $project.Name } }
+        foreach ($file in (Get-ProjectFiles $project)) {
+            Get-DeclaredTypes (Get-CodeWithoutComments $file) | ForEach-Object { [pscustomobject]@{ FullName = $_; Name = ($_ -split '\.')[-1]; Project = $project.Name; File = $file.FullName } }
         }
     }
 }

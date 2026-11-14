@@ -59,11 +59,12 @@ Describe "DotNet10Code.ps1" {
             Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
         }
 
-        It "legge i tipi dei progetti che non sono di test, con il nome della classe e il progetto" {
+        It "legge i tipi dei progetti che non sono di test, con il nome della classe, il progetto e il file" {
             $types.Count | Should -Be 1
             $types[0].FullName | Should -Be 'Contoso.Shop.Core.Issuer'
             $types[0].Name | Should -Be 'Issuer'
             $types[0].Project | Should -Be 'Contoso.Shop.Core'
+            $types[0].File | Should -Be (Join-Path $SourceDirectory 'Contoso.Shop.Core/Issuer.cs' | Resolve-Path).Path
         }
     }
 }
