@@ -257,19 +257,21 @@ Il modello è sostituito da un endpoint locale che risponde come Azure OpenAI, o
 | Configurazione e modalità | Guida indicata dal parametro, guida mancante, endpoint assente, `warn`, `off` |
 | Modello linguistico delle pipeline di documentazione | Con il fornitore `anthropic` il giudizio chiede la risposta a `claude-sonnet-5-5` su `/v1/messages` con la chiave Anthropic, senza token Entra ID né Azure CLI; con `foundry` al deployment dichiarato sulle chat completions; senza `ANTHROPIC_API_KEY` il passo fallisce nominando la chiave |
 
-#### `LanguageModel.Tests.ps1`, `Foundry.Tests.ps1`, `Anthropic.Tests.ps1`
+#### `LanguageModel.Tests.ps1`, `Foundry.Tests.ps1`, `Anthropic.Tests.ps1`, `LanguageModelTemplates.Tests.ps1`
 
 Il fornitore è un endpoint locale (`Fixtures/ModelEndpointStub.ps1`) che conserva percorso, intestazioni e corpo
 di ogni richiesta e risponde con le risposte registrate dal test; la Azure CLI e l'attesa fra i tentativi sono
 mock. Lo scenario `Un passo di documentazione usa Claude` del requisito si prova nei test dei tre passi
 (`Test-DocumentationStyle`, `Write-C4ModelText`, `Repair-DiagramFlows`) con la Azure CLI finta di
-`Fixtures/AzureCliProbe.ps1`.
+`Fixtures/AzureCliProbe.ps1`. `LanguageModelTemplates.Tests.ps1` legge il testo dei template dei tre passi e
+degli entry point `quality-arc42` e `quality-docs`.
 
 | Suite | Scenario testato |
 |---|---|
 | Scelta del fornitore | Foundry senza fornitore dichiarato, nome senza maiuscole e spazi, fornitore sconosciuto con l'elenco dei disponibili, chiamata al modulo del fornitore del client |
 | Foundry | Chat completions con token Entra ID, deployment, json_schema stretto con il nome, livello di ragionamento e seme solo se dichiarati, token chiesto alla Azure CLI una volta, token non ottenuto, seme rifiutato tolto per le richieste successive, 400 non ripetuto, `Retry-After`, tentativi esauriti, endpoint o modello mancanti |
 | Anthropic | `/v1/messages` con `x-api-key` e `anthropic-version`, `max_tokens` predefinito e dichiarato, system e unico messaggio dell'utente, schema invariato in `output_config.format`, `effort` solo se dichiarato, nessun campionamento, seme, `thinking` o risposta precompilata; testo letto dopo i blocchi di ragionamento, token usati, `refusal` e `max_tokens` come errori, risposta senza testo; 429 con `retry-after`, 529, 5xx, tentativi esauriti, 400 non ripetuto con il messaggio dell'API; chiave o modello mancanti |
+| Scelta del fornitore nei template | `documentation-style`, `c4-describe`, `flows-verify`: `foundry` di default, `AzureCLI@2` sulla service connection con Foundry, `PowerShell@2` senza Azure CLI con Anthropic e chiave mappata in `ANTHROPIC_API_KEY` da `$(anthropicApiKey)`, fornitore passato allo script, stesse variabili nelle due varianti; `styleProvider` e `styleAnthropicApiKey` negli entry point; riparazione dei diagrammi con Anthropic senza endpoint |
 
 #### `ScenarioCoverage.Tests.ps1` (14 suite, 25 test)
 

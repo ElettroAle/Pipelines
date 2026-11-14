@@ -199,3 +199,4 @@ Queste variabili devono essere definite nell'entry point (come `variables:` o tr
 | `sonarOrganization` | **parametro entry point** | quality-dotNet.yaml, quality-angular.yaml → `dotnet-sonar.yaml`, `angular-sonar.yaml` |
 | `sonarProjectKey` | **parametro entry point** | quality-dotNet.yaml, quality-angular.yaml → `dotnet-sonar.yaml`, `angular-sonar.yaml` |
 | `scenarioMessagesFile` | stringa | quality-dotNet.yaml → `dotnet-test.yaml`, `gherkin-scenario-coverage.yaml` |
+| `anthropicApiKey` | **segreta** | `documentation-style.yaml`, `c4-describe.yaml`, `flows-verify.yaml` con `provider: 'anthropic'` (mappata in `ANTHROPIC_API_KEY`) |

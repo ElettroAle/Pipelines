@@ -2,10 +2,13 @@
 
 # ── CI Step: Documentation style ──────────────────────────────────────────────
 #
-# Giudica lo stile delle sezioni di un documento con un modello Azure OpenAI
+# Giudica lo stile delle sezioni di un documento con un modello linguistico
 # (V3/CI/Scripts/Documentation/Test-DocumentationStyle.ps1): la guida di stile del repository e'
-# l'istruzione del modello. L'accesso al modello passa dalla service connection con un
-# token Entra ID, senza chiavi. In modalita' fix le correzioni del modello, validate e
+# l'istruzione del modello. Con provider foundry il modello e' un deployment Azure OpenAI e l'accesso
+# passa dalla service connection con un token Entra ID (AzureCLI@2); con provider anthropic e' Claude
+# a consumo sull'API Anthropic, il passo e' un PowerShell@2 senza service connection e la chiave e' una
+# variabile segreta del consumer, mappata in ANTHROPIC_API_KEY: senza, il passo fallisce nominandola.
+# In modalita' fix le correzioni del modello, validate e
 # rigiudicate, si salvano un file alla volta su un ramo di appoggio e tornano sul ramo della
 # PR a fine giudizio con i commit dell'identita' della build, che deve poter contribuire al
 # repository, creare rami e, per togliere il ramo di appoggio, cancellarli.
@@ -24,9 +27,14 @@
 #   reference          → file o cartelle che descrivono il sistema, ad esempio il modello generato: contesto
 #                        delle regole che li citano, e se una PR li cambia tutte le sezioni si rigiudicano
 #                        (default: nessuno)
-#   serviceConnection  → service connection Azure con il ruolo Cognitive Services OpenAI User [REQUIRED se mode non e' off]
-#   endpoint           → endpoint della risorsa Azure OpenAI, es. https://<nome>.openai.azure.com [REQUIRED se mode non e' off]
-#   model              → nome del deployment del modello [REQUIRED se mode non e' off]
+#   provider           → fornitore del modello: 'foundry' (default) | 'anthropic'
+#   serviceConnection  → service connection Azure con il ruolo Cognitive Services OpenAI User [REQUIRED con foundry
+#                        se mode non e' off]
+#   endpoint           → endpoint della risorsa Azure OpenAI, es. https://<nome>.openai.azure.com [REQUIRED con foundry
+#                        se mode non e' off]; con anthropic vuoto vuol dire https://api.anthropic.com
+#   model              → deployment Foundry o modello Anthropic, es. claude-sonnet-5-5 [REQUIRED se mode non e' off]
+#   anthropicApiKey    → chiave dell'API Anthropic, con anthropic (default: $(anthropicApiKey), la variabile
+#                        segreta del consumer: una variabile segreta arriva allo script solo cosi')
 #   gulpease, maxWords, abbreviations, decisionsDirectory → soglie dei controlli oggettivi, rieseguiti sul
 #                        testo corretto prima di pubblicarlo (come in documentation-verify.yaml)
 #   maxRounds          → giri massimi di giudizio in modalita' fix, l'ultimo solo di verifica (default: 4)
@@ -59,6 +67,11 @@ parameters:
   - name: reference
     type: object
     default: []
+
+  - name: provider
+    type: string
+    default: 'foundry'
+    values: ['foundry', 'anthropic']
 
   - name: serviceConnection
     type: string
@@ -100,6 +113,10 @@ parameters:
     type: number
     default: 1
 
+  - name: anthropicApiKey
+    type: string
+    default: '$(anthropicApiKey)'
+
   - name: templatesDirectory
     type: string
     default: '$(Pipeline.Workspace)/pipeline-templates'
@@ -107,7 +124,7 @@ parameters:
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
-  - ${{ if ne(parameters.mode, 'off') }}:
+  - ${{ if and(ne(parameters.mode, 'off'), eq(parameters.provider, 'foundry')) }}:
     - template: ensure-azure-cli.yaml
 
     - task: AzureCLI@2
@@ -137,3 +154,33 @@ steps:
         DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}
         STYLE_JUDGE_ENDPOINT: ${{ parameters.endpoint }}
         STYLE_JUDGE_MODEL: ${{ parameters.model }}
+        STYLE_JUDGE_PROVIDER: ${{ parameters.provider }}
+
+  - ${{ if and(ne(parameters.mode, 'off'), eq(parameters.provider, 'anthropic')) }}:
+    - task: PowerShell@2
+      displayName: 'Documentation style ${{ parameters.docsDirectory }} (${{ parameters.mode }})'
+      inputs:
+        filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Documentation/Test-DocumentationStyle.ps1'
+        workingDirectory: '$(Build.SourcesDirectory)'
+        pwsh: true
+      env:
+        GATE_MODE: ${{ replace(parameters.mode, 'fix', 'enforce') }}
+        STYLE_FIX: ${{ eq(parameters.mode, 'fix') }}
+        STYLE_MAX_ROUNDS: ${{ parameters.maxRounds }}
+        STYLE_MAX_FINDINGS: ${{ parameters.maxFindings }}
+        STYLE_JUDGE_SEED: ${{ parameters.seed }}
+        DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
+        STYLE_GUIDE: ${{ parameters.guide }}
+        DOCS_GLOSSARY: ${{ parameters.glossary }}
+        STYLE_REFERENCE: ${{ join(';', parameters.reference) }}
+        TARGET_BRANCH: $(System.PullRequest.TargetBranch)
+        SOURCE_BRANCH: $(System.PullRequest.SourceBranch)
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+        READABILITY_GULPEASE: ${{ parameters.gulpease }}
+        READABILITY_MAX_WORDS: ${{ parameters.maxWords }}
+        READABILITY_ABBREVIATIONS: ${{ join(';', parameters.abbreviations) }}
+        DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}
+        STYLE_JUDGE_ENDPOINT: ${{ parameters.endpoint }}
+        STYLE_JUDGE_MODEL: ${{ parameters.model }}
+        STYLE_JUDGE_PROVIDER: ${{ parameters.provider }}
+        ANTHROPIC_API_KEY: ${{ parameters.anthropicApiKey }}

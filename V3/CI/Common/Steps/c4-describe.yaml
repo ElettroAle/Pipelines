@@ -4,7 +4,7 @@
 #
 # Testo del modello C4 di tutto il sistema (V3/CI/Scripts/C4/Write-C4ModelText.ps1): la descrizione di
 # ogni elemento, cio' che passa su ogni relazione, le persone e i sistemi esterni con le loro relazioni,
-# scritti da un modello Azure OpenAI leggendo i frammenti dei lettori di tutti i repository sorgente
+# scritti da un modello linguistico leggendo i frammenti dei lettori di tutti i repository sorgente
 # (c4-read-*.yaml), il codice degli elementi, la guida di stile e i documenti di contesto. Un solo testo,
 # cosi' ogni persona, sistema esterno e applicazione compare una volta: dopo i container il modello
 # rilegge insieme il catalogo di persone e sistemi esterni e unisce le voci che indicano la stessa cosa.
@@ -15,9 +15,12 @@
 # fino a maxDrafts stesure. Il testo accettato si salva in generatedDirectory e, con progressBranch, sul
 # ramo, un container alla volta: rilanciata, la pipeline riparte dai container senza testo accettato. Il
 # testo di un container la cui struttura non cambia resta quello accettato. Lo compone c4-generate.yaml,
-# da eseguire dopo questo step per ogni repository sorgente. L'accesso al modello passa dalla service connection con un token Entra ID,
-# senza chiavi; con progressBranch l'identita' della build deve poter contribuire al repository e creare
-# rami.
+# da eseguire dopo questo step per ogni repository sorgente. Con provider foundry il modello e' un
+# deployment Azure OpenAI e l'accesso passa dalla service connection con un token Entra ID (AzureCLI@2);
+# con provider anthropic e' Claude a consumo sull'API Anthropic, il passo e' un PowerShell@2 senza service
+# connection e la chiave e' una variabile segreta del consumer, mappata in ANTHROPIC_API_KEY: senza, il
+# passo fallisce nominandola. Con progressBranch l'identita' della build deve poter contribuire al
+# repository e creare rami.
 #
 # Riusato da:
 #   il consumer, nella pipeline della documentazione che rigenera il modello dopo l'integrazione di un
@@ -26,10 +29,15 @@
 # Parametri
 # ─────────
 #   mode                → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
-#   serviceConnection   → service connection Azure con il ruolo Cognitive Services OpenAI User [REQUIRED se mode non e' off]
-#   endpoint            → endpoint della risorsa Azure OpenAI, es. https://<nome>.openai.azure.com [REQUIRED se mode non e' off]
-#   model               → nome del deployment del modello [REQUIRED se mode non e' off]
-#   reasoningEffort     → ragionamento del modello (default: high)
+#   provider            → fornitore del modello: 'foundry' (default) | 'anthropic'
+#   serviceConnection   → service connection Azure con il ruolo Cognitive Services OpenAI User [REQUIRED con foundry
+#                         se mode non e' off]
+#   endpoint            → endpoint della risorsa Azure OpenAI, es. https://<nome>.openai.azure.com [REQUIRED con
+#                         foundry se mode non e' off]; con anthropic vuoto vuol dire https://api.anthropic.com
+#   model               → deployment Foundry o modello Anthropic, es. claude-sonnet-5-5 [REQUIRED se mode non e' off]
+#   anthropicApiKey     → chiave dell'API Anthropic, con anthropic (default: $(anthropicApiKey), la variabile
+#                         segreta del consumer: una variabile segreta arriva allo script solo cosi')
+#   reasoningEffort     → ragionamento del modello (default: high; con anthropic anche xhigh e max)
 #   maxDrafts           → stesure massime per container e per il controllo del catalogo (default: 3)
 #   sourceRepositories  → repository sorgente del documento separati da virgola [REQUIRED]
 #   sourcesDirectory    → cartella con il checkout di ogni repository sorgente in <repository>
@@ -57,6 +65,11 @@ parameters:
     default: 'enforce'
     values: ['off', 'warn', 'enforce']
 
+  - name: provider
+    type: string
+    default: 'foundry'
+    values: ['foundry', 'anthropic']
+
   - name: serviceConnection
     type: string
     default: ''
@@ -72,6 +85,10 @@ parameters:
   - name: reasoningEffort
     type: string
     default: 'high'
+
+  - name: anthropicApiKey
+    type: string
+    default: '$(anthropicApiKey)'
 
   - name: maxDrafts
     type: number
@@ -131,7 +148,7 @@ parameters:
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
-  - ${{ if ne(parameters.mode, 'off') }}:
+  - ${{ if and(ne(parameters.mode, 'off'), eq(parameters.provider, 'foundry')) }}:
     - template: ensure-azure-cli.yaml
 
     - task: AzureCLI@2
@@ -160,3 +177,32 @@ steps:
         READABILITY_ABBREVIATIONS: ${{ join(';', parameters.abbreviations) }}
         PROGRESS_BRANCH: ${{ parameters.progressBranch }}
         SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+        C4_TEXT_PROVIDER: ${{ parameters.provider }}
+
+  - ${{ if and(ne(parameters.mode, 'off'), eq(parameters.provider, 'anthropic')) }}:
+    - task: PowerShell@2
+      displayName: 'C4 model text (${{ parameters.mode }})'
+      inputs:
+        filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/C4/Write-C4ModelText.ps1'
+        workingDirectory: '${{ parameters.workingDirectory }}'
+        pwsh: true
+      env:
+        GATE_MODE: ${{ parameters.mode }}
+        SOURCE_REPOSITORIES: ${{ parameters.sourceRepositories }}
+        SOURCES_DIRECTORY: ${{ parameters.sourcesDirectory }}
+        C4_CORRECTIONS_FILE: ${{ parameters.correctionsFile }}
+        FRAGMENT_DIRECTORY: ${{ parameters.fragmentDirectory }}
+        GENERATED_DIRECTORY: ${{ parameters.generatedDirectory }}
+        STYLE_GUIDE: ${{ parameters.guide }}
+        C4_TEXT_CONTEXT: ${{ join(';', parameters.context) }}
+        C4_REVIEW_EVIDENCE: ${{ join(';', parameters.reviewEvidence) }}
+        C4_TEXT_ENDPOINT: ${{ parameters.endpoint }}
+        C4_TEXT_MODEL: ${{ parameters.model }}
+        C4_TEXT_REASONING_EFFORT: ${{ parameters.reasoningEffort }}
+        C4_TEXT_MAX_DRAFTS: ${{ parameters.maxDrafts }}
+        READABILITY_MAX_WORDS: ${{ parameters.maxWords }}
+        READABILITY_ABBREVIATIONS: ${{ join(';', parameters.abbreviations) }}
+        PROGRESS_BRANCH: ${{ parameters.progressBranch }}
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+        C4_TEXT_PROVIDER: ${{ parameters.provider }}
+        ANTHROPIC_API_KEY: ${{ parameters.anthropicApiKey }}
