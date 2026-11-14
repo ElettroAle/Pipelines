@@ -4,10 +4,11 @@
 # relazione, le persone e i sistemi esterni con le loro relazioni. Un solo testo per tutti i repository
 # sorgente (SOURCE_REPOSITORIES, ognuno in SOURCES_DIRECTORY/<repository>): parti scritte separatamente
 # dichiarerebbero due volte la stessa persona o la stessa applicazione con nomi diversi. Lo scrive un
-# modello Azure OpenAI leggendo i frammenti dei lettori (FRAGMENT_DIRECTORY), il codice degli elementi
-# (sources), la guida di stile e i documenti di contesto; Export-C4CodeModel.ps1 lo compone con la
-# struttura. Si scrive un container alla volta, poi il modello rilegge il catalogo di persone e sistemi
-# esterni vedendo insieme tutti i container e unisce le voci che indicano la stessa cosa.
+# modello linguistico del fornitore scelto (C4_TEXT_PROVIDER) leggendo i frammenti dei lettori
+# (FRAGMENT_DIRECTORY), il codice degli elementi (sources), la guida di stile e i documenti di contesto;
+# Export-C4CodeModel.ps1 lo compone con la struttura. Si scrive un container alla volta, poi il modello
+# rilegge il catalogo di persone e sistemi esterni vedendo insieme tutti i container e unisce le voci
+# che indicano la stessa cosa.
 # Una stesura respinta non ferma la run: cio' che la struttura non contiene si toglie e si elenca in
 # C4_CORRECTIONS_FILE, i testi mancanti e le frasi troppo lunghe tornano al modello, che riscrive solo
 # quelli. Il testo accettato si salva in model.text.json (GENERATED_DIRECTORY) e, con PROGRESS_BRANCH,
@@ -22,7 +23,7 @@
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
 . "$PSScriptRoot/../Common/DocumentLanguage.ps1"
 . "$PSScriptRoot/../Common/MarkdownText.ps1"
-. "$PSScriptRoot/../Common/ModelRetry.ps1"
+. "$PSScriptRoot/../LanguageModel/LanguageModel.ps1"
 . "$PSScriptRoot/C4CodeModel.ps1"
 
 $SourceRepositories = @("$env:SOURCE_REPOSITORIES" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
@@ -31,8 +32,10 @@ $GeneratedDirectory = if ($env:GENERATED_DIRECTORY) { $env:GENERATED_DIRECTORY }
 $CorrectionsFile = $env:C4_CORRECTIONS_FILE
 $GuidePath = $env:STYLE_GUIDE
 $ContextPaths = @("$env:C4_TEXT_CONTEXT" -split ';' | ForEach-Object Trim | Where-Object { $_ })
-$Endpoint = "$env:C4_TEXT_ENDPOINT".TrimEnd('/')
+$Provider = $env:C4_TEXT_PROVIDER
+$Endpoint = $env:C4_TEXT_ENDPOINT
 $Model = $env:C4_TEXT_MODEL
+$MaxTokens = [int]"0$env:C4_TEXT_MAX_TOKENS"
 $ReasoningEffort = if ($env:C4_TEXT_REASONING_EFFORT) { $env:C4_TEXT_REASONING_EFFORT } else { 'high' }
 $MaxDrafts = if ($env:C4_TEXT_MAX_DRAFTS) { [math]::Max(1, [int]$env:C4_TEXT_MAX_DRAFTS) } else { 3 }
 $MaxSourceCharacters = if ($env:C4_TEXT_MAX_SOURCE_CHARACTERS) { [int]$env:C4_TEXT_MAX_SOURCE_CHARACTERS } else { 300000 }
@@ -416,38 +419,12 @@ function Get-SystemMessage {
     return "$Instructions`nGUIDA DI STILE:`n$guide"
 }
 
-function Get-AccessToken {
-    if ($env:C4_TEXT_TOKEN) { return $env:C4_TEXT_TOKEN }
-    $token = az account get-access-token --resource 'https://cognitiveservices.azure.com' --query accessToken -o tsv 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "token Entra ID non ottenuto: $token" }
-    return $token
-}
-
 function Invoke-Writer([string]$System, [string]$User, [hashtable]$Schema = (New-TextSchema), [string]$SchemaName = 'c4_model_text') {
-    if (-not $script:Token) { $script:Token = Get-AccessToken }
-    $body = [ordered]@{
-        model            = $Model
-        reasoning_effort = $ReasoningEffort
-        messages         = @(@{ role = 'system'; content = $System }, @{ role = 'user'; content = $User })
-        response_format  = @{ type = 'json_schema'; json_schema = @{ name = $SchemaName; strict = $true; schema = $Schema } }
-    } | ConvertTo-Json -Depth 30
-    for ($attempt = 1; ; $attempt++) {
-        try {
-            $response = Invoke-RestMethod -Method Post -Uri "$Endpoint/openai/v1/chat/completions" -Body ([Text.Encoding]::UTF8.GetBytes($body)) `
-                -ContentType 'application/json; charset=utf-8' -Headers @{ Authorization = "Bearer $script:Token" } -TimeoutSec $RequestTimeoutSeconds
-            break
-        }
-        catch {
-            $status = [int]$_.Exception.Response.StatusCode
-            $transient = $status -eq 429 -or $status -ge 500
-            if (-not $transient -or $attempt -ge $ModelMaxAttempts) { throw }
-            Start-Sleep -Seconds (Get-ModelRetryDelay $_.Exception.Response $attempt)
-        }
-    }
+    $answer = Invoke-LanguageModel $script:LanguageModel $System $User $Schema $SchemaName
     $script:Usage.Requests++
-    $script:Usage.Input += [int]$response.usage.prompt_tokens
-    $script:Usage.Output += [int]$response.usage.completion_tokens
-    return $response.choices[0].message.content | ConvertFrom-Json
+    $script:Usage.Input += $answer.Usage.Input
+    $script:Usage.Output += $answer.Usage.Output
+    return $answer.Response
 }
 
 function Test-Readable([string]$Text, [string]$Where) {
@@ -1082,7 +1059,8 @@ function Write-Corrections {
 
 function Get-TextIssues {
     if (-not $SourceRepositories) { return New-Issue $TextScope 'repository sorgente non dichiarati' 'SOURCE_REPOSITORIES' }
-    if (-not $Endpoint -or -not $Model) { return New-Issue $TextScope 'testo non scritto' 'endpoint o modello non configurati' }
+    try { $script:LanguageModel = New-LanguageModel $Provider $Endpoint $Model $ReasoningEffort -AccessToken $env:C4_TEXT_TOKEN -MaxTokens $MaxTokens -TimeoutSeconds $RequestTimeoutSeconds }
+    catch { return New-Issue $TextScope 'testo non scritto' $_.Exception.Message }
 
     $units = @(Get-Units @(Read-Fragments))
     if (-not $units) { return New-Issue $TextScope 'nessun container da descrivere' $FragmentDirectory }

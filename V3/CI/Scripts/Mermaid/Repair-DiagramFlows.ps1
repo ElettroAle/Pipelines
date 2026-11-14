@@ -11,12 +11,14 @@
 # della PR a fine giro: un push sul ramo della PR avvierebbe una nuova build. Se il job si interrompe, la
 # build dopo porta sul ramo della PR i commit del ramo di appoggio senza chiamare il modello.
 
-. "$PSScriptRoot/../Common/ModelRetry.ps1"
+. "$PSScriptRoot/../LanguageModel/LanguageModel.ps1"
 . "$PSScriptRoot/DiagramFlows.ps1"
 
 $sourceBranch = $env:SOURCE_BRANCH -replace '^refs/heads/', '' -replace '^\$\(.*\)$', ''
-$Endpoint = "$env:FLOWS_REPAIR_ENDPOINT".TrimEnd('/')
-$Deployment = $env:FLOWS_REPAIR_MODEL
+$Provider = $env:FLOWS_REPAIR_PROVIDER
+$Endpoint = $env:FLOWS_REPAIR_ENDPOINT
+$ModelName = $env:FLOWS_REPAIR_MODEL
+$MaxTokens = [int]"0$env:FLOWS_REPAIR_MAX_TOKENS"
 $ReasoningEffort = if ($env:FLOWS_REPAIR_REASONING_EFFORT) { $env:FLOWS_REPAIR_REASONING_EFFORT } else { 'high' }
 $MaxDrafts = if ($env:FLOWS_REPAIR_MAX_DRAFTS) { [math]::Max(1, [int]$env:FLOWS_REPAIR_MAX_DRAFTS) } else { 3 }
 $GuidePath = $env:STYLE_GUIDE
@@ -27,7 +29,7 @@ $SideBranchPrefix = 'flows-repair'
 $SkipCi = '[skip ci]'
 $RequestTimeoutSeconds = 900
 
-$script:Token = $null
+$script:LanguageModel = $null
 $script:Usage = @{ Requests = 0; Input = 0; Output = 0 }
 
 $Instructions = @'
@@ -76,38 +78,12 @@ function Get-SystemMessage {
     return "$Instructions`nGUIDA DI STILE:`n$guide"
 }
 
-function Get-AccessToken {
-    if ($env:FLOWS_REPAIR_TOKEN) { return $env:FLOWS_REPAIR_TOKEN }
-    $token = az account get-access-token --resource 'https://cognitiveservices.azure.com' --query accessToken -o tsv 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "token Entra ID non ottenuto: $token" }
-    return $token
-}
-
 function Invoke-Writer([string]$System, [string]$User) {
-    if (-not $script:Token) { $script:Token = Get-AccessToken }
-    $body = [ordered]@{
-        model            = $Deployment
-        reasoning_effort = $ReasoningEffort
-        messages         = @(@{ role = 'system'; content = $System }, @{ role = 'user'; content = $User })
-        response_format  = @{ type = 'json_schema'; json_schema = @{ name = 'diagram_flows_repair'; strict = $true; schema = New-RepairSchema } }
-    } | ConvertTo-Json -Depth 30
-    for ($attempt = 1; ; $attempt++) {
-        try {
-            $response = Invoke-RestMethod -Method Post -Uri "$Endpoint/openai/v1/chat/completions" -Body ([Text.Encoding]::UTF8.GetBytes($body)) `
-                -ContentType 'application/json; charset=utf-8' -Headers @{ Authorization = "Bearer $script:Token" } -TimeoutSec $RequestTimeoutSeconds
-            break
-        }
-        catch {
-            $status = [int]$_.Exception.Response.StatusCode
-            $transient = $status -eq 429 -or $status -ge 500
-            if (-not $transient -or $attempt -ge $ModelMaxAttempts) { throw }
-            Start-Sleep -Seconds (Get-ModelRetryDelay $_.Exception.Response $attempt)
-        }
-    }
+    $answer = Invoke-LanguageModel $script:LanguageModel $System $User (New-RepairSchema) 'diagram_flows_repair'
     $script:Usage.Requests++
-    $script:Usage.Input += [int]$response.usage.prompt_tokens
-    $script:Usage.Output += [int]$response.usage.completion_tokens
-    return $response.choices[0].message.content | ConvertFrom-Json
+    $script:Usage.Input += $answer.Usage.Input
+    $script:Usage.Output += $answer.Usage.Output
+    return $answer.Response
 }
 
 function Format-FlowModel($Model) {
@@ -299,6 +275,8 @@ function Repair-DiagramFlows {
     if (-not $sections) { return }
     $flowModel = Get-FlowModel
     if ($flowModel.Finding) { return }
+    try { $script:LanguageModel = New-LanguageModel $Provider $Endpoint $ModelName $ReasoningEffort -AccessToken $env:FLOWS_REPAIR_TOKEN -MaxTokens $MaxTokens -TimeoutSeconds $RequestTimeoutSeconds }
+    catch { return New-Issue $RepairScope 'riparazione non eseguita' $_.Exception.Message }
 
     $publisher = New-Publisher $source
     $issues = @()

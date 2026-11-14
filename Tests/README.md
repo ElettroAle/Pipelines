@@ -25,6 +25,8 @@ Tests/
     │   │   └── Fixtures/       # Repository sorgente finti, lettore del consumer, finto modello del testo
     │   ├── Mermaid/            # Test-MermaidDiagrams, Test-DiagramFlows, Sync-DiagramLabels, Repair-DiagramFlows
     │   ├── Documentation/      # Test-Documentation, Test-DocumentationStyle
+    │   ├── LanguageModel/      # LanguageModel, Foundry, Anthropic
+    │   │   └── Fixtures/       # Endpoint finto di un fornitore, Azure CLI finta che segna se viene chiamata
     │   ├── Release/            # GitCliff, Set-Versioning, Verify-SemVer, New-ReleaseNotes, Test-PublishedArtifact
     │   │   └── Fixtures/       # valid-commits.txt, invalid-commits.txt, usati da Verify-SemVer.Tests
     │   └── ScenarioCoverage/   # ScenarioCoverage.Tests.ps1
@@ -213,6 +215,7 @@ registrate e conserva le richieste.
 |---|---|
 | Diagrammi riallineati dall'AI | Chiamata senza relazione riparata passando per il modello, con il testo e un commit `[skip ci]` sul ramo della PR; elemento tolto dal modello; stesura scartata rimandata con i motivi; stesure esaurite senza pubblicare; ripresa dal ramo di appoggio senza chiamare il modello; documento in regola e fuori da una PR senza chiamate |
 | Stesure che non si applicano | Frase da sostituire che non compare una volta sola; riga senza diagramma |
+| Modello linguistico delle pipeline di documentazione | Con il fornitore `anthropic` la riparazione chiede la risposta a `claude-sonnet-5-5` su `/v1/messages` con la chiave Anthropic, senza token Entra ID né Azure CLI |
 
 #### `DiagramModel.Tests.ps1`
 
@@ -240,7 +243,7 @@ Richiede Node.js; il modello C4 è l'export JSON di Structurizr costruito in mem
 
 #### `Test-DocumentationStyle.Tests.ps1`
 
-Il modello è sostituito da un endpoint locale che risponde come Azure OpenAI: restituisce un rilievo quando la sezione inviata contiene la frase registrata e conserva le richieste. Le prove verificano cosa si manda al modello e come si riporta la risposta; il giudizio vero del modello si prova con gli esempi della guida di stile del repository della documentazione.
+Il modello è sostituito da un endpoint locale che risponde come Azure OpenAI, o come l'API Messages di Anthropic sul suo percorso: restituisce un rilievo quando la sezione inviata contiene la frase registrata e conserva le richieste. Le prove verificano cosa si manda al modello e come si riporta la risposta; il giudizio vero del modello si prova con gli esempi della guida di stile del repository della documentazione.
 
 | Suite | Scenario testato |
 |---|---|
@@ -252,6 +255,21 @@ Il modello è sostituito da un endpoint locale che risponde come Azure OpenAI: r
 | Giudizio delle decisioni | Regola delle decisioni violata (decisione e regola nominate); regola delle sezioni non applicata a una decisione; decisione respinta non giudicata; correzione di una decisione accettata alla versione portata dalla PR, senza versione nuova; titolo di una decisione nuova corretto con la riga dell'indice, che conta come giudicata |
 | Titoli e correzioni verificate | Titolo di secondo livello di una sezione corretto con il rimando alla sua ancora; paragrafo aggiunto che non toglie la violazione annullato, con il motivo nel rilievo |
 | Configurazione e modalità | Guida indicata dal parametro, guida mancante, endpoint assente, `warn`, `off` |
+| Modello linguistico delle pipeline di documentazione | Con il fornitore `anthropic` il giudizio chiede la risposta a `claude-sonnet-5-5` su `/v1/messages` con la chiave Anthropic, senza token Entra ID né Azure CLI; con `foundry` al deployment dichiarato sulle chat completions; senza `ANTHROPIC_API_KEY` il passo fallisce nominando la chiave |
+
+#### `LanguageModel.Tests.ps1`, `Foundry.Tests.ps1`, `Anthropic.Tests.ps1`
+
+Il fornitore è un endpoint locale (`Fixtures/ModelEndpointStub.ps1`) che conserva percorso, intestazioni e corpo
+di ogni richiesta e risponde con le risposte registrate dal test; la Azure CLI e l'attesa fra i tentativi sono
+mock. Lo scenario `Un passo di documentazione usa Claude` del requisito si prova nei test dei tre passi
+(`Test-DocumentationStyle`, `Write-C4ModelText`, `Repair-DiagramFlows`) con la Azure CLI finta di
+`Fixtures/AzureCliProbe.ps1`.
+
+| Suite | Scenario testato |
+|---|---|
+| Scelta del fornitore | Foundry senza fornitore dichiarato, nome senza maiuscole e spazi, fornitore sconosciuto con l'elenco dei disponibili, chiamata al modulo del fornitore del client |
+| Foundry | Chat completions con token Entra ID, deployment, json_schema stretto con il nome, livello di ragionamento e seme solo se dichiarati, token chiesto alla Azure CLI una volta, token non ottenuto, seme rifiutato tolto per le richieste successive, 400 non ripetuto, `Retry-After`, tentativi esauriti, endpoint o modello mancanti |
+| Anthropic | `/v1/messages` con `x-api-key` e `anthropic-version`, `max_tokens` predefinito e dichiarato, system e unico messaggio dell'utente, schema invariato in `output_config.format`, `effort` solo se dichiarato, nessun campionamento, seme, `thinking` o risposta precompilata; testo letto dopo i blocchi di ragionamento, token usati, `refusal` e `max_tokens` come errori, risposta senza testo; 429 con `retry-after`, 529, 5xx, tentativi esauriti, 400 non ripetuto con il messaggio dell'API; chiave o modello mancanti |
 
 #### `ScenarioCoverage.Tests.ps1` (14 suite, 25 test)
 
