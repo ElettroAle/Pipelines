@@ -33,7 +33,7 @@ Describe "DotNet10Code.ps1" {
         }
 
         It "non conta le graffe dentro stringhe e caratteri" {
-            $code = "namespace Contoso.Shop.Core;`n`npublic class Issuer`n{`n    private const string Open = `"{`";`n    private const string Raw = `"`"`"`n        }`n        `"`"`";`n    private const char Close = '}';`n    private const string Verbatim = @`"}`"`"`";`n}`npublic class After { }`n"
+            $code = "namespace Contoso.Shop.Core;`n`npublic class Issuer`n{`n    private const string Open = `"{`";`n    private const string Raw = `"`"`"`n        {`n        `"`"`";`n    private const char Brace = '{';`n    private const string Verbatim = @`"{`"`"`";`n    private const string Interpolated = `$@`"{{`";`n}`npublic class After { }`n"
             Get-DeclaredTypes $code | Should -Be @('Contoso.Shop.Core.Issuer', 'Contoso.Shop.Core.After')
         }
 

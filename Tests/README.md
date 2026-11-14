@@ -159,7 +159,7 @@ repository .NET finto con il suo diagramma delle classi e vi introduce un solo d
 | Suite | Scenario testato |
 |---|---|
 | Diagramma delle classi coerente con il codice che governa | Diagramma coerente, con una classe del framework che nessun pattern copre; classe governata assente dal diagramma, con la classe e la decisione; classe fuori dalle parti governate non nominata; classe di un progetto di test, tipo annidato e classe accanto al prefisso non controllati; voce di `governs` senza classi, struttura senza `governs`, `governs` senza struttura, struttura senza diagramma delle classi; decisioni chiuse non controllate; corpus senza struttura nel codice senza leggere il codice; codice sorgente assente; `warn` e `off` |
-| `DecisionClasses.ps1` | Frontmatter con le liste, pattern esatti e con il prefisso, nome della classe senza parametri generici, rilievi del confronto nel processo dei test |
+| `DecisionClasses.ps1` | Frontmatter con le liste, pattern esatti e con il prefisso, nome della classe senza parametri generici, rilievi del confronto nel processo dei test, con una classe parziale in due file nominata una volta |
 
 #### `DotNet10Code.Tests.ps1`
 

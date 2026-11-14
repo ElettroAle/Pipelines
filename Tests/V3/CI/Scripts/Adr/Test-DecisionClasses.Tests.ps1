@@ -263,7 +263,8 @@ Describe "DecisionClasses.ps1" {
         BeforeAll {
             $root = Join-Path ([IO.Path]::GetTempPath()) "pester-decision-classes-unit-$(New-Guid)"
             $files = New-ShopFiles
-            $files['source/Contoso.Shop.Core/Queue/QueueTicketCanceller.cs'] = "namespace Contoso.Shop.Core.Queue;`n`npublic class QueueTicketCanceller { }`n"
+            $files['source/Contoso.Shop.Core/Queue/QueueTicketCanceller.cs'] = "namespace Contoso.Shop.Core.Queue;`n`npublic partial class QueueTicketCanceller { }`n"
+            $files['source/Contoso.Shop.Core/Queue/QueueTicketCanceller.Refund.cs'] = "namespace Contoso.Shop.Core.Queue;`n`npublic partial class QueueTicketCanceller { }`n"
             $corpus = New-ClassesCorpus $files
             $corpus['docs/decisions/0037-biglietti-chiusi.md'] = New-DecisionText -Status 'superseded'
             Write-SourceFiles $root $corpus
@@ -276,7 +277,7 @@ Describe "DecisionClasses.ps1" {
             Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
         }
 
-        It "nomina la classe governata che manca dal diagramma, una volta sola" {
+        It "nomina una volta sola la classe governata che manca dal diagramma, anche se parziale in due file" {
             $issues | Should -Be @('0036-intenzioni-applicate-dopo-il-turno: classe governata assente dal diagramma delle classi (Contoso.Shop.Core.Queue.QueueTicketCanceller)')
         }
     }
