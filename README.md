@@ -253,6 +253,7 @@ parametri di formato e senza condizioni sul formato.
 | `flows-verify.yaml` | `Test-DiagramFlows.ps1`, con `Sync-DiagramLabels.ps1` e, con `endpoint`, `Repair-DiagramFlows.ps1` in modalità `fix` | flussi fatti degli elementi del modello C4, riconosciuti per identificativo, e delle classi delle decisioni; in una PR, diagrammi allineati ai nomi del modello e riparati da un modello linguistico quando il modello C4 toglie o aggiunge elementi | C4, Mermaid |
 | `documentation-verify.yaml` | `Test-Documentation.ps1` | rimandi esistenti, soglie numeriche di leggibilità | nessun formato |
 | `documentation-style.yaml` | `Test-DocumentationStyle.ps1` | giudizio dello stile con la guida del repository | nessun formato |
+| `documentation-update.yaml` | `Update-Documentation.ps1`, poi `Publish-PullRequest.ps1` | dopo un cambiamento nel ramo principale un modello linguistico riscrive i documenti toccati, le verifiche indicate giudicano ogni stesura, e una PR in auto-complete la porta nel ramo principale; respinta a ogni stesura apre un work item, con il modello non disponibile si riprende alla run successiva | nessun formato |
 
 Due ingressi:
 
@@ -634,9 +635,9 @@ Giudizio dello stile (`styleMode`, `CI/Scripts/Documentation/Test-DocumentationS
 ### Modello linguistico dei passi di documentazione
 
 Il giudizio dello stile (`documentation-style.yaml`, e `styleProvider` di `quality-arc42` e `quality-docs`), il
-testo del modello C4 (`c4-describe.yaml`), la riparazione dei diagrammi (`flows-verify.yaml`) e la proposta delle
-classi delle decisioni (`adr-classes-verify.yaml`) scelgono il
-fornitore del modello con il parametro `provider`, passato agli script (`CI/Scripts/LanguageModel/`):
+testo del modello C4 (`c4-describe.yaml`), la riparazione dei diagrammi (`flows-verify.yaml`), l'aggiornamento
+della documentazione (`documentation-update.yaml`) e la proposta delle classi delle decisioni
+(`adr-classes-verify.yaml`) scelgono il fornitore del modello con il parametro `provider`, passato agli script (`CI/Scripts/LanguageModel/`):
 
 - `foundry` (default): `model` è il deployment Azure OpenAI di `endpoint`; il passo è un `AzureCLI@2` sulla
   `serviceConnection`, con un token Entra ID, senza chiavi.
@@ -790,6 +791,7 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/Mermaid/Sync-DiagramLabels.ps1` | Diagrammi allineati al modello C4 (`flows-verify.yaml` in modalità `fix`): alias e etichette dei partecipanti e nomi dei riquadri dal modello, migrazione dei partecipanti scritti per nome con il modello del ramo base, commit sul ramo della PR |
 | `CI/Scripts/Mermaid/DiagramModel.ps1` | Elementi del modello C4 per identificativo del DSL, partecipanti e riquadri dei diagrammi di sequenza riconosciuti e riscritti con i nomi del modello |
 | `CI/Scripts/Documentation/Test-Documentation.ps1` | Controlli comuni a ogni documento (`documentation-verify.yaml`): rimandi esistenti, soglie numeriche di leggibilità |
+| `CI/Scripts/Documentation/Update-Documentation.ps1`, `DocumentationUpdate.ps1` | Aggiornamento della documentazione (`documentation-update.yaml`) con il modello linguistico (`DOCS_UPDATE_PROVIDER`): cambiamento dai commit dopo il punto di partenza registrato nel repository, esclusi quelli degli aggiornamenti precedenti; stesure giudicate dalle verifiche indicate, scartate solo per rilievi nuovi e rimandate con i motivi; versione nuova delle decisioni cambiate con la voce che nomina l'origine; work item per un aggiornamento respinto a ogni stesura; con il modello non disponibile nulla cambia e il punto di partenza resta |
 | `CI/Scripts/Documentation/Test-DocumentationStyle.ps1` | Giudizio dello stile di un documento (`documentation-style.yaml`) con il modello linguistico (`STYLE_JUDGE_PROVIDER`) che riceve la guida di stile del repository come istruzioni |
 | `CI/Scripts/LanguageModel/LanguageModel.ps1` | Contratto del modello linguistico dei passi di documentazione: `New-LanguageModel` crea il client del fornitore scelto (`foundry`, il default, o `anthropic`), `Invoke-LanguageModel` restituisce la risposta letta secondo lo schema e i token usati. Ogni altro file della cartella è il modulo di un fornitore |
 | `CI/Scripts/LanguageModel/Foundry.ps1` | Fornitore Foundry: chat completions Azure OpenAI con token Entra ID della Azure CLI, risposta in JSON schema stretto, livello di ragionamento, seme tolto se il deployment lo rifiuta |

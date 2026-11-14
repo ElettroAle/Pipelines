@@ -24,7 +24,7 @@ Tests/
     │   ├── C4/                 # Lettori, testo, scrittore e verifica del modello C4
     │   │   └── Fixtures/       # Repository sorgente finti, lettore del consumer, finto modello del testo
     │   ├── Mermaid/            # Test-MermaidDiagrams, Test-DiagramFlows, Sync-DiagramLabels, Repair-DiagramFlows
-    │   ├── Documentation/      # Test-Documentation, Test-DocumentationStyle
+    │   ├── Documentation/      # Test-Documentation, Test-DocumentationStyle, Update-Documentation
     │   ├── LanguageModel/      # LanguageModel, Foundry, Anthropic
     │   │   └── Fixtures/       # Endpoint finto di un fornitore, Azure CLI finta che segna se viene chiamata
     │   ├── Release/            # GitCliff, Set-Versioning, Verify-SemVer, New-ReleaseNotes, Test-PublishedArtifact
@@ -159,7 +159,7 @@ repository .NET finto con il suo diagramma delle classi e vi introduce un solo d
 | Suite | Scenario testato |
 |---|---|
 | Diagramma delle classi coerente con il codice che governa | Diagramma coerente, con una classe del framework che nessun pattern copre; classe governata assente dal diagramma, con la classe e la decisione; classe fuori dalle parti governate non nominata; classe di un progetto di test, tipo annidato e classe accanto al prefisso non controllati; voce di `governs` senza classi, struttura senza `governs`, `governs` senza struttura, struttura senza diagramma delle classi; decisioni chiuse non controllate; corpus senza struttura nel codice senza leggere il codice; codice sorgente assente; `warn` e `off` |
-| `DecisionClasses.ps1` | Frontmatter con le liste, pattern esatti e con il prefisso, nome della classe senza parametri generici, rilievi del confronto nel processo dei test |
+| `DecisionClasses.ps1` | Frontmatter con le liste, pattern esatti e con il prefisso, nome della classe senza parametri generici, rilievi del confronto nel processo dei test, con una classe parziale in due file nominata una volta |
 
 #### `Repair-DecisionClasses.Tests.ps1`
 

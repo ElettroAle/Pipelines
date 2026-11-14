@@ -5,8 +5,8 @@
     Test Pester della scelta del fornitore del modello nei template dei passi di documentazione.
 
 .DESCRIPTION
-    I template documentation-style, c4-describe, flows-verify e adr-classes-verify passano il fornitore agli script del
-    modello linguistico (V3/CI/Scripts/LanguageModel). I test leggono il testo dei template: con
+    I template documentation-style, c4-describe, flows-verify, documentation-update e adr-classes-verify passano il
+    fornitore agli script del modello linguistico (V3/CI/Scripts/LanguageModel). I test leggono il testo dei template: con
     foundry il passo e' un AzureCLI@2 sulla service connection, con anthropic un PowerShell@2 che mappa
     la chiave in ANTHROPIC_API_KEY; le due varianti passano allo script le stesse variabili.
 #>
@@ -52,6 +52,7 @@ Describe "Scelta del fornitore nel template <Template>" -ForEach @(
     @{ Template = 'V3/CI/Common/Steps/documentation-style.yaml'; Script = 'Test-DocumentationStyle.ps1'; Prefix = 'STYLE_JUDGE' }
     @{ Template = 'V3/CI/Common/Steps/c4-describe.yaml'; Script = 'Write-C4ModelText.ps1'; Prefix = 'C4_TEXT' }
     @{ Template = 'V3/CI/Common/Steps/flows-verify.yaml'; Script = 'Repair-DiagramFlows.ps1'; Prefix = 'FLOWS_REPAIR' }
+    @{ Template = 'V3/CI/Common/Steps/documentation-update.yaml'; Script = 'Update-Documentation.ps1'; Prefix = 'DOCS_UPDATE' }
     @{ Template = 'V3/CI/Common/Steps/adr-classes-verify.yaml'; Script = 'Repair-DecisionClasses.ps1'; Prefix = 'CLASSES_REPAIR' }
 ) {
     BeforeAll {
