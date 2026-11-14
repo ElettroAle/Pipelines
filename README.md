@@ -245,7 +245,7 @@ parametri di formato e senza condizioni sul formato.
 | `c4-read.yaml` | lo script passato con `scriptPath` | repository sorgente letto da un lettore nel frammento del modello C4 | C4 |
 | `c4-read-dotnet10.yaml` | `Read-C4DotNet10Model.ps1`, con `c4-read.yaml` | progetti .NET 10 di un repository sorgente letti nel frammento del modello C4 | C4, .NET 10 |
 | `c4-read-angular18.yaml` | `Read-C4Angular18Model.ps1`, con `c4-read.yaml` | applicazione Angular 18 di un repository sorgente letta nel frammento del modello C4 | C4, Angular 18 |
-| `c4-describe.yaml` | `Write-C4ModelText.ps1` | testo del modello C4 di tutto il sistema dai frammenti di tutti i repository sorgente, scritto da un modello Azure OpenAI, con un solo catalogo di persone e sistemi esterni e una revisione di tutto il modello sulla configurazione di produzione | C4, Azure OpenAI |
+| `c4-describe.yaml` | `Write-C4ModelText.ps1` | testo del modello C4 di tutto il sistema dai frammenti di tutti i repository sorgente, scritto dal modello linguistico scelto, con un solo catalogo di persone e sistemi esterni e una revisione di tutto il modello sulla configurazione di produzione | C4, Foundry o Anthropic |
 | `c4-generate.yaml` | `Export-C4CodeModel.ps1` | parte del modello C4 generata dai frammenti di un repository sorgente e dal testo del sistema, allineata al codice, e contesto con persone e sistemi esterni | C4 |
 | `c4-verify.yaml` | `Test-C4Model.ps1` | modello Structurizr valido e completo, testo del modello coerente con la parte generata, viste mostrate nelle sezioni, misura della leggibilità di ogni vista | C4 |
 | `mermaid-verify.yaml` | `Test-MermaidDiagrams.ps1` | diagrammi Mermaid validi, nel documento e nelle decisioni | Mermaid |
@@ -288,8 +288,9 @@ dei diagrammi che il documento usa. Chi non usa C4, o usa un'altra notazione, ca
 La verifica ha due modalità, ognuna di default `off`:
 
 - `docsMode`: controlli oggettivi (struttura del formato e controlli comuni), senza nessuna regola di stile;
-- `styleMode`: giudizio dello stile con un modello Azure OpenAI, che riceve la guida di stile del
-  repository come istruzioni. La pipeline non conosce nessuna regola di scrittura: cambiare guida non
+- `styleMode`: giudizio dello stile con un modello linguistico, Foundry o Claude (`styleProvider`, vedi
+  [Modello linguistico dei passi di documentazione](#modello-linguistico-dei-passi-di-documentazione)), che
+  riceve la guida di stile del repository come istruzioni. La pipeline non conosce nessuna regola di scrittura: cambiare guida non
   cambia la pipeline.
 
 ```yaml
@@ -380,8 +381,8 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   indirizzo chiamato a cui non si avvia nessun container, o se ne avvia più d'uno, ferma la generazione
   del repository che chiama, nominando il file e l'indirizzo. Tutti i lettori girano prima della
   generazione, che legge i frammenti di tutto il sistema.
-- **Il testo** (`c4-describe.yaml`, `CI/Scripts/C4/Write-C4ModelText.ps1`). Un modello Azure OpenAI
-  (`model`, con ragionamento `reasoningEffort`, default `high`) scrive il testo di tutto il sistema in una
+- **Il testo** (`c4-describe.yaml`, `CI/Scripts/C4/Write-C4ModelText.ps1`). Un modello linguistico
+  (`provider` e `model`, con ragionamento `reasoningEffort`, default `high`) scrive il testo di tutto il sistema in una
   sola generazione, un container alla volta: la descrizione di ogni elemento, ciò che passa su ogni
   relazione, le persone e i sistemi esterni che il container usa o che lo usano, con le loro relazioni.
   Legge i frammenti di tutti i repository sorgente (`sourceRepositories`, con il checkout di ognuno in
@@ -507,8 +508,8 @@ Flussi (`flows-verify.yaml`, `CI/Scripts/Mermaid/Test-DiagramFlows.ps1`):
   prende come alias il suo identificativo. Le righe cambiate tornano sul ramo della PR in un commit, e la
   verifica riparte dalla build di quel commit. Un elemento che nessun modello riconosce resta com'è e lo
   segnala la verifica.
-- **Riparazione.** Con `endpoint`, in modalità `fix`, in una PR, `CI/Scripts/Mermaid/Repair-DiagramFlows.ps1`
-  ripara poi con un modello Azure OpenAI le sezioni che la verifica respinge ancora, ad esempio per un
+- **Riparazione.** Con `endpoint` (Foundry) o con `provider: 'anthropic'`, in modalità `fix`, in una PR,
+  `CI/Scripts/Mermaid/Repair-DiagramFlows.ps1` ripara poi con il modello linguistico le sezioni che la verifica respinge ancora, ad esempio per un
   elemento tolto dal modello C4 o per una chiamata che il modello fa passare per altri elementi. Il modello
   linguistico riceve il modello C4, i rilievi e la sezione, e risponde con i diagrammi riscritti e le frasi
   che li descrivono; la verifica dei flussi accetta la stesura o la rimanda con i rilievi rimasti, fino a
@@ -597,9 +598,36 @@ Giudizio dello stile (`styleMode`, `CI/Scripts/Documentation/Test-DocumentationS
   appoggio serve anche il permesso di cancellare i rami, altrimenti resta e lo step lo segnala con un avviso.
 - Risposta in formato fissato (JSON schema): per ogni violazione il titolo della regola, la frase e il
   motivo. Il rilievo è `<sezione>: <regola> («frase»: motivo)`.
-- Accesso con token Entra ID della service connection (task `AzureCLI@2`), senza chiavi. Su 429 o 5xx
-  lo script riprova fino a tre volte; se il modello non risponde la verifica fallisce nominando il
-  motivo.
+- Accesso al modello come in [Modello linguistico dei passi di documentazione](#modello-linguistico-dei-passi-di-documentazione).
+  Su 429, 529 o 5xx lo script riprova rispettando `Retry-After`, fino a dieci tentativi; se il modello non
+  risponde la verifica fallisce nominando il motivo.
+
+### Modello linguistico dei passi di documentazione
+
+Il giudizio dello stile (`documentation-style.yaml`, e `styleProvider` di `quality-arc42` e `quality-docs`), il
+testo del modello C4 (`c4-describe.yaml`) e la riparazione dei diagrammi (`flows-verify.yaml`) scelgono il
+fornitore del modello con il parametro `provider`, passato agli script (`CI/Scripts/LanguageModel/`):
+
+- `foundry` (default): `model` è il deployment Azure OpenAI di `endpoint`; il passo è un `AzureCLI@2` sulla
+  `serviceConnection`, con un token Entra ID, senza chiavi.
+- `anthropic`: Claude a consumo sull'API Anthropic, `model` è il modello (es. `claude-sonnet-5-5`), `endpoint`
+  vuoto vuol dire `https://api.anthropic.com`. Il passo è un `PowerShell@2`: niente service connection, niente
+  Azure CLI. La chiave è una variabile segreta della pipeline del consumer: Azure Pipelines non passa le
+  variabili segrete agli script, quindi il passo la mappa in `ANTHROPIC_API_KEY` da `anthropicApiKey`
+  (`styleAnthropicApiKey` negli entry point), che di default vale `$(anthropicApiKey)`. Senza la variabile il
+  passo fallisce con `chiave Anthropic non configurata (ANTHROPIC_API_KEY)`.
+
+```yaml
+variables:
+  - group: documentazione   # contiene anthropicApiKey, segreta
+
+extends:
+  template: V3/CI/Agnostic/quality-docs.yaml@infrastructure
+  parameters:
+    styleMode: 'fix'
+    styleProvider: 'anthropic'
+    styleModel: 'claude-sonnet-5-5'
+```
 
 ### Pubblicazione nella wiki (publish-arc42-wiki)
 

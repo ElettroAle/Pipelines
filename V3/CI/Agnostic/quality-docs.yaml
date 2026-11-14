@@ -30,9 +30,14 @@
 #   styleGuide         → guida di stile del repository (default: docs/STYLE.md)
 #   styleReference     → file o cartelle che descrivono il sistema, contesto del giudizio dello stile: se una
 #                        PR li cambia, tutte le sezioni si rigiudicano (default: nessuno)
-#   styleServiceConnection → service connection Azure per il modello [REQUIRED se styleMode non e' off]
-#   styleEndpoint      → endpoint Azure OpenAI [REQUIRED se styleMode non e' off]
-#   styleModel         → nome del deployment del modello [REQUIRED se styleMode non e' off]
+#   styleProvider      → fornitore del modello: 'foundry' (default) | 'anthropic' (Claude a consumo sull'API
+#                        Anthropic, senza service connection)
+#   styleServiceConnection → service connection Azure per il modello [REQUIRED con foundry se styleMode non e' off]
+#   styleEndpoint      → endpoint Azure OpenAI [REQUIRED con foundry se styleMode non e' off]
+#   styleModel         → deployment Foundry o modello Anthropic, es. claude-sonnet-5-5 [REQUIRED se styleMode
+#                        non e' off]
+#   styleAnthropicApiKey → chiave dell'API Anthropic, con anthropic (default: $(anthropicApiKey), la variabile
+#                        segreta del consumer)
 #   styleMaxFindings   → violazioni dello stile tollerate come avvisi senza bloccare: 0 blocca ogni violazione,
 #                        -1 nessun limite (default: 0)
 #   styleMaxRounds     → giri del giudizio per file in modalita' fix; l'ultimo verifica soltanto (default: 4)
@@ -101,6 +106,11 @@ parameters:
     type: string
     default: 'docs/STYLE.md'
 
+  - name: styleProvider
+    type: string
+    default: 'foundry'
+    values: ['foundry', 'anthropic']
+
   - name: styleServiceConnection
     type: string
     default: ''
@@ -112,6 +122,10 @@ parameters:
   - name: styleModel
     type: string
     default: ''
+
+  - name: styleAnthropicApiKey
+    type: string
+    default: '$(anthropicApiKey)'
 
   - name: styleMaxFindings
     type: number
@@ -166,8 +180,10 @@ stages:
             guide: ${{ parameters.styleGuide }}
             glossary: ${{ parameters.docsGlossary }}
             reference: ${{ parameters.styleReference }}
+            provider: ${{ parameters.styleProvider }}
             serviceConnection: ${{ parameters.styleServiceConnection }}
             endpoint: ${{ parameters.styleEndpoint }}
             model: ${{ parameters.styleModel }}
+            anthropicApiKey: ${{ parameters.styleAnthropicApiKey }}
             maxFindings: ${{ parameters.styleMaxFindings }}
             maxRounds: ${{ parameters.styleMaxRounds }}

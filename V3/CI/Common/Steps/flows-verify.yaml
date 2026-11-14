@@ -12,13 +12,16 @@
 # In modalita' fix, in una PR, i diagrammi si allineano prima al modello
 # (V3/CI/Scripts/Mermaid/Sync-DiagramLabels.ps1): le righe cambiate tornano sul ramo della PR con un
 # commit dell'identita' della build, che deve poter contribuire al repository, e la verifica riparte
-# dalla build di quel commit. Con endpoint, in modalita' fix, un modello Azure OpenAI ripara poi le sezioni
+# dalla build di quel commit. Con endpoint o con provider anthropic, in modalita' fix, un modello linguistico ripara poi le sezioni
 # che la verifica respinge ancora, per esempio per un elemento tolto dal modello o una chiamata che il
 # modello fa passare per altri elementi (V3/CI/Scripts/Mermaid/Repair-DiagramFlows.ps1): riceve il modello,
 # i rilievi e la sezione, e riscrive i diagrammi e le frasi che li descrivono; la verifica dei flussi
 # accetta o rimanda ogni stesura. Le sezioni accettate passano da un ramo di appoggio, cosi' una build
 # interrotta riparte da li', e tornano sul ramo della PR: l'identita' della build deve anche poter creare
-# e cancellare rami. L'accesso al modello passa dalla service connection con un token Entra ID, senza chiavi.
+# e cancellare rami. Con provider foundry l'accesso al modello passa dalla service connection con un token
+# Entra ID (AzureCLI@2); con provider anthropic il modello e' Claude a consumo sull'API Anthropic, la
+# riparazione e' un PowerShell@2 senza service connection e la chiave e' una variabile segreta del
+# consumer, mappata in ANTHROPIC_API_KEY: senza, il passo fallisce nominandola.
 # Richiede Java 17 per la Structurizr CLI e Node.js per il parser Mermaid.
 #
 # Riusato da:
@@ -33,10 +36,16 @@
 #                        document-directories.yaml, altrimenti docs/architecture)
 #   decisionsDirectory → cartella degli ADR (default: quella dichiarata da document-directories.yaml,
 #                        altrimenti docs/decisions)
-#   serviceConnection  → service connection Azure con il ruolo Cognitive Services OpenAI User [REQUIRED con endpoint]
-#   endpoint           → endpoint della risorsa Azure OpenAI, es. https://<nome>.openai.azure.com: in modalita'
-#                        fix attiva la riparazione dei diagrammi (default: nessuno, nessuna riparazione)
-#   model              → nome del deployment del modello [REQUIRED con endpoint]
+#   provider           → fornitore del modello della riparazione: 'foundry' (default) | 'anthropic', che in
+#                        modalita' fix attiva la riparazione anche senza endpoint
+#   serviceConnection  → service connection Azure con il ruolo Cognitive Services OpenAI User [REQUIRED con foundry
+#                        ed endpoint]
+#   endpoint           → endpoint della risorsa Azure OpenAI, es. https://<nome>.openai.azure.com: con foundry, in
+#                        modalita' fix, attiva la riparazione dei diagrammi (default: nessuno, nessuna riparazione);
+#                        con anthropic vuoto vuol dire https://api.anthropic.com
+#   model              → deployment Foundry o modello Anthropic, es. claude-sonnet-5-5 [REQUIRED con la riparazione]
+#   anthropicApiKey    → chiave dell'API Anthropic, con anthropic (default: $(anthropicApiKey), la variabile
+#                        segreta del consumer: una variabile segreta arriva allo script solo cosi')
 #   reasoningEffort    → ragionamento del modello (default: high)
 #   maxDrafts          → stesure massime per sezione (default: 3)
 #   guide              → guida di stile del documento, per le frasi riscritte (default: docs/STYLE.md)
@@ -59,6 +68,11 @@ parameters:
     type: string
     default: ''
 
+  - name: provider
+    type: string
+    default: 'foundry'
+    values: ['foundry', 'anthropic']
+
   - name: serviceConnection
     type: string
     default: ''
@@ -74,6 +88,10 @@ parameters:
   - name: reasoningEffort
     type: string
     default: 'high'
+
+  - name: anthropicApiKey
+    type: string
+    default: '$(anthropicApiKey)'
 
   - name: maxDrafts
     type: number
@@ -116,7 +134,7 @@ steps:
         ${{ if ne(parameters.docsDirectory, '') }}:
           DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
 
-  - ${{ if and(eq(parameters.mode, 'fix'), ne(parameters.endpoint, '')) }}:
+  - ${{ if and(eq(parameters.mode, 'fix'), eq(parameters.provider, 'foundry'), ne(parameters.endpoint, '')) }}:
     - template: ensure-azure-cli.yaml
 
     - task: AzureCLI@2
@@ -135,6 +153,30 @@ steps:
         FLOWS_REPAIR_MODEL: ${{ parameters.model }}
         FLOWS_REPAIR_REASONING_EFFORT: ${{ parameters.reasoningEffort }}
         FLOWS_REPAIR_MAX_DRAFTS: ${{ parameters.maxDrafts }}
+        FLOWS_REPAIR_PROVIDER: ${{ parameters.provider }}
+        STYLE_GUIDE: ${{ parameters.guide }}
+        ${{ if ne(parameters.docsDirectory, '') }}:
+          DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
+        ${{ if ne(parameters.decisionsDirectory, '') }}:
+          DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}
+
+  - ${{ if and(eq(parameters.mode, 'fix'), eq(parameters.provider, 'anthropic')) }}:
+    - task: PowerShell@2
+      displayName: 'Diagram flows repaired with the C4 model'
+      inputs:
+        filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Mermaid/Repair-DiagramFlows.ps1'
+        workingDirectory: '$(Build.SourcesDirectory)'
+        pwsh: true
+      env:
+        GATE_MODE: enforce
+        SOURCE_BRANCH: $(System.PullRequest.SourceBranch)
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+        FLOWS_REPAIR_ENDPOINT: ${{ parameters.endpoint }}
+        FLOWS_REPAIR_MODEL: ${{ parameters.model }}
+        FLOWS_REPAIR_REASONING_EFFORT: ${{ parameters.reasoningEffort }}
+        FLOWS_REPAIR_MAX_DRAFTS: ${{ parameters.maxDrafts }}
+        FLOWS_REPAIR_PROVIDER: ${{ parameters.provider }}
+        ANTHROPIC_API_KEY: ${{ parameters.anthropicApiKey }}
         STYLE_GUIDE: ${{ parameters.guide }}
         ${{ if ne(parameters.docsDirectory, '') }}:
           DOCS_DIRECTORY: ${{ parameters.docsDirectory }}
