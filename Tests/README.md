@@ -19,7 +19,7 @@ Tests/
     ├── CI/Scripts/             # Livello 2: unit test PowerShell (Pester), stesso albero di V3/CI/Scripts
     │   ├── Common/             # MarkdownText.Tests.ps1
     │   │   └── Fixtures/Documentation/  # Documento valido e template arc42 italiano ufficiale, usati dai test della documentazione
-    │   ├── Adr/                # Test-AdrCorpus.Tests.ps1
+    │   ├── Adr/                # Test-AdrCorpus, Test-DecisionClasses
     │   ├── Arc42/              # Test-Arc42Document, Publish-Arc42Wiki, PlantUml
     │   ├── C4/                 # Lettori, testo, scrittore e verifica del modello C4
     │   │   └── Fixtures/       # Repository sorgente finti, lettore del consumer, finto modello del testo
@@ -150,6 +150,22 @@ Ogni test costruisce un repository con un bare repo come origin: il corpus di pa
 |---|---|
 | Verifica del corpus delle decisioni architetturali | Decisione ben formata; stato non ammesso, numero duplicato, sezione mancante, sostituzione non reciproca; ADR accepted riscritto e sostituito; diagramma cambiato con una versione nuova, modifica non versionata, esito cambiato; modalità `warn` |
 | Regole del corpus | ADR accepted eliminato, ADR senza versione alla versione 1, versione senza la sua voce, versione non intera, versione più bassa, ADR proposed riscrivibile, superseded-by verso una decisione inesistente, file senza frontmatter, file non numerati ignorati, run fuori da una PR, modalità `off`, una segnalazione per difetto |
+
+#### `Test-DecisionClasses.Tests.ps1`
+
+Richiede Node.js, come `Test-MermaidDiagrams.Tests.ps1`. Ogni scenario scrive una decisione che governa le classi di un
+repository .NET finto con il suo diagramma delle classi e vi introduce un solo difetto.
+
+| Suite | Scenario testato |
+|---|---|
+| Diagramma delle classi coerente con il codice che governa | Diagramma coerente, con una classe del framework che nessun pattern copre; classe governata assente dal diagramma, con la classe e la decisione; classe fuori dalle parti governate non nominata; classe di un progetto di test, tipo annidato e classe accanto al prefisso non controllati; voce di `governs` senza classi, struttura senza `governs`, `governs` senza struttura, struttura senza diagramma delle classi; decisioni chiuse non controllate; corpus senza struttura nel codice senza leggere il codice; codice sorgente assente; `warn` e `off` |
+| `DecisionClasses.ps1` | Frontmatter con le liste, pattern esatti e con il prefisso, nome della classe senza parametri generici, rilievi del confronto nel processo dei test, con una classe parziale in due file nominata una volta |
+
+#### `DotNet10Code.Tests.ps1`
+
+| Suite | Scenario testato |
+|---|---|
+| `DotNet10Code.ps1` | Tipi di primo livello con il namespace del file, tipi annidati esclusi, namespace a blocchi, graffe in stringhe e caratteri, tipo senza namespace; tipi dei soli progetti che non sono di test |
 
 I test degli script di verifica della documentazione partono dal documento valido di
 `Tests/V3/CI/Scripts/Common/Fixtures/Documentation/DocumentationFixture.ps1` (le dodici sezioni del template arc42 italiano,

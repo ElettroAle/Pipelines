@@ -5,113 +5,21 @@
 # componenti, legati da quei riferimenti nella direzione del flusso del controllo: un progetto che
 # implementa un'interfaccia del progetto che referenzia ne e' l'adattatore, e la relazione va dalla
 # porta all'adattatore, tranne che per l'applicazione, che compone i progetti. Il tipo di un progetto
-# viene dalle regole di .NET 10 qui sotto, provate solo su .NET 10: un progetto di un'altra versione,
+# viene dalle regole di .NET 10 di DotNet10Code.ps1, provate solo su .NET 10: un progetto di un'altra versione,
 # o di un tipo che le regole non riconoscono, ferma la lettura invece di essere letto con regole non sue.
 # Gli indirizzi a cui un'applicazione si avvia in locale vengono dai profili del suo
 # Properties/launchSettings.json.
 
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
 . "$PSScriptRoot/../Common/DocumentLanguage.ps1"
-. "$PSScriptRoot/C4CodeModel.ps1"
+. "$PSScriptRoot/DotNet10Code.ps1"
 
 $SupportedTargetFramework = '^net10\.0(-[a-z0-9.]+)?$'
-$TestKind = 'test'
-# Il tipo e' quello della prima regola le cui condizioni valgono tutte (confronto -like; Package vale
-# se una delle librerie corrisponde).
-$ProjectKinds = @(
-    @{ Kind = $TestKind; Sdk = 'MSTest.Sdk' }
-    @{ Kind = $TestKind; IsTestProject = 'true' }
-    @{ Kind = $TestKind; Package = 'Microsoft.NET.Test.Sdk' }
-    @{ Kind = 'web'; Sdk = 'Microsoft.NET.Sdk.Web' }
-    @{ Kind = 'functions'; Sdk = 'Microsoft.NET.Sdk.Functions' }
-    @{ Kind = 'functions'; Sdk = 'Microsoft.NET.Sdk'; AzureFunctionsVersion = '?*' }
-    @{ Kind = 'tool'; Sdk = 'Microsoft.NET.Sdk'; OutputType = 'Exe' }
-    @{ Kind = 'library'; Sdk = 'Microsoft.NET.Sdk'; OutputType = '' }
-    @{ Kind = 'library'; Sdk = 'Microsoft.NET.Sdk'; OutputType = 'Library' }
-)
 $ApplicationTechnologies = @{
     web       = 'ASP.NET Core'
     functions = 'Azure Functions'
 }
 $ApplicationTag = $DocumentLanguage.ApplicationTag
-
-function Get-ProjectFacts([xml]$Project) {
-    $properties = $Project.Project.PropertyGroup
-    return @{
-        Sdk                   = @($Project.Project.Sdk, $Project.Project.Sdk.Name) | Where-Object { $_ -is [string] -and $_ } | Select-Object -First 1
-        IsTestProject         = "$($properties.IsTestProject)".Trim()
-        OutputType            = "$($properties.OutputType)".Trim()
-        AzureFunctionsVersion = "$($properties.AzureFunctionsVersion)".Trim()
-        Package               = @($Project.Project.ItemGroup.PackageReference | Where-Object { $_ -and $_.Include } | ForEach-Object Include)
-    }
-}
-
-function Get-DeclaredTargetFrameworks([xml]$Project) {
-    $properties = $Project.Project.PropertyGroup
-    return @(@($properties.TargetFramework) + @($properties.TargetFrameworks) |
-            Where-Object { $_ -is [string] } | ForEach-Object { $_ -split ';' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-}
-
-# Un progetto senza versione la eredita dal Directory.Build.props piu' vicino, come fa MSBuild.
-function Get-TargetFrameworks($File, [xml]$Project) {
-    $declared = @(Get-DeclaredTargetFrameworks $Project)
-    $root = (Resolve-Path $SourceDirectory).Path
-    $directory = $File.Directory
-    while (-not $declared -and $directory -and $directory.FullName.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
-        $props = Join-Path $directory.FullName 'Directory.Build.props'
-        if (Test-Path $props -PathType Leaf) { $declared = @(Get-DeclaredTargetFrameworks ([xml](Get-Content -Raw $props))) }
-        $directory = $directory.Parent
-    }
-    return $declared
-}
-
-function Test-RuleMatches([hashtable]$Rule, [hashtable]$Facts) {
-    $conditions = @($Rule.Keys | Where-Object { $_ -ne 'Kind' })
-    return -not ($conditions | Where-Object { -not @(@($Facts[$_]) -like $Rule[$_]).Count })
-}
-
-function Get-ProjectKind([hashtable]$Facts) {
-    return ($ProjectKinds | Where-Object { Test-RuleMatches $_ $Facts } | Select-Object -First 1).Kind
-}
-
-function Read-DotNetProjects {
-    $projects = [ordered]@{}
-    foreach ($file in (Get-SourceFiles '*.csproj')) {
-        [xml]$xml = Get-Content -Raw $file.FullName
-        $assembly = "$($xml.Project.PropertyGroup.AssemblyName)".Trim()
-        $references = @($xml.Project.ItemGroup.ProjectReference | Where-Object { $_ } | ForEach-Object {
-                [IO.Path]::GetFullPath((Join-Path $file.DirectoryName ($_.Include -replace '\\', '/')))
-            })
-        $projects[$file.FullName] = [pscustomobject]@{
-            Name             = @($assembly, $file.BaseName) | Where-Object { $_ } | Select-Object -First 1
-            Path             = $file.FullName
-            Kind             = Get-ProjectKind (Get-ProjectFacts $xml)
-            TargetFrameworks = @(Get-TargetFrameworks $file $xml)
-            References       = $references
-        }
-    }
-    return $projects
-}
-
-# Una dichiarazione di tipo apre la riga, dopo attributi e modificatori: cosi' le parole class o
-# interface dentro una stringa non contano.
-$TypeDeclarationStart = '(?m)^[ \t]*(?:\[[^\]\n]*\][ \t]*)*(?:(?:public|internal|private|protected|static|sealed|abstract|partial|readonly|file|unsafe|new|ref)[ \t]+)*'
-
-function Get-CodeWithoutComments($File) {
-    return (Get-Content -Raw $File.FullName) -replace '(?s)/\*.*?\*/|//[^\n]*', ''
-}
-
-function Test-InOwnProject([string]$File, [string]$Root, [string[]]$NestedRoots) {
-    $inIgnored = $File.Substring($Root.Length) -split '[\\/]' | Where-Object { $IgnoredDirectories -contains $_ }
-    $inNested = $NestedRoots | Where-Object { $File.StartsWith("$_$([IO.Path]::DirectorySeparatorChar)", [StringComparison]::OrdinalIgnoreCase) }
-    return -not ($inIgnored -or $inNested)
-}
-
-function Get-ProjectCode($Project) {
-    $root = Split-Path $Project.Path
-    $nestedRoots = @(Get-ChildItem -Path $root -Recurse -File -Filter '*.csproj' | ForEach-Object { Split-Path $_.FullName } | Where-Object { $_ -ne $root })
-    return @(Get-ChildItem -Path $root -Recurse -File -Filter '*.cs' | Where-Object { Test-InOwnProject $_.FullName $root $nestedRoots } | ForEach-Object { Get-CodeWithoutComments $_ })
-}
 
 function Get-DeclaredInterfaces([string[]]$Code) {
     return @($Code | ForEach-Object { [regex]::Matches($_, "$TypeDeclarationStart" + 'interface\s+(\w+)') } | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)

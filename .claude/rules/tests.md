@@ -48,6 +48,7 @@ I test usano un **bare repo locale** come fake remote. L'unico accesso di rete Ã
 | `V3/CI/Scripts/Adr/Test-AdrCorpus.ps1` | Livello 1 + Livello 2 (`Test-AdrCorpus.Tests.ps1`) |
 | `V3/CI/Scripts/Arc42/Test-Arc42Document.ps1` | Livello 1 + Livello 2 (`Test-Arc42Document.Tests.ps1`) |
 | `V3/CI/Scripts/C4/Test-C4Model.ps1`, `Structurizr.ps1` | Livello 1 + Livello 2 (`Test-C4Model.Tests.ps1`, richiede Java 17) |
+| `V3/CI/Scripts/Adr/DecisionClasses.ps1`, `Test-DecisionClasses.ps1`, `V3/CI/Scripts/C4/DotNet10Code.ps1` | Livello 1 + Livello 2 (`Test-DecisionClasses.Tests.ps1` + `DotNet10Code.Tests.ps1` + `Read-C4DotNet10Model.Tests.ps1`, richiede Node.js e Java 17) |
 | `V3/CI/Scripts/C4/C4CodeModel.ps1`, `Read-C4DotNet10Model.ps1`, `Read-C4Angular18Model.ps1`, `Write-C4ModelText.ps1`, `Export-C4CodeModel.ps1`, `Tests/V3/CI/Scripts/C4/Fixtures/` | Livello 1 + Livello 2 (`Read-C4DotNet10Model.Tests.ps1` + `Read-C4Angular18Model.Tests.ps1` + `Write-C4ModelText.Tests.ps1` + `Export-C4CodeModel.Tests.ps1`, richiede Java 17) |
 | `V3/CI/Scripts/AzureRepos/Publish-PullRequest.ps1` | Livello 1 + Livello 2 (`Publish-PullRequest.Tests.ps1`) |
 | `V3/CI/Scripts/Arc42/Publish-Arc42Wiki.ps1`, `PlantUml.ps1` | Livello 1 + Livello 2 (`Publish-Arc42Wiki.Tests.ps1` + `PlantUml.Tests.ps1`, richiede Java 17) |

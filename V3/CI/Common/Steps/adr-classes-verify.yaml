@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# ── CI Step: Classi governate dalle decisioni ─────────────────────────────────
+#
+# Diagramma delle classi di ogni decisione aperta coerente con il codice che governa
+# (V3/CI/Scripts/Adr/Test-DecisionClasses.ps1): una decisione con la parte della struttura nel codice
+# dichiara nel frontmatter governs i pattern sui nomi completi delle classi che governa (un nome
+# completo, o un prefisso che finisce con *). Le classi di primo livello dei progetti .NET che non sono
+# di test, nel codice dei repository sorgente, che corrispondono a quei pattern stanno nel diagramma
+# delle classi della decisione; ogni voce di governs copre almeno una classe. Una classe che nessun
+# pattern copre non si controlla. Ogni rilievo nomina la decisione e la classe o la voce. Le decisioni
+# superseded, deprecated e rejected non si controllano. I nomi delle parti seguono DOCUMENT_LANGUAGE
+# (document-language.yaml). Il parser dei diagrammi richiede Node.js.
+#
+# Riusato da:
+#   il consumer, dopo il checkout dei repository sorgente in sourceDirectory
+#
+# Parametri
+# ─────────
+#   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
+#   sourceDirectory    → cartella con il codice dei repository sorgente, letta per intero
+#                        (default: $(Pipeline.Workspace)/sources)
+#   decisionsDirectory → cartella degli ADR (default: quella dichiarata da document-directories.yaml,
+#                        altrimenti docs/decisions)
+#   nodeVersion        → versione di Node.js per il parser (default: 22.x)
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#   condition          → condizione del passo (default: succeeded())
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: mode
+    type: string
+    default: 'enforce'
+    values: ['off', 'warn', 'enforce']
+
+  - name: sourceDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/sources'
+
+  - name: decisionsDirectory
+    type: string
+    default: ''
+
+  - name: nodeVersion
+    type: string
+    default: '22.x'
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+  - name: condition
+    type: string
+    default: 'succeeded()'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - ${{ if ne(parameters.mode, 'off') }}:
+    - task: UseNode@1
+      displayName: 'Install Node.js'
+      condition: ${{ parameters.condition }}
+      inputs:
+        version: ${{ parameters.nodeVersion }}
+
+  - task: PowerShell@2
+    displayName: 'Classes governed by the decisions (${{ parameters.mode }})'
+    condition: ${{ parameters.condition }}
+    inputs:
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Adr/Test-DecisionClasses.ps1'
+      workingDirectory: '$(Build.SourcesDirectory)'
+      pwsh: true
+    env:
+      GATE_MODE: ${{ parameters.mode }}
+      SOURCE_DIRECTORY: ${{ parameters.sourceDirectory }}
+      ${{ if ne(parameters.decisionsDirectory, '') }}:
+        DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}
