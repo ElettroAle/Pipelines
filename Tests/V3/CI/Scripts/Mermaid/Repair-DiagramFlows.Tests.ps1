@@ -7,8 +7,9 @@
 .DESCRIPTION
     Come la build di una PR su Azure DevOps: il ramo della PR e' su un origin locale e la copia di
     lavoro e' il commit di merge del ramo nella destinazione. Il modello linguistico e' sostituito da un
-    endpoint locale che risponde come Azure OpenAI con le stesure registrate, una per richiesta (l'ultima
-    si ripete), e conserva le richieste ricevute. Le prove verificano cosa lo script manda al modello e
+    endpoint locale che risponde come Azure OpenAI, o come l'API Messages di Anthropic sul suo percorso,
+    con le stesure registrate, una per richiesta (l'ultima si ripete), e conserva le richieste ricevute
+    con il loro percorso e le intestazioni di autenticazione. Le prove verificano cosa lo script manda al modello e
     come accetta, scarta e pubblica le stesure; la riparazione vera del modello si vede nella PR della
     documentazione. Lo script gira come in pipeline: richiede Java 17 o successivo per la Structurizr CLI
     e Node.js per il parser Mermaid.
@@ -16,6 +17,7 @@
 
 BeforeAll {
     . "$PSScriptRoot/../Common/Fixtures/Documentation/DocumentationFixture.ps1"
+    . "$PSScriptRoot/../LanguageModel/Fixtures/AzureCliProbe.ps1"
     $ScriptPath = Resolve-Path "$PSScriptRoot/../../../../../V3/CI/Scripts/Mermaid/Repair-DiagramFlows.ps1"
     $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-flows-repair-$(New-Guid)"
@@ -41,10 +43,15 @@ BeforeAll {
             $body = $reader.ReadToEnd()
             $count = @(Get-ChildItem $State -Filter 'request-*.json').Count + 1
             [IO.File]::WriteAllText((Join-Path $State "request-$count.json"), $body)
+            $route = @{ path = $context.Request.Url.AbsolutePath; apiKey = $context.Request.Headers['x-api-key']; version = $context.Request.Headers['anthropic-version']; authorization = $context.Request.Headers['Authorization'] }
+            [IO.File]::WriteAllText((Join-Path $State "route-$count.json"), ($route | ConvertTo-Json -Compress))
             $answers = @(Get-Content -Raw (Join-Path $State 'answers.json') | ConvertFrom-Json)
             $answer = $answers[[math]::Min($count, $answers.Count) - 1]
             $content = $answer | ConvertTo-Json -Depth 8 -Compress
-            $payload = @{ choices = @(@{ message = @{ role = 'assistant'; content = $content } }); usage = @{ prompt_tokens = 100; completion_tokens = 10 } } | ConvertTo-Json -Depth 6 -Compress
+            $payload = if ($context.Request.Url.AbsolutePath -eq '/v1/messages') {
+                @{ content = @(@{ type = 'thinking'; thinking = ''; signature = 'firma' }, @{ type = 'text'; text = $content }); stop_reason = 'end_turn'; usage = @{ input_tokens = 100; output_tokens = 10 } } | ConvertTo-Json -Depth 6 -Compress
+            }
+            else { @{ choices = @(@{ message = @{ role = 'assistant'; content = $content } }); usage = @{ prompt_tokens = 100; completion_tokens = 10 } } | ConvertTo-Json -Depth 6 -Compress }
             $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
             $context.Response.StatusCode = 200
             $context.Response.ContentType = 'application/json'
@@ -65,6 +72,7 @@ BeforeAll {
 
     function Set-Answers([object[]]$Answers) {
         Get-ChildItem $StubState -Filter 'request-*.json' | Remove-Item
+        Get-ChildItem $StubState -Filter 'route-*.json' | Remove-Item
         [IO.File]::WriteAllText((Join-Path $StubState 'answers.json'), (ConvertTo-Json -InputObject @($Answers) -Depth 8))
     }
 
@@ -74,6 +82,10 @@ BeforeAll {
 
     function Get-UserMessage($Request) {
         return ($Request.messages | Where-Object role -EQ 'user').content
+    }
+
+    function Get-Routes {
+        return @(Get-ChildItem $StubState -Filter 'route-*.json' | Sort-Object { [int]($_.BaseName -replace '\D', '') } | ForEach-Object { Get-Content -Raw $_.FullName | ConvertFrom-Json })
     }
 
     function New-Answer([int]$Line, [string]$Diagram, [string]$Find = '', [string]$Text = '') {
@@ -132,6 +144,7 @@ BeforeAll {
         $variables = @{
             GATE_MODE = 'enforce'; SOURCE_BRANCH = 'refs/heads/feature'; SYSTEM_ACCESSTOKEN = ''; DOCUMENT_LANGUAGE = ''; STYLE_GUIDE = ''
             FLOWS_REPAIR_ENDPOINT = $StubEndpoint; FLOWS_REPAIR_MODEL = 'riparatore'; FLOWS_REPAIR_TOKEN = 'token-di-prova'; FLOWS_REPAIR_MAX_DRAFTS = ''; FLOWS_REPAIR_REASONING_EFFORT = ''
+            FLOWS_REPAIR_PROVIDER = ''; ANTHROPIC_API_KEY = ''
         }
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
         $previous = @{}
@@ -392,5 +405,46 @@ Describe "Repair-DiagramFlows — stesure che non si applicano" {
             Get-UserMessage $requests[1] | Should -MatchExactly 'nessun diagramma alla riga 2'
         }
         finally { Remove-Repository $repository }
+    }
+}
+
+Describe "Funzionalità: Modello linguistico delle pipeline di documentazione" {
+
+    Context "Schema dello scenario: Un passo di documentazione usa Claude — riparazione dei diagrammi" {
+        BeforeAll {
+            $probe = New-AzureCliProbe
+            $repository = New-OriginRepository $Shortcut
+            Set-Answers @(New-Answer (Get-DiagramLine $repository.Docs) $RoutedDiagram $ShortcutProse $RoutedProse)
+            $res = Invoke-Repair $repository @{
+                FLOWS_REPAIR_PROVIDER = 'anthropic'; FLOWS_REPAIR_MODEL = 'claude-sonnet-5-5'; FLOWS_REPAIR_TOKEN = ''
+                ANTHROPIC_API_KEY = 'chiave-anthropic-di-prova'; PATH = $probe.Path
+            }
+            $requests = Get-Requests
+            $routes = Get-Routes
+            $runtime = Get-FeatureFile $repository $RuntimeView
+        }
+        AfterAll {
+            Remove-Repository $repository
+            Remove-AzureCliProbe $probe
+        }
+
+        It "Allora il passo chiede la risposta a Claude Sonnet 5.5 sull'API Anthropic" {
+            $requests.Count | Should -Be 1 -Because $res.Output
+            $routes | ForEach-Object { $_.path | Should -Be '/v1/messages' }
+            $requests | ForEach-Object { $_.model | Should -Be 'claude-sonnet-5-5' }
+            $runtime | Should -MatchExactly '(?m)^    client->>bff: apre la sessione$'
+        }
+
+        It "E la chiamata è addebitata all'account Anthropic dell'organizzazione" {
+            $routes | ForEach-Object {
+                $_.apiKey | Should -Be 'chiave-anthropic-di-prova'
+                $_.version | Should -Be '2026-10-21'
+            }
+        }
+
+        It "E il passo non usa il credito Azure" {
+            $routes | ForEach-Object { $_.authorization | Should -BeNullOrEmpty }
+            Test-Path $probe.Called | Should -BeFalse
+        }
     }
 }

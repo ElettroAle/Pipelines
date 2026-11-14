@@ -18,6 +18,7 @@
 BeforeAll {
     . "$PSScriptRoot/Fixtures/C4CodeFixture.ps1"
     . "$PSScriptRoot/../../../../../V3/CI/Scripts/C4/Structurizr.ps1"
+    . "$PSScriptRoot/../LanguageModel/Fixtures/AzureCliProbe.ps1"
     $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-text-tools-$(New-Guid)"
 
@@ -61,6 +62,10 @@ BeforeAll {
 
     function Get-UserMessage($Request) {
         return ($Request.messages | Where-Object role -EQ 'user').content
+    }
+
+    function Get-StubRoutes {
+        return @(Get-ChildItem $StubState -Filter 'route-*.json' | Sort-Object { [int]($_.BaseName -replace '\D', '') } | ForEach-Object { Get-Content -Raw $_.FullName | ConvertFrom-Json })
     }
 
     function Get-RequestedUnits {
@@ -136,7 +141,7 @@ BeforeAll {
         $variables = @{
             SOURCE_DIRECTORY = ''; SOURCE_REPOSITORY = ''; SOURCE_REPOSITORIES = $C4SourceRepositories; SOURCES_DIRECTORY = 'sources'
             FRAGMENT_DIRECTORY = 'fragments'; GENERATED_DIRECTORY = 'docs/architecture/c4/generated'; GENERATION_MODE = 'write'; DOCUMENT_LANGUAGE = ''
-            C4_TEXT_ENDPOINT = $StubEndpoint; C4_TEXT_MODEL = 'gpt-6-luna'; C4_TEXT_TOKEN = 'token-di-prova'; C4_TEXT_REASONING_EFFORT = ''
+            C4_TEXT_PROVIDER = ''; C4_TEXT_ENDPOINT = $StubEndpoint; C4_TEXT_MODEL = 'gpt-6-luna'; C4_TEXT_TOKEN = 'token-di-prova'; C4_TEXT_REASONING_EFFORT = ''; ANTHROPIC_API_KEY = ''
             C4_TEXT_MAX_DRAFTS = ''; C4_TEXT_CONTEXT = 'docs/decisions'; STYLE_GUIDE = 'docs/STYLE.md'; PROGRESS_BRANCH = ''
             READABILITY_MAX_WORDS = ''; READABILITY_ABBREVIATIONS = ''; GATE_MODE = ''; SYSTEM_ACCESSTOKEN = ''; C4_CORRECTIONS_FILE = 'corrections.md'
             C4_REVIEW_EVIDENCE = "$Engine/deploy"
@@ -1283,6 +1288,44 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
 
         It "E una configurazione di produzione cambiata la chiede di nuovo" {
             $changed | Should -Be 1
+        }
+    }
+}
+
+Describe "Funzionalità: Modello linguistico delle pipeline di documentazione" {
+
+    Context "Schema dello scenario: Un passo di documentazione usa Claude — testo e revisione del modello C4" {
+        BeforeAll {
+            Reset-Stub
+            $probe = New-AzureCliProbe
+            $root = New-Workspace (New-DescribedEngine)
+            $res = Invoke-Text $root -Environment @{
+                C4_TEXT_PROVIDER = 'anthropic'; C4_TEXT_MODEL = 'claude-sonnet-5-5'; C4_TEXT_TOKEN = ''
+                ANTHROPIC_API_KEY = 'chiave-anthropic-di-prova'; PATH = $probe.Path
+            }
+            Remove-Workspace $root
+            $requests = Get-StubRequests
+            $routes = Get-StubRoutes
+        }
+        AfterAll { Remove-AzureCliProbe $probe }
+
+        It "Allora il passo chiede la risposta a Claude Sonnet 5.5 sull'API Anthropic" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            @(Get-ReviewRequests).Count | Should -Be 1
+            $routes | ForEach-Object { $_.path | Should -Be '/v1/messages' }
+            $requests | ForEach-Object { $_.model | Should -Be 'claude-sonnet-5-5' }
+        }
+
+        It "E la chiamata è addebitata all'account Anthropic dell'organizzazione" {
+            $routes | ForEach-Object {
+                $_.apiKey | Should -Be 'chiave-anthropic-di-prova'
+                $_.version | Should -Be '2026-10-21'
+            }
+        }
+
+        It "E il passo non usa il credito Azure" {
+            $routes | ForEach-Object { $_.authorization | Should -BeNullOrEmpty }
+            Test-Path $probe.Called | Should -BeFalse
         }
     }
 }

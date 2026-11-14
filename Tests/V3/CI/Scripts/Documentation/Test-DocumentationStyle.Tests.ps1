@@ -5,16 +5,18 @@
     Test Pester per V3/CI/Scripts/Documentation/Test-DocumentationStyle.ps1
 
 .DESCRIPTION
-    Il modello e' sostituito da un endpoint locale che risponde come Azure OpenAI: per ogni
-    regola registrata restituisce una violazione, nella voce della regola, per ogni unita'
-    segnata della sezione che contiene la frase indicata, con la correzione registrata; conserva
-    le richieste ricevute. Le prove verificano cosa lo script manda al modello, come riporta la
+    Il modello e' sostituito da un endpoint locale che risponde come Azure OpenAI, o come l'API
+    Messages di Anthropic sul suo percorso: per ogni regola registrata restituisce una violazione,
+    nella voce della regola, per ogni unita' segnata della sezione che contiene la frase indicata,
+    con la correzione registrata; conserva le richieste ricevute e, in route-<n>.json, il percorso e
+    le intestazioni di autenticazione. Le prove verificano cosa lo script manda al modello, come riporta la
     risposta e come applica le correzioni; il giudizio vero del modello si prova con gli esempi
     della guida di stile del repository della documentazione.
 #>
 
 BeforeAll {
     $ScriptPath = Resolve-Path "$PSScriptRoot/../../../../../V3/CI/Scripts/Documentation/Test-DocumentationStyle.ps1"
+    . "$PSScriptRoot/../LanguageModel/Fixtures/AzureCliProbe.ps1"
 
     $script:StubState = Join-Path ([IO.Path]::GetTempPath()) "pester-style-judge-$(New-Guid)"
     New-Item -ItemType Directory -Path $StubState | Out-Null
@@ -40,9 +42,10 @@ BeforeAll {
             $section = Read-Units $sectionPart
             $glossary = Read-Units $glossaryPart
             $verdict = [ordered]@{}
-            $Request.response_format.json_schema.schema.properties.PSObject.Properties | ForEach-Object { $verdict[$_.Name] = [Collections.Generic.List[object]]::new() }
+            $schema = if ($Request.output_config) { $Request.output_config.format.schema } else { $Request.response_format.json_schema.schema }
+            $schema.properties.PSObject.Properties | ForEach-Object { $verdict[$_.Name] = [Collections.Generic.List[object]]::new() }
             foreach ($rule in $Rules) {
-                $property = $Request.response_format.json_schema.schema.properties.PSObject.Properties | Where-Object { $_.Value.description -eq $rule.rule } | Select-Object -First 1
+                $property = $schema.properties.PSObject.Properties | Where-Object { $_.Value.description -eq $rule.rule } | Select-Object -First 1
                 if (-not $property) { continue }
                 if ($rule.until -and $user.Contains($rule.until)) { continue }
                 foreach ($unit in ($section | Where-Object { ($_.Marked -or $rule.everywhere) -and $_.Text.Contains($rule.match) })) {
@@ -73,6 +76,9 @@ BeforeAll {
             $body = $reader.ReadToEnd()
             $count++
             [IO.File]::WriteAllText((Join-Path $State "request-$count.json"), $body)
+            $route = @{ path = $context.Request.Url.AbsolutePath; apiKey = $context.Request.Headers['x-api-key']; version = $context.Request.Headers['anthropic-version']; authorization = $context.Request.Headers['Authorization'] }
+            [IO.File]::WriteAllText((Join-Path $State "route-$count.json"), ($route | ConvertTo-Json -Compress))
+            $anthropic = $context.Request.Url.AbsolutePath -eq '/v1/messages'
 
             $statusFile = Join-Path $State 'status'
             $status = if (Test-Path $statusFile) { [int](Get-Content -Raw $statusFile) } else { 200 }
@@ -98,7 +104,10 @@ BeforeAll {
                 $rulesFile = Join-Path $State 'rules.json'
                 $rules = if (Test-Path $rulesFile) { @(Get-Content -Raw $rulesFile | ConvertFrom-Json) } else { @() }
                 $content = New-Verdict $request $rules | ConvertTo-Json -Depth 8 -Compress
-                $payload = @{ choices = @(@{ message = @{ role = 'assistant'; content = $content } }); usage = @{ prompt_tokens = 100; completion_tokens = 10 } } | ConvertTo-Json -Depth 6 -Compress
+                $payload = if ($anthropic) {
+                    @{ content = @(@{ type = 'thinking'; thinking = ''; signature = 'firma' }, @{ type = 'text'; text = $content }); stop_reason = 'end_turn'; usage = @{ input_tokens = 100; output_tokens = 10 } } | ConvertTo-Json -Depth 6 -Compress
+                }
+                else { @{ choices = @(@{ message = @{ role = 'assistant'; content = $content } }); usage = @{ prompt_tokens = 100; completion_tokens = 10 } } | ConvertTo-Json -Depth 6 -Compress }
             }
             $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
             $context.Response.StatusCode = $status
@@ -202,6 +211,10 @@ Il titolo di una decisione nomina la scelta, senza sigle.
         return ($Request.messages | Where-Object role -EQ 'user').content
     }
 
+    function Get-StubRoutes {
+        return @(Get-ChildItem $StubState -Filter 'route-*.json' | Sort-Object { [int]($_.BaseName -replace '\D') } | ForEach-Object { Get-Content -Raw $_.FullName | ConvertFrom-Json })
+    }
+
     function Write-Docs([System.Collections.IDictionary]$Docs, [string]$Root) {
         foreach ($path in $Docs.Keys) {
             $file = Join-Path $Root $path
@@ -217,7 +230,7 @@ Il titolo di una decisione nomina la scelta, senza sigle.
             $Root = Join-Path ([IO.Path]::GetTempPath()) "pester-style-$(New-Guid)"
             Write-Docs $Docs $Root
         }
-        $variables = @{ GATE_MODE = $Mode; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; TARGET_BRANCH = ''; SOURCE_BRANCH = ''; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_FIX = ''; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_JUDGE_SEED = ''; READABILITY_MAX_WORDS = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = ''; STYLE_REFERENCE = '' }
+        $variables = @{ GATE_MODE = $Mode; STYLE_JUDGE_PROVIDER = ''; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; ANTHROPIC_API_KEY = ''; TARGET_BRANCH = ''; SOURCE_BRANCH = ''; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_FIX = ''; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_JUDGE_SEED = ''; READABILITY_MAX_WORDS = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = ''; STYLE_REFERENCE = '' }
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
 
         Push-Location $Root
@@ -311,7 +324,7 @@ Il titolo di una decisione nomina la scelta, senza sigle.
 
     # Come un job che va in timeout: lo script si ferma a meta' giudizio e il processo si chiude da fuori.
     function Invoke-InterruptedStyleCheck($Repository, [hashtable]$Environment, [string]$Side) {
-        $variables = @{ GATE_MODE = 'enforce'; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_JUDGE_SEED = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = '' }
+        $variables = @{ GATE_MODE = 'enforce'; STYLE_JUDGE_PROVIDER = ''; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; ANTHROPIC_API_KEY = ''; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_JUDGE_SEED = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = '' }
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
         $previous = @{}
         foreach ($name in $variables.Keys) {
@@ -1480,6 +1493,77 @@ Describe "Funzionalità: Verifica della documentazione architetturale — titoli
         It "E la correzione è scartata con il motivo «non toglie la violazione»" {
             $res.ExitCode | Should -Be 1
             Get-Issues $res.Output | Where-Object { $_.StartsWith("Vincoli: $Filler («Regione C4»") -and $_ -like '*la correzione non toglie la violazione*' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+    }
+}
+
+Describe "Funzionalità: Modello linguistico delle pipeline di documentazione" {
+
+    Context "Schema dello scenario: Un passo di documentazione usa Claude — giudizio dello stile" {
+        BeforeAll {
+            Reset-Stub
+            $probe = New-AzureCliProbe
+            $res = Invoke-StyleCheck (New-Docs) 'enforce' @{
+                STYLE_JUDGE_PROVIDER = 'anthropic'; STYLE_JUDGE_MODEL = 'claude-sonnet-5-5'; STYLE_JUDGE_TOKEN = ''
+                ANTHROPIC_API_KEY = 'chiave-anthropic-di-prova'; PATH = $probe.Path
+            }
+            $requests = Get-StubRequests
+            $routes = Get-StubRoutes
+        }
+        AfterAll { Remove-AzureCliProbe $probe }
+
+        It "Allora il passo chiede la risposta a Claude Sonnet 5.5 sull'API Anthropic" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $requests.Count | Should -Be 2
+            $routes | ForEach-Object { $_.path | Should -Be '/v1/messages' }
+            $requests | ForEach-Object { $_.model | Should -Be 'claude-sonnet-5-5' }
+        }
+
+        It "E la chiamata è addebitata all'account Anthropic dell'organizzazione" {
+            $routes | ForEach-Object {
+                $_.apiKey | Should -Be 'chiave-anthropic-di-prova'
+                $_.version | Should -Be '2026-10-21'
+            }
+        }
+
+        It "E il passo non usa il credito Azure" {
+            $routes | ForEach-Object { $_.authorization | Should -BeNullOrEmpty }
+            Test-Path $probe.Called | Should -BeFalse
+        }
+    }
+
+    Context "Scenario: Foundry resta un'alternativa" {
+        BeforeAll {
+            Reset-Stub
+            $res = Invoke-StyleCheck (New-Docs) 'enforce' @{ STYLE_JUDGE_PROVIDER = 'foundry'; STYLE_JUDGE_MODEL = 'giudice-foundry' }
+            $requests = Get-StubRequests
+            $routes = Get-StubRoutes
+        }
+
+        It "Allora il passo chiede la risposta al modello Foundry dichiarato dal repository" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $requests.Count | Should -Be 2
+            $routes | ForEach-Object {
+                $_.path | Should -Be '/openai/v1/chat/completions'
+                $_.authorization | Should -Be 'Bearer token-di-prova'
+            }
+            $requests | ForEach-Object { $_.model | Should -Be 'giudice-foundry' }
+        }
+    }
+
+    Context "Scenario: Chiave Anthropic mancante" {
+        BeforeAll {
+            Reset-Stub
+            $res = Invoke-StyleCheck (New-Docs) 'enforce' @{ STYLE_JUDGE_PROVIDER = 'anthropic'; STYLE_JUDGE_MODEL = 'claude-sonnet-5-5'; ANTHROPIC_API_KEY = '' }
+        }
+
+        It "Allora il passo fallisce" {
+            $res.ExitCode | Should -Be 1 -Because $res.Output
+            @(Get-StubRequests).Count | Should -Be 0
+        }
+
+        It "E il messaggio nomina la chiave Anthropic mancante" {
+            Get-Issues $res.Output | Where-Object { $_ -match '^giudizio dello stile: verifica non eseguita \(chiave Anthropic non configurata \(ANTHROPIC_API_KEY\)\)' } | Should -Not -BeNullOrEmpty -Because $res.Output
         }
     }
 }

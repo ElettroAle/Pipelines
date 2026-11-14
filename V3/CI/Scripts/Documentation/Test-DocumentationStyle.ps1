@@ -10,7 +10,7 @@
 
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
 . "$PSScriptRoot/../Common/MarkdownText.ps1"
-. "$PSScriptRoot/../Common/ModelRetry.ps1"
+. "$PSScriptRoot/../LanguageModel/LanguageModel.ps1"
 
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
 $decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }
@@ -18,8 +18,10 @@ $guidePath = if ($env:STYLE_GUIDE) { $env:STYLE_GUIDE } else { 'docs/STYLE.md' }
 $glossaryFileName = $env:DOCS_GLOSSARY
 $targetBranch = $env:TARGET_BRANCH -replace '^refs/heads/', '' -replace '^\$\(.*\)$', ''
 $sourceBranch = $env:SOURCE_BRANCH -replace '^refs/heads/', '' -replace '^\$\(.*\)$', ''
-$endpoint = "$env:STYLE_JUDGE_ENDPOINT".TrimEnd('/')
+$provider = $env:STYLE_JUDGE_PROVIDER
+$endpoint = $env:STYLE_JUDGE_ENDPOINT
 $model = $env:STYLE_JUDGE_MODEL
+$maxTokens = [int]"0$env:STYLE_JUDGE_MAX_TOKENS"
 $seed = if ($env:STYLE_JUDGE_SEED) { [int]$env:STYLE_JUDGE_SEED } else { 1 }
 $fixRequested = $env:STYLE_FIX -eq 'true'
 $maxRounds = if ($env:STYLE_MAX_ROUNDS) { [math]::Max(1, [int]$env:STYLE_MAX_ROUNDS) } else { 4 }
@@ -49,8 +51,7 @@ $BlockStartPattern = '^\s*(```|~~~|<!--|#{1,6}\s|>|\||(?:[-*+]|\d+\.)\s)'
 # Una parola che, a inizio riga, trasformerebbe la riga in un titolo, un elenco, una citazione o una tabella.
 $BlockWordPattern = '^(```|~~~|<!--|>|\||#{1,6}$|[-*+]$|\d+\.$)'
 
-$script:SeedSupported = $true
-$script:Token = $null
+$script:LanguageModel = $null
 $script:Usage = @{ Requests = 0; Input = 0; Output = 0 }
 
 $Instructions = @'
@@ -85,7 +86,8 @@ GUIDA DI STILE
 
 function Read-JudgeSetup {
     if (-not (Test-Path $guidePath -PathType Leaf)) { return @{ Issue = New-Issue $JudgeScope 'guida mancante' $guidePath } }
-    if (-not $endpoint -or -not $model) { return @{ Issue = New-Issue $JudgeScope 'verifica non eseguita' 'endpoint o modello non configurati' } }
+    try { $script:LanguageModel = New-LanguageModel $provider $endpoint $model -Seed $seed -AccessToken $env:STYLE_JUDGE_TOKEN -MaxTokens $maxTokens -TimeoutSeconds $RequestTimeoutSeconds }
+    catch { return @{ Issue = New-Issue $JudgeScope 'verifica non eseguita' $_.Exception.Message } }
     $guide = [IO.File]::ReadAllText($guidePath)
     $rules = Get-GuideRules $guide
     if (-not $rules) { return @{ Issue = New-Issue $JudgeScope 'guida senza regole' $guidePath } }
@@ -495,48 +497,12 @@ function New-FindingsSchema([string[]]$Rules) {
     return @{ type = 'object'; additionalProperties = $false; required = @($properties.Keys); properties = $properties }
 }
 
-function Get-AccessToken {
-    if ($env:STYLE_JUDGE_TOKEN) { return $env:STYLE_JUDGE_TOKEN }
-    $token = az account get-access-token --resource 'https://cognitiveservices.azure.com' --query accessToken -o tsv 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "token Entra ID non ottenuto: $token" }
-    return $token
-}
-
-function New-JudgeBody([string]$System, [string]$User, $Schema) {
-    $body = [ordered]@{
-        model           = $model
-        messages        = @(@{ role = 'system'; content = $System }, @{ role = 'user'; content = $User })
-        response_format = @{ type = 'json_schema'; json_schema = @{ name = 'style_findings'; strict = $true; schema = $Schema } }
-    }
-    if ($script:SeedSupported) { $body.seed = $seed }
-    return $body | ConvertTo-Json -Depth 30
-}
-
 function Invoke-Judge($Context, [string]$User) {
-    if (-not $script:Token) { $script:Token = Get-AccessToken }
-    for ($attempt = 1; ; $attempt++) {
-        $body = New-JudgeBody $Context.System $User $Context.Schema
-        try {
-            $response = Invoke-RestMethod -Method Post -Uri "$endpoint/openai/v1/chat/completions" -Body ([Text.Encoding]::UTF8.GetBytes($body)) `
-                -ContentType 'application/json; charset=utf-8' -Headers @{ Authorization = "Bearer $script:Token" } -TimeoutSec $RequestTimeoutSeconds
-            break
-        }
-        catch {
-            $status = [int]$_.Exception.Response.StatusCode
-            if ($status -eq 400 -and $script:SeedSupported -and "$($_.ErrorDetails.Message)" -match 'seed') {
-                $script:SeedSupported = $false
-                continue
-            }
-            $transient = $status -eq 429 -or $status -ge 500
-            if (-not $transient -or $attempt -ge $ModelMaxAttempts) { throw }
-            Start-Sleep -Seconds (Get-ModelRetryDelay $_.Exception.Response $attempt)
-        }
-    }
-
+    $answer = Invoke-LanguageModel $script:LanguageModel $Context.System $User $Context.Schema 'style_findings'
     $script:Usage.Requests++
-    $script:Usage.Input += [int]$response.usage.prompt_tokens
-    $script:Usage.Output += [int]$response.usage.completion_tokens
-    $verdict = $response.choices[0].message.content | ConvertFrom-Json
+    $script:Usage.Input += $answer.Usage.Input
+    $script:Usage.Output += $answer.Usage.Output
+    $verdict = $answer.Response
     for ($k = 0; $k -lt $Context.Rules.Count; $k++) {
         foreach ($item in @($verdict."regola_$($k + 1)")) {
             if ($null -eq $item) { continue }

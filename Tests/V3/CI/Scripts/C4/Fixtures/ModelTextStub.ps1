@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# Endpoint locale che risponde come Azure OpenAI al generatore del testo del modello C4. Per ogni
+# Endpoint locale che risponde come Azure OpenAI, o come l'API Messages di Anthropic sul suo percorso, al
+# generatore del testo del modello C4. Per ogni
 # richiesta legge la parte da descrivere e la sua struttura dal messaggio, e scrive una stesura che
 # descrive ogni elemento e ogni relazione. answers.json nella cartella di stato cambia la stesura di
 # una parte, una voce per stesura: omitElement toglie un elemento, extraRelationship aggiunge una
@@ -13,7 +14,8 @@
 # resta e ogni container tiene il suo nome. status forza un codice
 # HTTP; throttle rifiuta con 429 e Retry-After di un secondo quel numero di richieste; fail-after rifiuta
 # con 503 ogni richiesta oltre quel numero, contato dall'ultimo azzeramento dello stato. Un rifiuto porta
-# sempre Retry-After. Le richieste ricevute restano in request-<n>.json.
+# sempre Retry-After. Le richieste ricevute restano in request-<n>.json, il loro percorso e le intestazioni
+# di autenticazione in route-<n>.json.
 
 param([string]$Endpoint, [string]$State)
 
@@ -101,6 +103,8 @@ while (-not (Test-Path $stopFile)) {
     $body = $reader.ReadToEnd()
     $count++
     [IO.File]::WriteAllText((Join-Path $State "request-$count.json"), $body)
+    $route = @{ path = $context.Request.Url.AbsolutePath; apiKey = $context.Request.Headers['x-api-key']; version = $context.Request.Headers['anthropic-version']; authorization = $context.Request.Headers['Authorization'] }
+    [IO.File]::WriteAllText((Join-Path $State "route-$count.json"), ($route | ConvertTo-Json -Compress))
 
     $statusFile = Join-Path $State 'status'
     $status = if (Test-Path $statusFile) { [int](Get-Content -Raw $statusFile) } else { 200 }
@@ -131,7 +135,10 @@ while (-not (Test-Path $stopFile)) {
         $spec = if ($specs.Count) { $specs[[math]::Min($draft, $specs.Count - 1)] } else { $null }
         $answer = if ($catalogue) { New-CatalogueAnswer $user $spec } elseif ($review) { New-ReviewAnswer $user $spec } else { New-Draft (Get-Structure $user) $spec }
         $content = $answer | ConvertTo-Json -Depth 10 -Compress
-        $payload = @{ choices = @(@{ message = @{ role = 'assistant'; content = $content } }); usage = @{ prompt_tokens = 100; completion_tokens = 10 } } | ConvertTo-Json -Depth 6 -Compress
+        $payload = if ($context.Request.Url.AbsolutePath -eq '/v1/messages') {
+            @{ content = @(@{ type = 'thinking'; thinking = ''; signature = 'firma' }, @{ type = 'text'; text = $content }); stop_reason = 'end_turn'; usage = @{ input_tokens = 100; output_tokens = 10 } } | ConvertTo-Json -Depth 6 -Compress
+        }
+        else { @{ choices = @(@{ message = @{ role = 'assistant'; content = $content } }); usage = @{ prompt_tokens = 100; completion_tokens = 10 } } | ConvertTo-Json -Depth 6 -Compress }
     }
     $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
     $context.Response.StatusCode = $status
