@@ -12,6 +12,7 @@
 #
 # Riusato da:
 #   il consumer, dopo i passi che scrivono i file da proporre
+#   CI/Common/Steps/documentation-update.yaml
 #
 # Parametri
 # ─────────
@@ -28,6 +29,8 @@
 #   autoComplete       → completamento automatico a nome dell'identita' della build (default: true)
 #   deleteSourceBranch → cancella il ramo al completamento (default: true)
 #   draft              → apre la PR come bozza (default: false)
+#   condition          → condizione del passo, es. una variabile scritta da un passo precedente
+#                        (default: succeeded())
 #   workingDirectory   → checkout del repository della PR (default: $(Build.SourcesDirectory))
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #
@@ -80,6 +83,10 @@ parameters:
     type: boolean
     default: false
 
+  - name: condition
+    type: string
+    default: 'succeeded()'
+
   - name: workingDirectory
     type: string
     default: '$(Build.SourcesDirectory)'
@@ -93,6 +100,7 @@ parameters:
 steps:
   - task: PowerShell@2
     displayName: 'Pull request from ${{ parameters.branch }} to ${{ parameters.targetBranch }}'
+    condition: ${{ parameters.condition }}
     inputs:
       filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/AzureRepos/Publish-PullRequest.ps1'
       workingDirectory: '${{ parameters.workingDirectory }}'

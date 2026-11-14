@@ -24,7 +24,7 @@ Tests/
     │   ├── C4/                 # Lettori, testo, scrittore e verifica del modello C4
     │   │   └── Fixtures/       # Repository sorgente finti, lettore del consumer, finto modello del testo
     │   ├── Mermaid/            # Test-MermaidDiagrams, Test-DiagramFlows, Sync-DiagramLabels, Repair-DiagramFlows
-    │   ├── Documentation/      # Test-Documentation, Test-DocumentationStyle
+    │   ├── Documentation/      # Test-Documentation, Test-DocumentationStyle, Update-Documentation
     │   ├── LanguageModel/      # LanguageModel, Foundry, Anthropic
     │   │   └── Fixtures/       # Endpoint finto di un fornitore, Azure CLI finta che segna se viene chiamata
     │   ├── Release/            # GitCliff, Set-Versioning, Verify-SemVer, New-ReleaseNotes, Test-PublishedArtifact
