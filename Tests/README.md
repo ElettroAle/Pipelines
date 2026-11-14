@@ -19,7 +19,7 @@ Tests/
     ├── CI/Scripts/             # Livello 2: unit test PowerShell (Pester), stesso albero di V3/CI/Scripts
     │   ├── Common/             # MarkdownText.Tests.ps1
     │   │   └── Fixtures/Documentation/  # Documento valido e template arc42 italiano ufficiale, usati dai test della documentazione
-    │   ├── Adr/                # Test-AdrCorpus, Test-DecisionClasses
+    │   ├── Adr/                # Test-AdrCorpus, Test-DecisionClasses, Repair-DecisionClasses
     │   ├── Arc42/              # Test-Arc42Document, Publish-Arc42Wiki, PlantUml
     │   ├── C4/                 # Lettori, testo, scrittore e verifica del modello C4
     │   │   └── Fixtures/       # Repository sorgente finti, lettore del consumer, finto modello del testo
@@ -161,11 +161,22 @@ repository .NET finto con il suo diagramma delle classi e vi introduce un solo d
 | Diagramma delle classi coerente con il codice che governa | Diagramma coerente, con una classe del framework che nessun pattern copre; classe governata assente dal diagramma, con la classe e la decisione; classe fuori dalle parti governate non nominata; classe di un progetto di test, tipo annidato e classe accanto al prefisso non controllati; voce di `governs` senza classi, struttura senza `governs`, `governs` senza struttura, struttura senza diagramma delle classi; decisioni chiuse non controllate; corpus senza struttura nel codice senza leggere il codice; codice sorgente assente; `warn` e `off` |
 | `DecisionClasses.ps1` | Frontmatter con le liste, pattern esatti e con il prefisso, nome della classe senza parametri generici, rilievi del confronto nel processo dei test |
 
+#### `Repair-DecisionClasses.Tests.ps1`
+
+Richiede Node.js, come `Test-DecisionClasses.Tests.ps1`. La documentazione è una copia con un origin locale, dove
+vive il ramo di avanzamento; il codice è un repository .NET finto; il modello linguistico è un endpoint locale che
+risponde con le stesure registrate e conserva le richieste.
+
+| Suite | Scenario testato |
+|---|---|
+| Il modello propone pattern e diagramma delle classi delle decisioni | Classe governata assente dal diagramma aggiunta, con il rilievo e il codice al modello, versione nuova con la sua voce, resto invariato, salvata sul ramo di avanzamento; classe candidata che appartiene alla decisione aggiunta a `governs` e al registro; candidata che non appartiene, ricordata nel registro senza una seconda chiamata; stesura scartata rimandata con i motivi; stesure esaurite con la decisione invariata e un avviso; modello non disponibile; ripresa dal ramo di avanzamento senza chiamare il modello; decisioni in pari senza chiamate |
+| `Repair-DecisionClasses.ps1` | Stesura applicata (voci di `governs`, struttura, versione e voce), voce in fondo alle versioni esistenti, stesura vuota; registro delle candidate e candidate dei namespace governati |
+
 #### `DotNet10Code.Tests.ps1`
 
 | Suite | Scenario testato |
 |---|---|
-| `DotNet10Code.ps1` | Tipi di primo livello con il namespace del file, tipi annidati esclusi, namespace a blocchi, graffe in stringhe e caratteri, tipo senza namespace; tipi dei soli progetti che non sono di test |
+| `DotNet10Code.ps1` | Tipi di primo livello con il namespace del file, tipi annidati esclusi, namespace a blocchi, graffe in stringhe e caratteri, tipo senza namespace; tipi dei soli progetti che non sono di test, con il file che li dichiara |
 
 I test degli script di verifica della documentazione partono dal documento valido di
 `Tests/V3/CI/Scripts/Common/Fixtures/Documentation/DocumentationFixture.ps1` (le dodici sezioni del template arc42 italiano,
@@ -279,7 +290,7 @@ Il fornitore è un endpoint locale (`Fixtures/ModelEndpointStub.ps1`) che conser
 di ogni richiesta e risponde con le risposte registrate dal test; la Azure CLI e l'attesa fra i tentativi sono
 mock. Lo scenario `Un passo di documentazione usa Claude` del requisito si prova nei test dei tre passi
 (`Test-DocumentationStyle`, `Write-C4ModelText`, `Repair-DiagramFlows`) con la Azure CLI finta di
-`Fixtures/AzureCliProbe.ps1`. `LanguageModelTemplates.Tests.ps1` legge il testo dei template dei tre passi e
+`Fixtures/AzureCliProbe.ps1`. `LanguageModelTemplates.Tests.ps1` legge il testo dei template dei passi che chiamano il modello e
 degli entry point `quality-arc42` e `quality-docs`.
 
 | Suite | Scenario testato |
@@ -287,7 +298,7 @@ degli entry point `quality-arc42` e `quality-docs`.
 | Scelta del fornitore | Foundry senza fornitore dichiarato, nome senza maiuscole e spazi, fornitore sconosciuto con l'elenco dei disponibili, chiamata al modulo del fornitore del client |
 | Foundry | Chat completions con token Entra ID, deployment, json_schema stretto con il nome, livello di ragionamento e seme solo se dichiarati, token chiesto alla Azure CLI una volta, token non ottenuto, seme rifiutato tolto per le richieste successive, 400 non ripetuto, `Retry-After`, tentativi esauriti, endpoint o modello mancanti |
 | Anthropic | `/v1/messages` con `x-api-key` e `anthropic-version`, `max_tokens` predefinito e dichiarato, system e unico messaggio dell'utente, schema invariato in `output_config.format`, `effort` solo se dichiarato, nessun campionamento, seme, `thinking` o risposta precompilata; testo letto dopo i blocchi di ragionamento, token usati, `refusal` e `max_tokens` come errori, risposta senza testo; 429 con `retry-after`, 529, 5xx, tentativi esauriti, 400 non ripetuto con il messaggio dell'API; chiave o modello mancanti |
-| Scelta del fornitore nei template | `documentation-style`, `c4-describe`, `flows-verify`: `foundry` di default, `AzureCLI@2` sulla service connection con Foundry, `PowerShell@2` senza Azure CLI con Anthropic e chiave mappata in `ANTHROPIC_API_KEY` da `$(anthropicApiKey)`, fornitore passato allo script, stesse variabili nelle due varianti; `styleProvider` e `styleAnthropicApiKey` negli entry point; riparazione dei diagrammi con Anthropic senza endpoint |
+| Scelta del fornitore nei template | `documentation-style`, `c4-describe`, `flows-verify`, `adr-classes-verify`: `foundry` di default, `AzureCLI@2` sulla service connection con Foundry, `PowerShell@2` senza Azure CLI con Anthropic e chiave mappata in `ANTHROPIC_API_KEY` da `$(anthropicApiKey)`, fornitore passato allo script, stesse variabili nelle due varianti; `styleProvider` e `styleAnthropicApiKey` negli entry point; riparazione dei diagrammi e proposta delle classi con Anthropic senza endpoint |
 
 #### `ScenarioCoverage.Tests.ps1` (14 suite, 25 test)
 

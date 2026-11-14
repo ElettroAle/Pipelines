@@ -241,7 +241,7 @@ parametri di formato e senza condizioni sul formato.
 | Step | Script | Cosa controlla | Legato a |
 |---|---|---|---|
 | `adr-verify.yaml` | `Test-AdrCorpus.ps1` | corpus delle decisioni | MADR |
-| `adr-classes-verify.yaml` | `Test-DecisionClasses.ps1` | classi .NET che le decisioni governano con i pattern di `governs`, presenti nel loro diagramma delle classi | MADR, Mermaid, .NET 10 |
+| `adr-classes-verify.yaml` | `Test-DecisionClasses.ps1` e, in modalità `fix`, `Repair-DecisionClasses.ps1` | classi .NET che le decisioni governano con i pattern di `governs`, presenti nel loro diagramma delle classi; in modalità `fix`, pattern e diagramma proposti da un modello linguistico | MADR, Mermaid, .NET 10 |
 | `arc42-verify.yaml` | `Test-Arc42Document.ps1` | un file per sezione con nome e titolo del template ufficiale | arc42 |
 | `c4-read.yaml` | lo script passato con `scriptPath` | repository sorgente letto da un lettore nel frammento del modello C4 | C4 |
 | `c4-read-dotnet10.yaml` | `Read-C4DotNet10Model.ps1`, con `c4-read.yaml` | progetti .NET 10 di un repository sorgente letti nel frammento del modello C4 | C4, .NET 10 |
@@ -510,8 +510,20 @@ Classi delle decisioni (`adr-classes-verify.yaml`, `CI/Scripts/Adr/Test-Decision
   struttura o la struttura senza diagramma delle classi. Una classe che nessun pattern copre, come la classe
   del framework da cui una classe governata eredita, non si controlla; un tipo annidato neppure. Le decisioni
   `superseded`, `deprecated` e `rejected` non si controllano.
+- **Proposta.** In modalità `fix`, `CI/Scripts/Adr/Repair-DecisionClasses.ps1` propone prima con il modello
+  linguistico le decisioni che la verifica respinge o che hanno classi candidate: le classi dei namespace delle
+  classi governate che nessun pattern copre e che il registro `candidatesFile` non ha già visto. Il modello
+  riceve la decisione, i rilievi, le candidate e il codice delle classi, e risponde con le voci da aggiungere a
+  `governs` (mai da togliere), la parte della struttura nel codice riscritta e la riga della versione; lo script
+  alza la versione della decisione e aggiunge la voce sotto Versioni. La verifica delle classi, quella del flusso
+  della decisione e il parser accettano la stesura o la rimandano con i motivi, fino a `maxDrafts` stesure; poi
+  la decisione resta com'è e il passo la segnala senza fallire. Ogni decisione accettata e il registro vanno in
+  un commit sul ramo `progressBranch`, da cui una run rilanciata riprende senza richiamare il modello; il
+  registro evita di chiedere al modello le stesse candidate a ogni run. La verifica che segue segnala senza
+  bloccare: il cancello è la quality della PR che il consumer apre con le decisioni proposte.
 - **Requisiti.** Node.js per il parser Mermaid, preparato dallo step con `UseNode@1`, e il checkout dei
-  repository sorgente prima dello step.
+  repository sorgente prima dello step; in modalità `fix`, il modello linguistico (vedi sotto) e un'identità
+  della build che può creare il ramo `progressBranch`.
 
 Flussi (`flows-verify.yaml`, `CI/Scripts/Mermaid/Test-DiagramFlows.ps1`):
 
@@ -622,7 +634,8 @@ Giudizio dello stile (`styleMode`, `CI/Scripts/Documentation/Test-DocumentationS
 ### Modello linguistico dei passi di documentazione
 
 Il giudizio dello stile (`documentation-style.yaml`, e `styleProvider` di `quality-arc42` e `quality-docs`), il
-testo del modello C4 (`c4-describe.yaml`) e la riparazione dei diagrammi (`flows-verify.yaml`) scelgono il
+testo del modello C4 (`c4-describe.yaml`), la riparazione dei diagrammi (`flows-verify.yaml`) e la proposta delle
+classi delle decisioni (`adr-classes-verify.yaml`) scelgono il
 fornitore del modello con il parametro `provider`, passato agli script (`CI/Scripts/LanguageModel/`):
 
 - `foundry` (default): `model` è il deployment Azure OpenAI di `endpoint`; il passo è un `AzureCLI@2` sulla
@@ -760,7 +773,8 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/Arc42/Test-Arc42Document.ps1` | Struttura di un documento arc42 (`arc42-verify.yaml`): un file per sezione con nome e titolo del template ufficiale; release, URL e SHA-256 per lingua fissati nello script |
 | `CI/Scripts/C4/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, nessun elemento tecnico nelle viste di contesto, elementi e relazioni generati descritti, nessuna relazione fra elementi generati che il codice non dichiara, marcatori di vista nelle sezioni |
 | `CI/Scripts/Adr/Test-DecisionClasses.ps1` | Classi governate dalle decisioni (`adr-classes-verify.yaml`): ogni classe .NET che un pattern di `governs` copre sta nel diagramma delle classi della decisione, ogni voce copre almeno una classe |
-| `CI/Scripts/Adr/DecisionClasses.ps1` | Frontmatter `governs`, classi dei diagrammi delle classi e confronto con il codice, condivisi dalla verifica delle classi delle decisioni |
+| `CI/Scripts/Adr/DecisionClasses.ps1` | Frontmatter `governs`, classi dei diagrammi delle classi e confronto con il codice, condivisi dalla verifica e dalla proposta delle classi delle decisioni |
+| `CI/Scripts/Adr/Repair-DecisionClasses.ps1` | Classi delle decisioni proposte con il modello linguistico (`CLASSES_REPAIR_PROVIDER`) (`adr-classes-verify.yaml` in modalità `fix`): voci di `governs` e struttura nel codice di ogni decisione respinta o con classi candidate, stesure accettate dalla verifica, registro delle candidate, ramo di avanzamento e ripresa |
 | `CI/Scripts/C4/DotNet10Code.ps1` | Lettura del codice .NET 10 condivisa dal lettore del modello C4 e dalla verifica delle classi delle decisioni: progetti con il loro tipo, codice senza commenti, tipi di primo livello con il nome completo |
 | `CI/Scripts/C4/C4CodeModel.ps1` | Contratto del frammento del modello C4 generato, incluso dai lettori: file di progetto letti, container, componenti, relazioni, indirizzi di avvio e chiamati e il loro legame |
 | `CI/Scripts/C4/Read-C4DotNet10Model.ps1` | Lettore .NET 10 (`c4-read-dotnet10.yaml`): applicazioni come container, progetti di produzione come componenti, regole di .NET 10; un progetto di un'altra versione ferma la lettura |
