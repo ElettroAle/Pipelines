@@ -571,6 +571,9 @@ Giudizio dello stile (`styleMode`, `CI/Scripts/Documentation/Test-DocumentationS
   altrimenti si annulla e il modello riceve il motivo. L'ultimo dei `maxRounds` giri verifica soltanto:
   `quality-arc42` e `quality-docs` lo espongono come `styleMaxRounds` (default `4`). Un file si ferma al
   primo giro senza rilievi, quindi i giri in più si pagano solo dove servono.
+- Il job di `quality-arc42` e `quality-docs` ha un timeout di 90 minuti (`timeoutInMinutes`), perché il giudizio
+  in modalità `fix` di un documento intero supera i 30 minuti di un job di build; se il job si ferma comunque, il
+  giudizio riparte dai file già registrati sul ramo `style-judge/<commit>`.
 - `styleMaxFindings` è la soglia delle violazioni tollerate: fino alla soglia restano come avvisi e la
   verifica passa con esito parziale (`SucceededWithIssues`); oltre la soglia la verifica fallisce e le nomina
   tutte. `0` (default) blocca ogni violazione, `-1` non pone limiti. In modalità `fix` contano le violazioni

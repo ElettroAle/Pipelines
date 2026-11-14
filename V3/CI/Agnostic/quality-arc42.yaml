@@ -39,6 +39,8 @@
 #                        -1 nessun limite (default: 0)
 #   styleMaxRounds     → giri del giudizio per file in modalita' fix; l'ultimo verifica soltanto (default: 4)
 #   pool               → pool del job (default: hosted ubuntu-latest, richiesto da Gitleaks via docker)
+#   timeoutInMinutes   → timeout del job (default: 90): il giudizio dello stile e i passi con il modello
+#                        durano piu' dei 30 minuti di un job di build
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -125,12 +127,17 @@ parameters:
     default:
       vmImage: 'ubuntu-latest'
 
+  - name: timeoutInMinutes
+    type: number
+    default: 90
+
 stages:
   - template: ../Common/quality.yaml
     parameters:
       checkoutRepository: ${{ parameters.checkoutRepository }}
       pool: ${{ parameters.pool }}
       checkoutPipelineTemplates: true
+      timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
       buildAndTestSteps:
         - template: ../Common/Steps/document-language.yaml
           parameters:
