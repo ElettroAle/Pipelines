@@ -54,9 +54,10 @@ I test usano un **bare repo locale** come fake remote. L'unico accesso di rete Ã
 | `V3/CI/Scripts/Mermaid/Test-MermaidDiagrams.ps1`, `Mermaid.ps1`, `Parser/` | Livello 1 + Livello 2 (`Test-MermaidDiagrams.Tests.ps1`, richiede Node.js) |
 | `V3/CI/Scripts/Documentation/Test-Documentation.ps1` | Livello 1 + Livello 2 (`Test-Documentation.Tests.ps1`) |
 | `V3/CI/Scripts/Documentation/Test-DocumentationStyle.ps1` | Livello 1 + Livello 2 (`Test-DocumentationStyle.Tests.ps1`) |
+| `V3/CI/Scripts/Documentation/Update-Documentation.ps1`, `DocumentationUpdate.ps1` | Livello 1 + Livello 2 (`Update-Documentation.Tests.ps1`) |
 | `V3/CI/Scripts/Common/MarkdownText.ps1`, `VerificationGate.ps1`, `Tests/V3/CI/Scripts/Common/Fixtures/Documentation/` | Livello 1 + Livello 2 (`MarkdownText.Tests.ps1` e i test di tutti gli script di verifica della documentazione) |
-| `V3/CI/Scripts/LanguageModel/`, `V3/CI/Scripts/Common/ModelRetry.ps1`, `Tests/V3/CI/Scripts/LanguageModel/Fixtures/` | Livello 1 + Livello 2 (`LanguageModel.Tests.ps1` + `Foundry.Tests.ps1` + `Anthropic.Tests.ps1` + `ModelRetry.Tests.ps1`, e i test degli script che chiamano il modello: `Test-DocumentationStyle.Tests.ps1`, `Write-C4ModelText.Tests.ps1`, `Repair-DiagramFlows.Tests.ps1`, questi ultimi due con Java 17) |
-| `V3/CI/Common/Steps/documentation-style.yaml`, `c4-describe.yaml`, `flows-verify.yaml`, `V3/CI/Agnostic/quality-arc42.yaml`, `quality-docs.yaml` | Livello 1 + Livello 2 (`LanguageModelTemplates.Tests.ps1`) |
+| `V3/CI/Scripts/LanguageModel/`, `V3/CI/Scripts/Common/ModelRetry.ps1`, `Tests/V3/CI/Scripts/LanguageModel/Fixtures/` | Livello 1 + Livello 2 (`LanguageModel.Tests.ps1` + `Foundry.Tests.ps1` + `Anthropic.Tests.ps1` + `ModelRetry.Tests.ps1`, e i test degli script che chiamano il modello: `Test-DocumentationStyle.Tests.ps1`, `Update-Documentation.Tests.ps1`, `Write-C4ModelText.Tests.ps1`, `Repair-DiagramFlows.Tests.ps1`, questi ultimi due con Java 17) |
+| `V3/CI/Common/Steps/documentation-style.yaml`, `c4-describe.yaml`, `flows-verify.yaml`, `documentation-update.yaml`, `V3/CI/Agnostic/quality-arc42.yaml`, `quality-docs.yaml` | Livello 1 + Livello 2 (`LanguageModelTemplates.Tests.ps1`) |
 | `V3/CI/Scripts/ScenarioCoverage/ScenarioCoverage.cs` | Livello 1 + Livello 2 (`ScenarioCoverage.Tests.ps1`, richiede .NET SDK 10) |
 
 I workflow GitHub Actions replicano questi stessi check automaticamente su ogni push.

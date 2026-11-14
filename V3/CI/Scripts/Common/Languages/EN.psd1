@@ -17,4 +17,6 @@
     StatusColumn   = 'Status'
     StatusLabels   = @{ proposed = 'proposed'; accepted = 'accepted'; rejected = 'rejected'; deprecated = 'deprecated'; superseded = 'superseded' }
     StatusNotices  = @{ superseded = 'SUPERSEDED DECISION. It is replaced by'; deprecated = 'DEPRECATED DECISION. It no longer applies and no decision replaces it.'; rejected = 'REJECTED DECISION. It stays as a record of the discussion.' }
+    UpdateOriginPullRequest = 'PR {0} of {1}'
+    UpdateOriginCommit = 'commit {0} of {1}'
 }
