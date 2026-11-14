@@ -241,6 +241,7 @@ parametri di formato e senza condizioni sul formato.
 | Step | Script | Cosa controlla | Legato a |
 |---|---|---|---|
 | `adr-verify.yaml` | `Test-AdrCorpus.ps1` | corpus delle decisioni | MADR |
+| `adr-classes-verify.yaml` | `Test-DecisionClasses.ps1` | classi .NET che le decisioni governano con i pattern di `governs`, presenti nel loro diagramma delle classi | MADR, Mermaid, .NET 10 |
 | `arc42-verify.yaml` | `Test-Arc42Document.ps1` | un file per sezione con nome e titolo del template ufficiale | arc42 |
 | `c4-read.yaml` | lo script passato con `scriptPath` | repository sorgente letto da un lettore nel frammento del modello C4 | C4 |
 | `c4-read-dotnet10.yaml` | `Read-C4DotNet10Model.ps1`, con `c4-read.yaml` | progetti .NET 10 di un repository sorgente letti nel frammento del modello C4 | C4, .NET 10 |
@@ -496,6 +497,22 @@ Diagrammi Mermaid (`mermaid-verify.yaml`, `CI/Scripts/Mermaid/Test-MermaidDiagra
 - **Requisiti.** Node.js (dipendenze fissate da `CI/Scripts/Mermaid/Parser/package-lock.json`); lo step lo
   prepara con `UseNode@1`. Senza Node.js la verifica fallisce nominando il controllo non eseguito.
 
+Classi delle decisioni (`adr-classes-verify.yaml`, `CI/Scripts/Adr/Test-DecisionClasses.ps1`):
+
+- **Pattern.** Una decisione con la parte della struttura nel codice dichiara nel frontmatter `governs` i
+  pattern sui nomi completi delle classi che governa: un nome completo, o un prefisso che finisce con `*`
+  (`Contoso.Shop.Core.Queue.*`, `Contoso.Shop.Core.Handlers.V2.QueueTicket*`).
+- **Confronto.** Le classi di primo livello (classi, record, struct, interfacce, enum) dei progetti .NET che non
+  sono di test, nella cartella `sourceDirectory` con il codice dei repository sorgente, lette con le regole del
+  lettore .NET 10 del modello C4 (`CI/Scripts/C4/DotNet10Code.ps1`), che corrispondono a un pattern stanno nel
+  diagramma delle classi della decisione. La verifica fallisce nominando la decisione e la classe, o la voce di
+  `governs` che non copre nessuna classe, e se la decisione ha la struttura senza `governs`, `governs` senza la
+  struttura o la struttura senza diagramma delle classi. Una classe che nessun pattern copre, come la classe
+  del framework da cui una classe governata eredita, non si controlla; un tipo annidato neppure. Le decisioni
+  `superseded`, `deprecated` e `rejected` non si controllano.
+- **Requisiti.** Node.js per il parser Mermaid, preparato dallo step con `UseNode@1`, e il checkout dei
+  repository sorgente prima dello step.
+
 Flussi (`flows-verify.yaml`, `CI/Scripts/Mermaid/Test-DiagramFlows.ps1`):
 
 - **Partecipanti.** Un partecipante è un elemento del modello C4 per il suo identificativo nel DSL, che è
@@ -742,6 +759,9 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/Adr/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, versione intera, sostituzioni reciproche, ADR `accepted` con l'esito invariato e cambiati solo con una versione nuova rispetto al ramo di destinazione della PR |
 | `CI/Scripts/Arc42/Test-Arc42Document.ps1` | Struttura di un documento arc42 (`arc42-verify.yaml`): un file per sezione con nome e titolo del template ufficiale; release, URL e SHA-256 per lingua fissati nello script |
 | `CI/Scripts/C4/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, nessun elemento tecnico nelle viste di contesto, elementi e relazioni generati descritti, nessuna relazione fra elementi generati che il codice non dichiara, marcatori di vista nelle sezioni |
+| `CI/Scripts/Adr/Test-DecisionClasses.ps1` | Classi governate dalle decisioni (`adr-classes-verify.yaml`): ogni classe .NET che un pattern di `governs` copre sta nel diagramma delle classi della decisione, ogni voce copre almeno una classe |
+| `CI/Scripts/Adr/DecisionClasses.ps1` | Frontmatter `governs`, classi dei diagrammi delle classi e confronto con il codice, condivisi dalla verifica delle classi delle decisioni |
+| `CI/Scripts/C4/DotNet10Code.ps1` | Lettura del codice .NET 10 condivisa dal lettore del modello C4 e dalla verifica delle classi delle decisioni: progetti con il loro tipo, codice senza commenti, tipi di primo livello con il nome completo |
 | `CI/Scripts/C4/C4CodeModel.ps1` | Contratto del frammento del modello C4 generato, incluso dai lettori: file di progetto letti, container, componenti, relazioni, indirizzi di avvio e chiamati e il loro legame |
 | `CI/Scripts/C4/Read-C4DotNet10Model.ps1` | Lettore .NET 10 (`c4-read-dotnet10.yaml`): applicazioni come container, progetti di produzione come componenti, regole di .NET 10; un progetto di un'altra versione ferma la lettura |
 | `CI/Scripts/C4/Read-C4Angular18Model.ps1` | Lettore Angular 18 (`c4-read-angular18.yaml`): l'applicazione come container, cartelle di funzionalità e moduli di base come componenti; un workspace di un'altra versione ferma la lettura |
