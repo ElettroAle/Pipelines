@@ -3,7 +3,8 @@
 # Endpoint locale di un fornitore del modello linguistico per i test dei moduli. Ogni richiesta resta in
 # request-<n>.json con percorso, intestazioni e corpo; la risposta e' la voce n di responses.json
 # (l'ultima si ripete), con status, headers e body. La cartella di stato si azzera fra un test e l'altro
-# con Reset-ModelEndpoint.
+# con Reset-ModelEndpoint. Il listener parte in un thread: Start-ModelEndpoint torna solo quando ascolta,
+# altrimenti la prima richiesta di un test puo' arrivare prima e trovare la porta chiusa.
 
 function Start-ModelEndpoint {
     $state = Join-Path ([IO.Path]::GetTempPath()) "pester-language-model-$(New-Guid)"
@@ -16,6 +17,7 @@ function Start-ModelEndpoint {
         $listener = [Net.HttpListener]::new()
         $listener.Prefixes.Add("$Endpoint/")
         $listener.Start()
+        New-Item -ItemType File -Path (Join-Path $State 'ready') | Out-Null
         $stopFile = Join-Path $State 'stop'
         while (-not (Test-Path $stopFile)) {
             $pending = $listener.GetContextAsync()
@@ -40,6 +42,12 @@ function Start-ModelEndpoint {
             $context.Response.Close()
         }
         $listener.Stop()
+    }
+    $ready = Join-Path $state 'ready'
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    while (-not (Test-Path $ready)) {
+        if ($job.State -eq 'Failed' -or [DateTime]::UtcNow -gt $deadline) { throw "endpoint del modello non avviato: $($job | Receive-Job -ErrorAction SilentlyContinue)" }
+        Start-Sleep -Milliseconds 50
     }
     return @{ Endpoint = $endpoint; State = $state; Job = $job }
 }
