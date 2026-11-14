@@ -436,6 +436,7 @@ Describe "Funzionalità: Modello linguistico delle pipeline di documentazione" {
         }
 
         It "E la chiamata è addebitata all'account Anthropic dell'organizzazione" {
+            $routes.Count | Should -BeGreaterThan 0
             $routes | ForEach-Object {
                 $_.apiKey | Should -Be 'chiave-anthropic-di-prova'
                 $_.version | Should -Be '2026-10-21'
