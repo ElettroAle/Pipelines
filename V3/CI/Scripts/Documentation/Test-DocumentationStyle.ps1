@@ -40,6 +40,8 @@ $SkipCi = '[skip ci]'
 $PendingTrailer = 'Style-Judge-Pending'
 $PendingTextLength = 80
 $RequestTimeoutSeconds = 600
+$JudgeAttempts = 2
+$MissingRulesLabel = 'REGOLE CHE LA RISPOSTA PRECEDENTE NON HA GIUDICATO: rispondi con una voce per ognuna'
 $WrapWidth = 110
 $LockedKinds = @('code', 'marker', 'separator', 'frontmatter')
 # Una decisione sostituita, deprecata o respinta e' storia: non si giudica.
@@ -60,9 +62,10 @@ guida di stile che segue: nessun'altra regola, nessuna preferenza personale.
 
 Il documento arriva diviso in unità numerate. Giudichi solo le unità segnate con l'asterisco, per
 esempio [4*]; le altre unità e il glossario sono contesto. Il compito è uno spoglio completo, in
-questa sola risposta: per ogni regola, nell'ordine della guida, esamini ogni unità segnata e riporti
-ogni violazione nella voce di quella regola. Una voce vuota dice che nessuna unità segnata viola la
-regola. Lo stesso testo non avrà un secondo giudizio: ciò che non riporti ora resta nel documento.
+questa sola risposta: per ogni regola, nell'ordine della guida, esamini ogni unità segnata e scrivi
+una voce con il titolo della regola e ogni sua violazione. La risposta ha una voce per ogni regola;
+una voce senza violazioni dice che nessuna unità segnata viola la regola. Lo stesso testo non avrà
+un secondo giudizio: ciò che non riporti ora resta nel documento.
 
 Per ogni violazione indichi il numero dell'unità, il tratto che viola la regola copiato alla
 lettera, il motivo in una frase e la correzione:
@@ -469,6 +472,9 @@ function Set-InitialMarks($Document, $FileScope) {
 
 #region Giudizio
 
+# Una sola voce per regola, con il titolo scelto fra quelli delle regole: lo schema resta della stessa
+# grandezza con qualunque numero di regole, perche' l'API Anthropic rifiuta la grammatica di uno schema
+# con una proprieta' per regola. Che ogni regola abbia la sua voce lo verifica Invoke-Judge.
 function New-FindingsSchema([string[]]$Rules) {
     $fix = @{
         type                 = 'object'
@@ -492,22 +498,48 @@ function New-FindingsSchema([string[]]$Rules) {
             fix         = $fix
         }
     }
-    $properties = [ordered]@{}
-    for ($k = 0; $k -lt $Rules.Count; $k++) { $properties["regola_$($k + 1)"] = @{ type = 'array'; description = $Rules[$k]; items = $violation } }
-    return @{ type = 'object'; additionalProperties = $false; required = @($properties.Keys); properties = $properties }
+    $entry = @{
+        type                 = 'object'
+        additionalProperties = $false
+        required             = @('rule', 'violations')
+        properties           = @{
+            rule       = @{ type = 'string'; enum = @($Rules | Select-Object -Unique); description = 'Il titolo della regola della guida' }
+            violations = @{ type = 'array'; items = $violation }
+        }
+    }
+    return @{ type = 'object'; additionalProperties = $false; required = @('rules'); properties = @{ rules = @{ type = 'array'; items = $entry } } }
 }
 
+function Get-MissingRules($Context, $Answers) {
+    $answered = @($Answers | ForEach-Object { @($_.rules) } | Where-Object { $_ } | ForEach-Object { "$($_.rule)" })
+    return @($Context.Rules | Select-Object -Unique | Where-Object { $answered -cnotcontains $_ })
+}
+
+# Una risposta senza la voce di qualche regola non ha giudicato quelle regole: si chiedono una volta
+# sola le regole mancanti, e le voci della prima risposta restano.
 function Invoke-Judge($Context, [string]$User) {
-    $answer = Invoke-LanguageModel $script:LanguageModel $Context.System $User $Context.Schema 'style_findings'
-    $script:Usage.Requests++
-    $script:Usage.Input += $answer.Usage.Input
-    $script:Usage.Output += $answer.Usage.Output
-    $verdict = $answer.Response
-    for ($k = 0; $k -lt $Context.Rules.Count; $k++) {
-        foreach ($item in @($verdict."regola_$($k + 1)")) {
-            if ($null -eq $item) { continue }
-            [pscustomobject]@{ Rule = $Context.Rules[$k]; Unit = [int]$item.unit; Excerpt = $item.excerpt; Explanation = $item.explanation; Fix = $item.fix }
+    $answers = [Collections.Generic.List[object]]::new()
+    $message = $User
+    for ($attempt = 1; $attempt -le $JudgeAttempts; $attempt++) {
+        $answer = Invoke-LanguageModel $script:LanguageModel $Context.System $message $Context.Schema 'style_findings'
+        $script:Usage.Requests++
+        $script:Usage.Input += $answer.Usage.Input
+        $script:Usage.Output += $answer.Usage.Output
+        $answers.Add($answer.Response)
+        $missing = Get-MissingRules $Context $answers
+        if (-not $missing) { break }
+        $message = "$User`n`n$MissingRulesLabel`n" + (@($missing | ForEach-Object { "- $_" }) -join "`n")
+    }
+    if ($missing) { throw "il modello non ha giudicato le regole: $($missing -join '; ')" }
+    $judged = [Collections.Generic.HashSet[string]]::new()
+    foreach ($response in $answers) {
+        $entries = @(@($response.rules) | Where-Object { $_ -and $Context.Rules -ccontains "$($_.rule)" -and -not $judged.Contains("$($_.rule)") })
+        foreach ($entry in $entries) {
+            foreach ($item in @($entry.violations | Where-Object { $_ })) {
+                [pscustomobject]@{ Rule = "$($entry.rule)"; Unit = [int]$item.unit; Excerpt = $item.excerpt; Explanation = $item.explanation; Fix = $item.fix }
+            }
         }
+        $entries | ForEach-Object { [void]$judged.Add("$($_.rule)") }
     }
 }
 
