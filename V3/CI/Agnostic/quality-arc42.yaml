@@ -14,6 +14,9 @@
 # Parametri
 # ─────────
 #   checkoutRepository → repository da fare checkout [REQUIRED]
+#   checkoutSteps      → checkout di altri repository che i diagramSteps leggono, es. i sorgenti di un modello
+#                        generato dal codice: vanno prima del checkout di checkoutRepository, che li cancellerebbe
+#                        (default: nessuno)
 #   arc42Language      → lingua del template arc42 e del documento, es. 'IT' o 'EN' [REQUIRED];
 #                        sceglie anche V3/CI/Scripts/Common/Languages per ADR, marcatori di vista e tag C4
 #   adrMode            → off | warn | enforce (default: enforce)
@@ -52,6 +55,10 @@
 parameters:
   - name: checkoutRepository
     type: string
+
+  - name: checkoutSteps
+    type: stepList
+    default: []
 
   - name: arc42Language
     type: string
@@ -151,6 +158,7 @@ stages:
       checkoutRepository: ${{ parameters.checkoutRepository }}
       pool: ${{ parameters.pool }}
       checkoutPipelineTemplates: true
+      checkoutSteps: ${{ parameters.checkoutSteps }}
       timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
       buildAndTestSteps:
         - template: ../Common/Steps/document-language.yaml

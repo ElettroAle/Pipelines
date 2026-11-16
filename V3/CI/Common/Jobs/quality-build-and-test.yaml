@@ -20,6 +20,8 @@
 #   workspaceClean     → pulizia workspace prima del job (default: 'none', nessuna)
 #   checkoutPipelineTemplates → checkout anche del repo 'infrastructure' in
 #                        $(Pipeline.Workspace)/pipeline-templates (default: false)
+#   checkoutSteps      → checkout di altri repository, prima di quello di checkoutRepository, che allora va
+#                        in s (default: nessuno)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -69,6 +71,10 @@ parameters:
     type: boolean
     default: false
 
+  - name: checkoutSteps
+    type: stepList
+    default: []
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 jobs:
@@ -104,9 +110,11 @@ jobs:
           path: pipeline-templates
           fetchDepth: 1
 
+      - ${{ parameters.checkoutSteps }}
+
       - checkout: ${{ parameters.checkoutRepository }}
         fetchDepth: 0
-        ${{ if eq(parameters.checkoutPipelineTemplates, true) }}:
+        ${{ if or(eq(parameters.checkoutPipelineTemplates, true), ne(length(parameters.checkoutSteps), 0)) }}:
           path: s
 
       - template: ../Steps/gitleaks.yaml
