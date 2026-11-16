@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# ── CI Step: Ensure Chrome libraries ──────────────────────────────────────────
+#
+# Garantisce le librerie di sistema con cui Chrome headless parte su Linux, per disegnare i diagrammi
+# Mermaid e stampare il PDF del documento (V3/CI/Scripts/Browser/Browser.ps1): un'immagine Ubuntu
+# server non le ha, un agent ospitato da Microsoft si'. Un agent che le ha gia' non installa nulla;
+# uno che non le ha le installa con sudo, una volta per macchina. Su Windows Chrome non ne richiede.
+#
+# Riusato da:
+#   CI/Common/Steps/arc42-wiki-publish.yaml
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: Bash@3
+    displayName: 'Ensure Chrome libraries (Linux)'
+    condition: and(succeeded(), ne(variables['Agent.OS'], 'Windows_NT'))
+    inputs:
+      targetType: 'inline'
+      script: |
+        set -euo pipefail
+
+        # Ubuntu 24.04 rinomina alcune librerie con il suffisso t64: ogni voce accetta i due nomi.
+        libraries="libnss3, libatk1.0-0 | libatk1.0-0t64, libatk-bridge2.0-0 | libatk-bridge2.0-0t64,
+          libcups2 | libcups2t64, libdrm2, libxkbcommon0, libxcomposite1, libxdamage1, libxfixes3,
+          libxrandr2, libgbm1, libasound2 | libasound2t64, libpango-1.0-0, libcairo2"
+        libraries=$(echo "$libraries" | tr -s ' \n' ' ')
+
+        # La simulazione non chiede privilegi; fallisce anche quando mancano gli indici dei pacchetti.
+        if simulation=$(apt-get -s satisfy "$libraries" 2>&1) && ! grep -q '^Inst ' <<< "$simulation"; then
+          echo "Librerie di Chrome gia' presenti"
+          exit 0
+        fi
+
+        if ! sudo -n true 2>/dev/null; then
+          echo "##vso[task.logissue type=error]L'agent non ha le librerie di Chrome e il suo utente non ha sudo: servono $libraries."
+          exit 1
+        fi
+
+        apt="sudo -n apt-get -o DPkg::Lock::Timeout=600 -q"
+        DEBIAN_FRONTEND=noninteractive $apt update
+        DEBIAN_FRONTEND=noninteractive $apt satisfy -y "$libraries"

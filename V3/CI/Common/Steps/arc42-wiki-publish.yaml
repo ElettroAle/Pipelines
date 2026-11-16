@@ -7,6 +7,9 @@
 # sotto la sezione 9, le viste C4 come immagini C4-PlantUML. Un commit solo nel repository
 # della wiki, che tocca soltanto wikiRoot, le sue immagini e la sua voce nell'ordine della radice.
 # PlantUML richiede Java e i font di sistema.
+# Con documentFormats lo stesso commit allega il documento unico in PDF e Word, che la pagina wikiRoot
+# nomina (V3/CI/Scripts/Arc42/Arc42Document.ps1): pandoc si scarica alla prima esecuzione, Chrome
+# headless richiede Node.js e, su Linux, le sue librerie di sistema.
 #
 # Riusato da:
 #   CI/Agnostic/publish-arc42-wiki.yaml
@@ -22,6 +25,8 @@
 #   decisionsDirectory → cartella degli ADR (default: docs/decisions)
 #   sourcesDirectory   → checkout del repository del documento (default: $(Build.SourcesDirectory))
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#   documentFormats    → formati del documento unico da allegare, 'pdf' e 'docx' (default: nessuno)
+#   nodeVersion        → versione di Node.js per Chrome headless (default: 22.x)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -56,12 +61,28 @@ parameters:
     type: string
     default: '$(Pipeline.Workspace)/pipeline-templates'
 
+  - name: documentFormats
+    type: object
+    default: []
+
+  - name: nodeVersion
+    type: string
+    default: '22.x'
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
   - template: ensure-java.yaml
 
   - template: ensure-fonts.yaml
+
+  - ${{ if ne(length(parameters.documentFormats), 0) }}:
+    - task: UseNode@1
+      displayName: 'Install Node.js'
+      inputs:
+        version: ${{ parameters.nodeVersion }}
+
+    - template: ensure-chrome-libraries.yaml
 
   - task: PowerShell@2
     displayName: 'Publish ${{ parameters.docsDirectory }} to the wiki'
@@ -76,4 +97,5 @@ steps:
       WIKI_DIRECTORY: ${{ parameters.wikiDirectory }}
       WIKI_ROOT: ${{ parameters.wikiRoot }}
       WIKI_BRANCH: ${{ parameters.wikiBranch }}
+      DOCUMENT_FORMATS: ${{ join(',', parameters.documentFormats) }}
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)

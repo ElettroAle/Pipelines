@@ -20,6 +20,7 @@
 #   docsDirectory      → cartella delle sezioni (default: docs/architecture)
 #   decisionsDirectory → cartella degli ADR (default: docs/decisions)
 #   composeSteps       → step che compongono il documento prima della pubblicazione (default: nessuno)
+#   documentFormats    → formati del documento unico allegato alla wiki, 'pdf' e 'docx' (default: nessuno)
 #   pool               → pool del job (default: hosted ubuntu-latest)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -52,6 +53,10 @@ parameters:
 
   - name: composeSteps
     type: stepList
+    default: []
+
+  - name: documentFormats
+    type: object
     default: []
 
   - name: pool
@@ -95,3 +100,4 @@ stages:
               docsDirectory: ${{ parameters.docsDirectory }}
               decisionsDirectory: ${{ parameters.decisionsDirectory }}
               sourcesDirectory: '$(Pipeline.Workspace)/s'
+              documentFormats: ${{ parameters.documentFormats }}

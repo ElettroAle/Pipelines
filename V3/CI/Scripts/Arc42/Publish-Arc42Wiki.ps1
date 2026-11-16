@@ -6,10 +6,13 @@
 # I marcatori di vista diventano le immagini dei diagrammi C4, disegnate con C4-PlantUML nella direzione
 # che si legge meglio (ViewImages.ps1), e i link puntano alle pagine. Si scrive nel repository git della wiki con un commit solo, che tocca soltanto
 # WIKI_ROOT, le sue immagini e la sua voce nell'ordine della radice: il resto della wiki resta com'e'.
+# Con DOCUMENT_FORMATS (pdf, docx) le stesse pagine diventano anche un documento unico (Arc42Document.ps1), che
+# lo stesso commit allega alla wiki e che la pagina WIKI_ROOT nomina.
 
 . "$PSScriptRoot/../Common/MarkdownText.ps1"
 . "$PSScriptRoot/../C4/Structurizr.ps1"
 . "$PSScriptRoot/../C4/ViewImages.ps1"
+. "$PSScriptRoot/Arc42Document.ps1"
 
 $ErrorActionPreference = 'Stop'
 
@@ -19,6 +22,7 @@ $wikiDirectory = $env:WIKI_DIRECTORY
 $wikiRoot = if ($env:WIKI_ROOT) { $env:WIKI_ROOT } else { $DocumentLanguage.WikiRoot }
 $wikiBranch = if ($env:WIKI_BRANCH) { $env:WIKI_BRANCH } else { 'wikiMaster' }
 $repositoryUrl = "$($env:SYSTEM_COLLECTIONURI)$($env:SYSTEM_TEAMPROJECT)/_git/$($env:BUILD_REPOSITORY_NAME)"
+$sourceVersion = if ($env:BUILD_SOURCEVERSION) { $env:BUILD_SOURCEVERSION.Substring(0, [math]::Min(8, $env:BUILD_SOURCEVERSION.Length)) } else { 'locale' }
 
 $SectionFilePattern = '^(\d+)[_-].+\.md$'
 $DecisionFilePattern = '^(\d{4})-.+\.md$'
@@ -66,9 +70,10 @@ function Get-DecisionPageName([string]$FileName) {
     return "$($words[0]) $($title.Substring(0, 1).ToUpperInvariant())$($title.Substring(1))"
 }
 
-function New-Page([string]$Source, [string]$Name, [string]$ParentPath, $Markdown) {
+function New-Page([string]$Source, [string]$Name, [string]$ParentPath, $Markdown, [string]$Title = $Name) {
     return [pscustomobject]@{
         Source   = $Source
+        Title    = $Title
         Name     = ConvertTo-WikiName $Name
         WikiPath = "$ParentPath/$(ConvertTo-WikiName $Name)"
         Status   = $Markdown.Status
@@ -84,7 +89,8 @@ function Get-DocumentPages {
         $number = [int]([regex]::Match($file.Name, $SectionFilePattern).Groups[1].Value)
         $markdown = Read-Markdown $file.FullName
         if (-not $markdown.Title) { throw "$($file.Name): la sezione non ha un titolo" }
-        [pscustomobject]@{ Number = $number; Page = New-Page (ConvertTo-RepositoryPath $file.FullName) "$number. $(ConvertTo-PlainText $markdown.Title)" $rootPath $markdown }
+        $title = ConvertTo-PlainText $markdown.Title
+        [pscustomobject]@{ Number = $number; Page = New-Page (ConvertTo-RepositoryPath $file.FullName) "$number. $title" $rootPath $markdown $title }
     }
     $sections = @($sections | Sort-Object Number)
     if (-not $sections) { throw "nessuna sezione in $docsDirectory" }
@@ -141,36 +147,39 @@ function Get-RowDecision([string]$Row, $Page, [hashtable]$PagesBySource) {
     return $null
 }
 
-function Format-Alert([string]$Text) {
+# Word e PDF non mostrano lo stile HTML della wiki: nel documento l'avviso e' in grassetto.
+function Format-Alert([string]$Text, $Document) {
+    if ($Document) { return "**$Text**" }
     return "<span style=`"color:red;font-weight:bold`">$Text</span>"
 }
 
-function Get-StatusLabel([string]$Status) {
+function Get-StatusLabel([string]$Status, $Document) {
     $label = if ($DocumentLanguage.StatusLabels.ContainsKey($Status)) { $DocumentLanguage.StatusLabels[$Status] } else { $Status }
-    if ($DocumentLanguage.StatusNotices.ContainsKey($Status)) { return Format-Alert $label }
+    if ($DocumentLanguage.StatusNotices.ContainsKey($Status)) { return Format-Alert $label $Document }
     return $label
 }
 
 # Una decisione che non vale piu' resta nella wiki con il testo di quando valeva: chi ci arriva da un
 # link se ne accorge prima di leggerla e trova la decisione che vale al suo posto.
-function Get-StatusNotice($Page, [hashtable]$PagesBySource) {
+function Get-StatusNotice($Page, [hashtable]$PagesBySource, $Document) {
     if (-not $Page.Status -or -not $DocumentLanguage.StatusNotices.ContainsKey($Page.Status)) { return $null }
-    $notice = "> $(Format-Alert $DocumentLanguage.StatusNotices[$Page.Status])"
+    $notice = "> $(Format-Alert $DocumentLanguage.StatusNotices[$Page.Status] $Document)"
     if ($Page.Status -ne 'superseded' -or -not $Page.SupersededBy) { return $notice }
     $successor = $PagesBySource["$decisionsDirectory/$($Page.SupersededBy).md"]
     $name = Get-DecisionPageName "$($Page.SupersededBy).md"
-    $reference = if ($successor) { "[$name]($($successor.WikiPath))" } else { $name }
+    $target = if ($Document -and $successor) { "#$(Get-DocumentAnchor $successor)" } elseif ($successor) { $successor.WikiPath } else { $null }
+    $reference = if ($target) { "[$name]($target)" } else { $name }
     return "$notice $reference."
 }
 
 # Una tabella le cui righe rimandano tutte a una decisione e' un indice delle decisioni: riceve la
 # colonna con lo stato di ognuna.
-function Add-DecisionStatus([string[]]$Table, $Page, [hashtable]$PagesBySource) {
+function Add-DecisionStatus([string[]]$Table, $Page, [hashtable]$PagesBySource, $Document) {
     if ($Table.Count -lt 3 -or $Table[1] -notmatch $TableSeparatorPattern) { return $Table }
     $decisions = @($Table | Select-Object -Skip 2 | ForEach-Object { Get-RowDecision $_ $Page $PagesBySource })
     if ($decisions.Count -ne ($Table.Count - 2) -or @($decisions | Where-Object { -not $_ }).Count) { return $Table }
     $rows = @("$($Table[0].TrimEnd()) $($DocumentLanguage.StatusColumn) |", "$($Table[1].TrimEnd()) --- |")
-    for ($i = 2; $i -lt $Table.Count; $i++) { $rows += "$($Table[$i].TrimEnd()) $(Get-StatusLabel $decisions[$i - 2].Status) |" }
+    for ($i = 2; $i -lt $Table.Count; $i++) { $rows += "$($Table[$i].TrimEnd()) $(Get-StatusLabel $decisions[$i - 2].Status $Document) |" }
     return $rows
 }
 
@@ -178,22 +187,30 @@ function Get-ViewImagePath([string]$View) {
     return "$AttachmentsFolder/$(ConvertTo-WikiName $wikiRoot)/$View.png"
 }
 
-function Convert-PageBody($Page, [hashtable]$PagesBySource, $Views, [hashtable]$ShownViews) {
+# Con $Document il corpo va nel documento unico invece che in una pagina: i link portano dentro il documento,
+# i diagrammi Mermaid diventano immagini e le viste i file PNG accanto al documento.
+function Convert-PageBody($Page, [hashtable]$PagesBySource, $Views, [hashtable]$ShownViews, $Document = $null) {
     $output = [Collections.Generic.List[string]]::new()
     $table = [Collections.Generic.List[string]]::new()
     $fence = $null
-    $notice = Get-StatusNotice $Page $PagesBySource
+    $diagram = $null
+    $convertLinks = if ($Document) { { param($Line) Convert-DocumentLinks $Line $Page $PagesBySource } } else { { param($Line) Convert-Links $Line $Page $PagesBySource } }
+    $notice = Get-StatusNotice $Page $PagesBySource $Document
     if ($notice) { $output.Add($notice); $output.Add('') }
     $flushTable = {
-        foreach ($row in (Add-DecisionStatus $table.ToArray() $Page $PagesBySource)) { $output.Add((Convert-Links $row $Page $PagesBySource)) }
+        foreach ($row in (Add-DecisionStatus $table.ToArray() $Page $PagesBySource $Document)) { $output.Add((& $convertLinks $row)) }
         $table.Clear()
     }
     foreach ($line in ($Page.Body -split "`n")) {
         if ($fence) {
             if ($line -match '^\s*```\s*$') {
-                $output.Add($(if ($fence -eq 'mermaid') { ':::' } else { $line }))
+                if ($null -ne $diagram) { $output.Add((Add-DocumentDiagram $Document $diagram)) }
+                elseif ($fence -eq 'mermaid') { $output.Add(':::') }
+                else { $output.Add($line) }
                 $fence = $null
+                $diagram = $null
             }
+            elseif ($null -ne $diagram) { $diagram.Add($line) }
             else { $output.Add($line) }
             continue
         }
@@ -201,7 +218,8 @@ function Convert-PageBody($Page, [hashtable]$PagesBySource, $Views, [hashtable]$
         if ($table.Count) { & $flushTable }
         if ($line -match $FencePattern) {
             $fence = if ($Matches[1]) { $Matches[1] } else { 'text' }
-            $output.Add($(if ($fence -eq 'mermaid') { '::: mermaid' } else { $line }))
+            if ($fence -eq 'mermaid' -and $Document) { $diagram = [Collections.Generic.List[string]]::new() }
+            else { $output.Add($(if ($fence -eq 'mermaid') { '::: mermaid' } else { $line })) }
         }
         elseif ($line -match $ViewMarkerPattern) {
             $marker = $Matches[1]
@@ -209,10 +227,10 @@ function Convert-PageBody($Page, [hashtable]$PagesBySource, $Views, [hashtable]$
             if (-not $keys.Count -or @($keys | Where-Object { -not $Views.Diagrams.ContainsKey($_) }).Count) { throw "$($Page.Source): la vista $marker non esiste nel modello C4" }
             foreach ($key in $keys) {
                 $ShownViews[$key] = $Views.Diagrams[$key]
-                $output.Add("![$key](/$(Get-ViewImagePath $key))")
+                $output.Add($(if ($Document) { "![]($(Get-DocumentViewFile $key))" } else { "![$key](/$(Get-ViewImagePath $key))" }))
             }
         }
-        else { $output.Add((Convert-Links $line $Page $PagesBySource)) }
+        else { $output.Add((& $convertLinks $line)) }
     }
     if ($table.Count) { & $flushTable }
     return ($output -join "`n").TrimEnd("`n") + "`n"
@@ -253,13 +271,21 @@ function Write-ViewImages([hashtable]$Images) {
     }
 }
 
-function Write-Document($Pages, [hashtable]$Contents, [hashtable]$Images) {
+# La pagina radice rimanda ai file del documento, che stanno accanto alle immagini.
+function Write-Document($Pages, [hashtable]$Contents, [hashtable]$Images, [System.Collections.IDictionary]$Documents) {
     $rootName = ConvertTo-WikiName $wikiRoot
     $imagesFolder = "$AttachmentsFolder/$rootName"
     Remove-Item -Recurse -Force (Join-Path $wikiDirectory $rootName), (Join-Path $wikiDirectory "$rootName.md"), (Join-Path $wikiDirectory $imagesFolder) -ErrorAction SilentlyContinue
-    Write-WikiFile "$rootName.md" "[[_TOSP_]]`n"
+    $rootPage = @('[[_TOSP_]]')
+    if ($Documents.Count) { $rootPage += @('') + @($Documents.Keys | ForEach-Object { "- [$_](/$imagesFolder/$_)" }) }
+    Write-WikiFile "$rootName.md" (($rootPage -join "`n") + "`n")
     Write-PageTree $Pages $rootName $Contents
     Write-ViewImages $Images
+    foreach ($file in $Documents.Keys) {
+        $path = Join-Path $wikiDirectory "$imagesFolder/$file"
+        New-Item -ItemType Directory -Force -Path (Split-Path $path) | Out-Null
+        [IO.File]::WriteAllBytes($path, $Documents[$file])
+    }
     Update-RootOrder $rootName
     return [pscustomobject]@{ RootName = $rootName; ImagesFolder = $imagesFolder }
 }
@@ -279,18 +305,17 @@ function Invoke-WikiGit {
     return $output
 }
 
-function Publish-Document($Pages, [hashtable]$Contents, [hashtable]$Images) {
+function Publish-Document($Pages, [hashtable]$Contents, [hashtable]$Images, [System.Collections.IDictionary]$Documents) {
     $authorization = if ($env:SYSTEM_ACCESSTOKEN) { @('-c', "http.extraheader=AUTHORIZATION: bearer $env:SYSTEM_ACCESSTOKEN") } else { @() }
     $name = if ($env:BUILD_REQUESTEDFOR) { $env:BUILD_REQUESTEDFOR } else { 'Architecture Wiki' }
     $email = if ($env:BUILD_REQUESTEDFOREMAIL) { $env:BUILD_REQUESTEDFOREMAIL } else { 'architecture-wiki@noreply.local' }
-    $source = if ($env:BUILD_SOURCEVERSION) { $env:BUILD_SOURCEVERSION.Substring(0, [math]::Min(8, $env:BUILD_SOURCEVERSION.Length)) } else { 'locale' }
 
     # Un'altra pipeline puo' scrivere nella wiki nel frattempo: a
     # ogni tentativo l'albero si riscrive sopra l'ultimo commit della wiki.
     for ($attempt = 1; $attempt -le $MaxPushAttempts; $attempt++) {
         Invoke-WikiGit @authorization fetch -q origin $wikiBranch | Out-Null
         Invoke-WikiGit reset -q --hard FETCH_HEAD | Out-Null
-        $written = Write-Document $Pages $Contents $Images
+        $written = Write-Document $Pages $Contents $Images $Documents
         Invoke-WikiGit add -A -- @(Get-DocumentPaths $written) | Out-Null
         git -C $wikiDirectory diff --cached --quiet
         if ($LASTEXITCODE -eq 0) {
@@ -298,7 +323,7 @@ function Publish-Document($Pages, [hashtable]$Contents, [hashtable]$Images) {
             return
         }
         $global:LASTEXITCODE = 0
-        Invoke-WikiGit -c "user.name=$name" -c "user.email=$email" commit -q -m "${wikiRoot} @ $source" | Out-Null
+        Invoke-WikiGit -c "user.name=$name" -c "user.email=$email" commit -q -m "${wikiRoot} @ $sourceVersion" | Out-Null
         git -C $wikiDirectory @authorization push -q origin "HEAD:refs/heads/$wikiBranch" 2>&1 | ForEach-Object { Write-Host $_ }
         if ($LASTEXITCODE -eq 0) {
             Write-Host "Wiki aggiornata: $(@(Get-AllPages $Pages).Count) pagine sotto /$wikiRoot"
@@ -333,6 +358,7 @@ function Get-ViewImages([hashtable]$ShownViews) {
 
 function Publish-Arc42Wiki {
     if (-not $wikiDirectory -or -not (Test-Path (Join-Path $wikiDirectory '.git'))) { throw "WIKI_DIRECTORY non indica un checkout della wiki: '$wikiDirectory'" }
+    $formats = Get-DocumentFormats "$env:DOCUMENT_FORMATS"
     $pages = Get-DocumentPages
     $pagesBySource = @{}
     foreach ($page in (Get-AllPages $pages)) { $pagesBySource[$page.Source] = $page }
@@ -340,7 +366,9 @@ function Publish-Arc42Wiki {
     $shownViews = @{}
     $contents = @{}
     foreach ($page in $pagesBySource.Values) { $contents[$page.Source] = Convert-PageBody $page $pagesBySource $views $shownViews }
-    Publish-Document $pages $contents (Get-ViewImages $shownViews)
+    $images = Get-ViewImages $shownViews
+    $documents = if ($formats) { New-Arc42Document $pages $pagesBySource $views $images $formats } else { [ordered]@{} }
+    Publish-Document $pages $contents $images $documents
 }
 
 try { Publish-Arc42Wiki }
