@@ -46,6 +46,7 @@ I test usano un **bare repo locale** come fake remote. L'unico accesso di rete Ã
 | `V3/CI/Scripts/Release/New-ReleaseNotes.ps1` | Livello 1 + Livello 2 (`New-ReleaseNotes.Tests.ps1`) |
 | `V3/CI/Scripts/Release/Test-PublishedArtifact.ps1` | Livello 1 + Livello 2 (`Test-PublishedArtifact.Tests.ps1`) |
 | `V3/CI/Scripts/Adr/Test-AdrCorpus.ps1` | Livello 1 + Livello 2 (`Test-AdrCorpus.Tests.ps1`) |
+| `V3/CI/Scripts/Adr/Register-Decisions.ps1`, `DecisionRegistration.ps1`, `Tests/V3/CI/Scripts/Adr/Fixtures/AzureDevOpsStub.ps1` | Livello 1 + Livello 2 (`Register-Decisions.Tests.ps1`) |
 | `V3/CI/Scripts/Arc42/Test-Arc42Document.ps1` | Livello 1 + Livello 2 (`Test-Arc42Document.Tests.ps1`) |
 | `V3/CI/Scripts/C4/Test-C4Model.ps1`, `Structurizr.ps1` | Livello 1 + Livello 2 (`Test-C4Model.Tests.ps1`, richiede Java 17) |
 | `V3/CI/Scripts/C4/ViewImages.ps1` | Livello 1 + Livello 2 (`ViewImages.Tests.ps1`, il disegno vero con Java 17) |
