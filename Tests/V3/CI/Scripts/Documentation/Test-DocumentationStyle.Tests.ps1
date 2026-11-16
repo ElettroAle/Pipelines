@@ -1030,8 +1030,8 @@ Describe "Test-DocumentationStyle — cosa si manda al modello" {
             $requests = @(Get-StubRequests)
             $decision = $requests | Where-Object { (Get-UserMessage $_) -like '*DECISIONE DA GIUDICARE (0002-nuova.md)*' }
             $section = $requests | Where-Object { (Get-UserMessage $_) -like '*SEZIONE DA GIUDICARE (02-vincoli.md)*' }
-            @($decision.response_format.json_schema.schema.properties.PSObject.Properties | ForEach-Object { $_.Value.description }) | Should -Be @($Filler, $DecisionRule)
-            @($section.response_format.json_schema.schema.properties.PSObject.Properties | ForEach-Object { $_.Value.description }) | Should -Be @($Filler, $SectionRule)
+            @($decision.response_format.json_schema.schema.properties.rules.items.properties.rule.enum) | Should -Be @($Filler, $DecisionRule)
+            @($section.response_format.json_schema.schema.properties.rules.items.properties.rule.enum) | Should -Be @($Filler, $SectionRule)
             $decisionGuide = ($decision.messages | Where-Object role -EQ 'system').content
             $sectionGuide = ($section.messages | Where-Object role -EQ 'system').content
             $decisionGuide | Should -Not -BeLike "*$SectionRule*"
