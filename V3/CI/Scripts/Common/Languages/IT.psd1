@@ -7,6 +7,7 @@
     GeneratedTag   = 'Generato'
     CodeNameProperty = 'codice'
     ExternalTag    = 'Esterno'
+    DataAccessViewSuffix = 'accesso-dati'
     TextLanguage   = 'italiano'
     AdrSections    = @('Contesto e problema', 'Opzioni considerate', 'Esito della decisione')
     StyleRuleParts = @{ Common = 'Regole'; Sections = 'Regole delle sezioni'; Decisions = 'Regole delle decisioni' }

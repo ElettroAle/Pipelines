@@ -13,9 +13,14 @@
 # La revisione del testo da' a ogni risorsa il suo nome e unisce le copie: una copia non si scrive.
 # Un indirizzo che un container del repository chiama in locale si lega con i frammenti di tutto il
 # sistema: se non vi si avvia nessun container, o piu' d'uno, la generazione si ferma.
-# Le viste dei componenti dei container della parte stanno in GENERATED_DIRECTORY/views/<repository>.dsl:
-# una per container con componenti, con l'identificativo del container come chiave. Le parti e le viste
-# stanno in due cartelle perche' il workspace le include come cartelle, senza elencare i repository.
+# Le viste della parte stanno in GENERATED_DIRECTORY/views/<repository>.dsl. Un repository con applicazioni
+# ha la vista dei container container-<gruppo>, con le applicazioni e gli elementi con cui hanno relazioni,
+# nel sistema che nel workspace accanto a GENERATED_DIRECTORY include i container generati. Un container
+# con componenti ha la vista della logica, con l'identificativo del container come chiave, e quella
+# dell'accesso ai dati, <container>-<suffisso della lingua>, ciascuna se ha componenti: un componente e' di
+# accesso ai dati se un segmento del suo nome e' fra C4_DATA_ACCESS_SEGMENTS (default DataAccess). Le
+# parti e le viste stanno in due cartelle perche' il workspace le include come cartelle, senza elencare i
+# repository.
 # GENERATION_MODE=check confronta i file del repository con quelli che la generazione produce. Un file
 # che il repository non ha ancora non si confronta: lo segnala l'!include del workspace che lo usa, e
 # cosi' un file nuovo della generazione non ferma le PR delle parti generate prima di lui.
@@ -30,6 +35,10 @@ $Mode = if ($env:GENERATION_MODE) { $env:GENERATION_MODE.ToLower() } else { 'wri
 $GeneratedTag = $DocumentLanguage.GeneratedTag
 $TechnicalTag = $DocumentLanguage.TechnicalTag
 $ExternalTag = $DocumentLanguage.ExternalTag
+$ApplicationTag = $DocumentLanguage.ApplicationTag
+$DataAccessViewSuffix = $DocumentLanguage.DataAccessViewSuffix
+$DataAccessSegments = @("$(if ($env:C4_DATA_ACCESS_SEGMENTS) { $env:C4_DATA_ACCESS_SEGMENTS } else { 'DataAccess' })" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$WorkspaceFile = Join-Path (Split-Path -Parent $GeneratedDirectory) 'workspace.dsl'
 $TextFileName = 'model.text.json'
 $CodeNameProperty = $DocumentLanguage.CodeNameProperty
 $Manifests = @('*.csproj', '*.fsproj', '*.vbproj', '*.sqlproj', '*.esproj', '*.njsproj', '*.shproj', 'package.json', 'angular.json',
@@ -165,27 +174,32 @@ function Format-Containers($Containers) {
     return Format-Container $Containers[0] ''
 }
 
+function New-PartRelationship($Relationship, [string[]]$Texts) {
+    $source = Get-KeptId $Relationship.source
+    $target = Get-KeptId $Relationship.target
+    return [pscustomobject]@{ Source = $source; Target = $target; Line = (@("$source -> $target") + @($Texts | ForEach-Object { Format-Text $_ })) -join ' ' }
+}
+
+# Le relazioni della parte, prima quelle del codice e poi quelle con persone e sistemi esterni, una volta sola.
+function Get-PartRelationships($Fragments) {
+    $declared = @(@($Fragments.Content.relationships) + $script:CallRelationships | Where-Object { $_ } | ForEach-Object {
+            $described = $script:ModelText.Relationships["$($_.source) -> $($_.target)"]
+            New-PartRelationship $_ @($described.description, $described.technology, $GeneratedTag)
+        })
+    $linked = @($script:ModelText.Links | Where-Object { $_ } | ForEach-Object { New-PartRelationship $_ @($_.description, $_.technology) })
+    $written = @{}
+    foreach ($relationship in $declared + $linked) {
+        $key = "$($relationship.Source) -> $($relationship.Target)"
+        if ($relationship.Source -eq $relationship.Target -or $written.ContainsKey($key)) { continue }
+        $written[$key] = $true
+        $relationship
+    }
+}
+
 function Format-Model($Fragments) {
     $lines = @("// Parte del modello C4 generata da $Repository con Export-C4CodeModel.ps1: non si modifica a mano.")
     $lines += Format-Containers (Get-KeptContainers @($Fragments.Content.containers))
-    $written = @{}
-    @($Fragments.Content.relationships) + $script:CallRelationships | Where-Object { $_ } | ForEach-Object {
-        $described = $script:ModelText.Relationships["$($_.source) -> $($_.target)"]
-        $source = Get-KeptId $_.source
-        $target = Get-KeptId $_.target
-        $key = "$source -> $target"
-        if ($source -eq $target -or $written.ContainsKey($key)) { return }
-        $written[$key] = $true
-        $lines += "$key $(Format-Text $described.description) $(Format-Text $described.technology) $(Format-Text $GeneratedTag)"
-    }
-    $script:ModelText.Links | ForEach-Object {
-        $source = Get-KeptId $_.source
-        $target = Get-KeptId $_.target
-        $key = "$source -> $target"
-        if ($source -eq $target -or $written.ContainsKey($key)) { return }
-        $written[$key] = $true
-        $lines += "$key $(Format-Text $_.description) $(Format-Text $_.technology)"
-    }
+    $lines += @($script:PartRelationships | ForEach-Object Line)
     return ($lines -join "`n") + "`n"
 }
 
@@ -201,10 +215,63 @@ function Format-Context {
     return ($lines -join "`n") + "`n"
 }
 
-function Format-Views($Fragments) {
-    $lines = @("// Viste dei componenti generate da $Repository con Export-C4CodeModel.ps1: non si modificano a mano.")
+function Get-Applications($Fragments) {
+    return @(Get-KeptContainers @($Fragments.Content.containers) | Where-Object { @($_.tags) -contains $ApplicationTag })
+}
+
+# Il sistema del blocco piu' interno che include la cartella containers delle parti generate.
+function Get-DocumentSystem {
+    if (-not (Test-Path $WorkspaceFile -PathType Leaf)) { return $null }
+    $include = '^\s*!include\s+"?' + [regex]::Escape((Split-Path -Leaf $GeneratedDirectory)) + '/containers/?"?\s*$'
+    $blocks = [Collections.Generic.List[string]]::new()
+    foreach ($line in [IO.File]::ReadAllLines((Resolve-Path $WorkspaceFile).Path)) {
+        if ($line -match $include) { return @($blocks | Where-Object { $_ }) | Select-Object -Last 1 }
+        $code = $line -replace '"[^"]*"', '""' -replace '(^|\s)(#|//).*$', ''
+        $system = if ($code -match '^\s*(?<id>\w+)\s*=\s*softwareSystem\b') { $Matches.id } else { '' }
+        foreach ($character in $code.ToCharArray()) {
+            if ($character -eq '{') { $blocks.Add($system); $system = '' }
+            elseif ($character -eq '}' -and $blocks.Count) { $blocks.RemoveAt($blocks.Count - 1) }
+        }
+    }
+    return $null
+}
+
+function Test-DataAccess($Component) {
+    return [bool](@("$($Component.name)" -split '\.') | Where-Object { $DataAccessSegments -contains $_ })
+}
+
+# Gli elementi mostrati, poi quelli fuori dal container in relazione con loro e, con WithUsed, anche quelli
+# del container che usano.
+function Get-ViewElements([string[]]$Shown, [string[]]$Container, [bool]$WithUsed) {
+    $related = foreach ($relationship in $script:PartRelationships) {
+        if ($Shown -contains $relationship.Source -and ($WithUsed -or $Container -notcontains $relationship.Target)) { $relationship.Target }
+        elseif ($Shown -contains $relationship.Target -and $Container -notcontains $relationship.Source) { $relationship.Source }
+    }
+    return @($Shown) + @($related | Where-Object { $Shown -notcontains $_ } | Sort-Object -Unique)
+}
+
+function Format-View([string]$Kind, [string]$Scope, [string]$Key, [string[]]$Elements, [string]$Layout) {
+    return "$Kind $Scope $(Format-Text $Key) {", "    include $($Elements -join ' ')", "    autoLayout $Layout", '}'
+}
+
+function Format-ComponentViews($Container) {
+    $components = @($Container.components | Where-Object { $_ })
+    $ids = @($components | ForEach-Object id)
+    $dataAccess = @($components | Where-Object { Test-DataAccess $_ } | ForEach-Object id)
+    $logic = @($ids | Where-Object { $dataAccess -notcontains $_ })
+    if ($logic.Count) { Format-View 'component' $Container.id $Container.id (Get-ViewElements $logic $ids $false) 'tb' }
+    if ($dataAccess.Count) { Format-View 'component' $Container.id "$($Container.id)-$DataAccessViewSuffix" (Get-ViewElements $dataAccess $ids $true) 'tb' }
+}
+
+function Format-Views($Fragments, [string]$System) {
+    $lines = @("// Viste generate da $Repository con Export-C4CodeModel.ps1: non si modificano a mano.")
+    $applications = Get-Applications $Fragments
+    if ($applications.Count) {
+        $group = Remove-CommonPrefix $Repository @($SourceRepositories + $Repository | Select-Object -Unique)
+        $lines += Format-View 'container' $System "container-$(ConvertTo-Identifier $group)" @($applications | ForEach-Object { "->$($_.id)->" }) 'lr'
+    }
     foreach ($container in @($Fragments.Content.containers | Where-Object { @($_.components | Where-Object { $_ }).Count })) {
-        $lines += "component $($container.id) $(Format-Text $container.id) {", '    include *', '    autoLayout tb', '}'
+        $lines += Format-ComponentViews $container
     }
     return ($lines -join "`n") + "`n"
 }
@@ -249,8 +316,11 @@ function Get-GenerationIssues {
 
     $script:ModelText = Get-PartText $text $fragments
     $script:ApplicationNames = Get-C4ApplicationNames @(Read-FragmentContents | ForEach-Object { @($_.containers) })
+    $system = Get-DocumentSystem
+    if ((Get-Applications $fragments).Count -and -not $system) { return New-Issue $Repository 'sistema che include le parti generate non trovato' ($WorkspaceFile -replace '\\', '/') }
+    $script:PartRelationships = @(Get-PartRelationships $fragments)
     $name = $Repository.ToLowerInvariant()
-    $outputs = [ordered]@{ "containers/$name.dsl" = Format-Model $fragments; "views/$name.dsl" = Format-Views $fragments; 'context.dsl' = Format-Context }
+    $outputs = [ordered]@{ "containers/$name.dsl" = Format-Model $fragments; "views/$name.dsl" = Format-Views $fragments $system; 'context.dsl' = Format-Context }
     & $ModeActions[$Mode] $outputs
 }
 

@@ -8,6 +8,10 @@
 $C4ScriptsDirectory = Resolve-Path "$PSScriptRoot/../../../../../../V3/CI/Scripts"
 $C4Readers = @{ dotnet10 = 'C4/Read-C4DotNet10Model.ps1'; angular18 = 'C4/Read-C4Angular18Model.ps1'; consumer = "$PSScriptRoot/Read-C4ConsumerModel.ps1" }
 $C4SourceRepositories = 'Contoso.Shop.AI,Contoso.Shop.Bff.Web,Contoso.Shop.Client.Web'
+# Il workspace del documento accanto alle parti generate: il sistema che include i container generati e' quello
+# delle viste dei container generate.
+$C4WorkspacePath = 'docs/architecture/c4/workspace.dsl'
+$C4Workspace = "workspace {`n    model {`n        sistema = softwareSystem `"Contoso.Shop`" {`n            !include generated/containers`n        }`n    }`n    views {`n        !include generated/views`n    }`n}`n"
 
 function New-Project([string]$Sdk = 'Microsoft.NET.Sdk', [string[]]$References = @(), [string]$Properties = '', [string]$Items = '') {
     $refs = ($References | ForEach-Object { "    <ProjectReference Include=`"..\$_\$_.csproj`" />" }) -join "`n"
@@ -105,9 +109,11 @@ function Read-Directory([string]$Directory, [string]$Filter) {
     return $content
 }
 
-function Invoke-C4Steps([System.Collections.IDictionary]$Files, [string]$Repository, [string[]]$Steps, [string]$Mode, [hashtable]$Fragments) {
+# Un file a $null in Files resta assente: senza voce per il workspace vale $C4Workspace.
+function Invoke-C4Steps([System.Collections.IDictionary]$Files, [string]$Repository, [string[]]$Steps, [string]$Mode, [hashtable]$Fragments, [hashtable]$Environment = @{}) {
     $root = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-code-$(New-Guid)"
     Write-SourceFiles $root $Files
+    if (-not $Files.Contains($C4WorkspacePath)) { Write-SourceFiles $root @{ $C4WorkspacePath = $C4Workspace } }
     $fragmentFiles = [ordered]@{}
     $Fragments.Keys | ForEach-Object { $fragmentFiles["fragments/$_"] = $Fragments[$_] }
     Write-SourceFiles $root $fragmentFiles
@@ -115,6 +121,7 @@ function Invoke-C4Steps([System.Collections.IDictionary]$Files, [string]$Reposit
         SOURCE_DIRECTORY = 'source'; SOURCE_REPOSITORY = $Repository; SOURCE_REPOSITORIES = $C4SourceRepositories
         FRAGMENT_DIRECTORY = 'fragments'; C4_SCRIPTS_DIRECTORY = "$C4ScriptsDirectory"; GENERATED_DIRECTORY = 'docs/architecture/c4/generated'; GENERATION_MODE = $Mode; DOCUMENT_LANGUAGE = ''
     }
+    $Environment.Keys | ForEach-Object { $variables[$_] = $Environment[$_] }
     Push-Location $root
     try {
         $outputs = @()
@@ -140,9 +147,9 @@ function Invoke-C4Steps([System.Collections.IDictionary]$Files, [string]$Reposit
 
 # Readers sono i lettori della composizione, nell'ordine; Fragments i frammenti gia' presenti, per
 # provare lo scrittore senza un lettore.
-function Invoke-C4Generation([System.Collections.IDictionary]$Files, [string]$Repository, [string[]]$Readers, [string]$Mode = 'write', [hashtable]$Fragments = @{}) {
+function Invoke-C4Generation([System.Collections.IDictionary]$Files, [string]$Repository, [string[]]$Readers, [string]$Mode = 'write', [hashtable]$Fragments = @{}, [hashtable]$Environment = @{}) {
     $steps = @($Readers | ForEach-Object { $C4Readers[$_] }) + 'C4/Export-C4CodeModel.ps1'
-    return Invoke-C4Steps $Files $Repository $steps $Mode $Fragments
+    return Invoke-C4Steps $Files $Repository $steps $Mode $Fragments $Environment
 }
 
 function Invoke-C4Reader([System.Collections.IDictionary]$Files, [string]$Repository, [string]$Reader) {
