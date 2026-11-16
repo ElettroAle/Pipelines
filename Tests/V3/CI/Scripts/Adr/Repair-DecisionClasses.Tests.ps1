@@ -62,14 +62,15 @@ BeforeAll {
     }
 
     # La documentazione su un origin locale, il codice in una cartella accanto; Progress e' il testo della
-    # decisione e il registro gia' salvati sul ramo di avanzamento da una run interrotta.
-    function New-Workspace([System.Collections.IDictionary]$Files, [string]$DecisionText = $Decision, [string]$Candidates, [hashtable]$Progress) {
+    # decisione e il registro gia' salvati sul ramo di avanzamento da una run interrotta; MainText e' la
+    # decisione che main integra dopo il salvataggio.
+    function New-Workspace([System.Collections.IDictionary]$Files, [string]$DecisionText = $Decision, [string]$Candidates, [System.Collections.IDictionary]$Progress, [string]$MainText) {
         $root = Join-Path ([IO.Path]::GetTempPath()) "pester-decision-classes-repair-$(New-Guid)"
         $origin = Join-Path $root 'origin.git'
         $docs = Join-Path $root 'docs'
         New-Item -ItemType Directory -Force -Path $root | Out-Null
         Invoke-Git $root init -q --bare -b main $origin | Out-Null
-        Invoke-Git $root clone -q $origin $docs | Out-Null
+        Invoke-Git $root clone -q -c core.autocrlf=false $origin $docs | Out-Null
         Write-SourceFiles $docs ([ordered]@{ $DecisionPath = $DecisionText })
         if ($Candidates) { Write-SourceFiles $docs ([ordered]@{ $CandidatesPath = $Candidates }) }
         Invoke-Git $docs add -A | Out-Null
@@ -83,6 +84,12 @@ BeforeAll {
             Invoke-Git $docs push -q origin "HEAD:$ProgressBranch" | Out-Null
             Invoke-Git $docs checkout -q main | Out-Null
             Invoke-Git $docs branch -q --delete --force $ProgressBranch | Out-Null
+        }
+        if ($MainText) {
+            Write-SourceFiles $docs ([ordered]@{ $DecisionPath = $MainText })
+            Invoke-Git $docs add -A | Out-Null
+            Invoke-Git $docs -c user.name=Test -c user.email=test@local commit -q -m 'docs: decision changed in main' | Out-Null
+            Invoke-Git $docs push -q origin HEAD:main | Out-Null
         }
         Write-SourceFiles (Join-Path $root 'sources') $Files
         return @{ Root = $root; Origin = $origin; Docs = $docs; Sources = (Join-Path $root 'sources/source') }
@@ -313,6 +320,62 @@ Describe "Funzionalità: Il modello propone pattern e diagramma delle classi del
         }
     }
 
+    Context "Scenario: main ha cambiato la decisione dopo il salvataggio" {
+        BeforeAll {
+            $files = New-ShopFiles @{ QueueTicketCanceller = 'public class QueueTicketCanceller { }' }
+            $text = $Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer$', '  - Contoso.Shop.Core.Queue.QueueTicket*'
+            $accepted = ($text -replace '(?m)^    class QueueTicketIssuer$', "    class QueueTicketIssuer`n    class QueueTicketCanceller") -replace 'status: accepted', "status: accepted`nversion: 2"
+            $accepted += "`n## Versioni`n`n- 2: classi del biglietto allineate al codice`n"
+            $changed = ($text -replace 'Il biglietto si emette a turno finito\.', 'Il biglietto si emette quando il turno finisce.') -replace 'status: accepted', "status: accepted`nversion: 2"
+            $changed += "`n## Versioni`n`n- 2: contesto riscritto`n"
+            $workspace = New-Workspace $files $text -Progress ([ordered]@{ $DecisionPath = $accepted }) -MainText $changed
+            $res = Invoke-Repair $workspace @(New-Draft)
+        }
+
+        AfterAll { Remove-Workspace $workspace }
+
+        It "Allora la decisione contiene la versione di main" {
+            $res.Decision | Should -Match 'Il biglietto si emette quando il turno finisce\.' -Because ($res.Output)
+            $res.Decision | Should -Match '(?m)^- 2: contesto riscritto$'
+        }
+
+        It "E contiene la struttura proposta dal modello, con una versione nuova" {
+            $res.Decision | Should -Match '(?m)^    class QueueTicketCanceller$'
+            $res.Decision | Should -Match '(?m)^version: 3$'
+            $res.Decision | Should -Match "(?m)^- 2: contesto riscritto`n- 3: classi del biglietto allineate al codice$"
+        }
+
+        It "E il modello non si chiama" {
+            $res.Requests.Count | Should -Be 0 -Because ($res.Output)
+            $res.ExitCode | Should -Be 0
+        }
+    }
+
+    Context "Scenario: lavoro del modello che non si applica sopra main" {
+        BeforeAll {
+            $files = New-ShopFiles @{ QueueTicketRefunder = 'public sealed class QueueTicketRefunder : IQueueTicketIssuer { }' }
+            $accepted = ($Decision -replace '(?m)^    class QueueTicketIssuer$', "    class QueueTicketIssuer`n    class QueueTicketRefunder") -replace 'status: accepted', "status: accepted`nversion: 2"
+            $accepted = $accepted -replace '(?m)^(  - Contoso\.Shop\.Core\.Queue\.IQueueTicketIssuer)$', "`$1`n  - Contoso.Shop.Core.Queue.QueueTicketRefunder"
+            $accepted += "`n## Versioni`n`n- 2: emettitore del rimborso governato`n"
+            $changed = ($Decision -replace 'Le classi emettono il biglietto\.', 'Le classi emettono e numerano il biglietto.') -replace 'status: accepted', "status: accepted`nversion: 2"
+            $changed += "`n## Versioni`n`n- 2: spiegazione della struttura riscritta`n"
+            $ledger = '{ "0036-biglietti-dopo-il-turno": ["Contoso.Shop.Core.Queue.QueueTicketRefunder"] }'
+            $workspace = New-Workspace $files $Decision -Progress ([ordered]@{ $DecisionPath = $accepted; $CandidatesPath = $ledger }) -MainText $changed
+            $res = Invoke-Repair $workspace @(New-Draft)
+        }
+
+        AfterAll { Remove-Workspace $workspace }
+
+        It "Allora la decisione resta com'e' in main" {
+            $res.Decision | Should -Be $changed -Because ($res.Output)
+        }
+
+        It "E le classi aggiunte dal modello tornano candidate" {
+            $res.Requests.Count | Should -Be 1 -Because ($res.Output)
+            Get-UserMessage $res.Requests[0] | Should -Match "CLASSI CANDIDATE`n- Contoso\.Shop\.Core\.Queue\.QueueTicketRefunder"
+        }
+    }
+
     Context "Scenario: decisioni in pari con il codice" {
         BeforeAll {
             $workspace = New-Workspace (New-ShopFiles)
@@ -354,6 +417,61 @@ Describe "Repair-DecisionClasses.ps1" {
 
         It "non cambia nulla senza voci nuove e senza struttura" {
             Get-DraftText $Decision ([pscustomobject]@{ governs = @('Contoso.Shop.Core.Queue.QueueTicketIssuer'); structure = ' '; version = 'x' }) $Governs | Should -BeNullOrEmpty
+        }
+    }
+
+    Context "Ripresa sopra main" {
+        BeforeAll {
+            $types = @(
+                [pscustomobject]@{ FullName = 'Contoso.Shop.Core.Queue.QueueTicketIssuer'; Name = 'QueueTicketIssuer' }
+                [pscustomobject]@{ FullName = 'Contoso.Shop.Core.Queue.IQueueTicketIssuer'; Name = 'IQueueTicketIssuer' }
+                [pscustomobject]@{ FullName = 'Contoso.Shop.Core.Queue.QueueTicketRefunder'; Name = 'QueueTicketRefunder' }
+            )
+            $versioned = ($Decision -replace 'status: accepted', "status: accepted`nversion: 2") + "`n## Versioni`n`n- 2: contesto riscritto`n"
+            $saved = ($Decision -replace 'status: accepted', "status: accepted`nversion: 2") -replace '(?m)^(  - Contoso\.Shop\.Core\.Queue\.IQueueTicketIssuer)$', "`$1`n  - Contoso.Shop.Core.Queue.QueueTicketRefunder"
+            $saved = ($saved -replace '(?m)^    class QueueTicketIssuer$', "    class QueueTicketIssuer`n    class QueueTicketRefunder") + "`n## Versioni`n`n- 2: 2: rimborso governato`n"
+        }
+
+        It "legge le voci di versione e la parte della struttura" {
+            Get-VersionEntries $saved | Should -Be @('- 2: 2: rimborso governato')
+            @(Get-VersionEntries $Decision).Count | Should -Be 0
+            Get-PartText $Decision 'Struttura nel codice' | Should -Match '^```mermaid'
+            Get-PartText $Decision 'Versioni' | Should -Be ''
+            Get-PartText "# Titolo`n`n## Versioni`n## Altro`n" 'Versioni' | Should -Be ''
+            @(Get-VersionEntries "# Titolo`n`n## Versioni`n## Altro`n").Count | Should -Be 0
+        }
+
+        It "conta le voci comuni dall'inizio" {
+            Get-CommonCount @('a', 'b', 'c') @('a', 'b', 'x') | Should -Be 2
+            Get-CommonCount @() @('a') | Should -Be 0
+        }
+
+        It "applica sopra main le voci e la struttura del ramo, con una versione nuova" {
+            $text = Get-ResumedText $Decision $saved $versioned @('rimborso governato') $types
+            $text | Should -Match '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketRefunder$'
+            $text | Should -Match '(?m)^    class QueueTicketRefunder$'
+            $text | Should -Match "(?m)^- 2: contesto riscritto`n- 3: rimborso governato$"
+        }
+
+        It "non applica la struttura che anche main ha cambiato, ne' le voci per classi che main governa gia'" {
+            $restructured = $versioned -replace 'Le classi emettono il biglietto\.', 'Le classi numerano il biglietto.'
+            $governed = $restructured -replace '(?m)^(  - Contoso\.Shop\.Core\.Queue\.IQueueTicketIssuer)$', "`$1`n  - Contoso.Shop.Core.Queue.QueueTicketR*"
+            Get-ResumedText $Decision $saved $governed @('rimborso governato') $types | Should -BeNullOrEmpty
+            $text = Get-ResumedText $Decision $saved $restructured @('rimborso governato') $types
+            $text | Should -Match 'Le classi numerano il biglietto\.'
+            $text | Should -Not -Match 'class QueueTicketRefunder'
+        }
+
+        It "non riprende nulla senza lavoro del modello o senza il testo di partenza in main" {
+            Get-ResumedDecision 'assente.md' $versioned $versioned $types | Should -BeNullOrEmpty
+            Mock Find-MainText { $null }
+            Get-ResumedDecision 'assente.md' $saved $versioned $types | Should -BeNullOrEmpty
+        }
+
+        It "riprende dal testo corrente quando main non ha versioni nuove, togliendo il numero ripetuto" {
+            $text = Get-ResumedDecision 'assente.md' $saved $Decision $types
+            $text | Should -Match "(?m)^- 2: rimborso governato$"
+            $text | Should -Match '(?m)^    class QueueTicketRefunder$'
         }
     }
 
@@ -421,6 +539,22 @@ Describe "Repair-DecisionClasses.ps1" {
                 $again = Invoke-InProcess $workspace @($repaired)
                 $again.Requests.Count | Should -Be 0
                 $again.Decision | Should -Match '(?m)^    class QueueTicketCanceller$'
+            }
+            finally { Remove-Workspace $workspace }
+        }
+
+        It "riprende sopra main il lavoro salvato prima di una versione nuova di main" {
+            $ProgressBranch = 'c4/model'
+            $accepted = ($text -replace '(?m)^    class QueueTicketIssuer$', "    class QueueTicketIssuer`n    class QueueTicketCanceller") -replace 'status: accepted', "status: accepted`nversion: 2"
+            $accepted += "`n## Versioni`n`n- 2: classi del biglietto allineate al codice`n"
+            $changed = ($text -replace 'Il biglietto si emette a turno finito\.', 'Il biglietto si emette quando il turno finisce.') -replace 'status: accepted', "status: accepted`nversion: 2"
+            $changed += "`n## Versioni`n`n- 2: contesto riscritto`n"
+            $workspace = New-Workspace $files $text -Progress ([ordered]@{ $DecisionPath = $accepted }) -MainText $changed
+            try {
+                $res = Invoke-InProcess $workspace @($repaired)
+                $res.Requests.Count | Should -Be 0
+                $res.Decision | Should -Match 'Il biglietto si emette quando il turno finisce\.'
+                $res.Decision | Should -Match "(?m)^- 2: contesto riscritto`n- 3: classi del biglietto allineate al codice$"
             }
             finally { Remove-Workspace $workspace }
         }
