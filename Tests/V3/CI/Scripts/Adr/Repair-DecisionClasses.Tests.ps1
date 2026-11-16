@@ -415,6 +415,15 @@ Describe "Repair-DecisionClasses.ps1" {
             $text | Should -Match "- 3: seconda`n- 4: terza"
         }
 
+        It "scrive il numero della versione una volta sola anche quando la nota del modello lo ripete" -ForEach @(
+            @{ Note = '2: rimborso' }
+            @{ Note = '- 2: rimborso' }
+            @{ Note = '2: 2: rimborso' }
+        ) {
+            $text = Get-DraftText $Decision ([pscustomobject]@{ governs = @(); structure = 'Altro.'; version = $Note }) $Governs
+            $text | Should -Match "## Versioni`n`n- 2: rimborso`n?$"
+        }
+
         It "non cambia nulla senza voci nuove e senza struttura" {
             Get-DraftText $Decision ([pscustomobject]@{ governs = @('Contoso.Shop.Core.Queue.QueueTicketIssuer'); structure = ' '; version = 'x' }) $Governs | Should -BeNullOrEmpty
         }
