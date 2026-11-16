@@ -246,6 +246,7 @@ parametri di formato e senza condizioni sul formato.
 | `c4-read.yaml` | lo script passato con `scriptPath` | repository sorgente letto da un lettore nel frammento del modello C4 | C4 |
 | `c4-read-dotnet10.yaml` | `Read-C4DotNet10Model.ps1`, con `c4-read.yaml` | progetti .NET 10 di un repository sorgente letti nel frammento del modello C4 | C4, .NET 10 |
 | `c4-read-angular18.yaml` | `Read-C4Angular18Model.ps1`, con `c4-read.yaml` | applicazione Angular 18 di un repository sorgente letta nel frammento del modello C4 | C4, Angular 18 |
+| `c4-read-terraform.yaml` | `Read-C4TerraformModel.ps1`, con `c4-read.yaml` | ambienti di deployment della dichiarazione Terraform di un repository sorgente letti nel frammento del modello C4 | C4, Terraform |
 | `c4-describe.yaml` | `Write-C4ModelText.ps1` | testo del modello C4 di tutto il sistema dai frammenti di tutti i repository sorgente, scritto dal modello linguistico scelto, con un solo catalogo di persone e sistemi esterni e una revisione di tutto il modello sulla configurazione di produzione | C4, Foundry o Anthropic |
 | `c4-generate.yaml` | `Export-C4CodeModel.ps1` | parte del modello C4 generata dai frammenti di un repository sorgente e dal testo del sistema, allineata al codice, e contesto con persone e sistemi esterni | C4 |
 | `c4-verify.yaml` | `Test-C4Model.ps1` | modello Structurizr valido e completo, testo del modello coerente con la parte generata, viste mostrate nelle sezioni, misura della leggibilità di ogni vista | C4 |
@@ -486,6 +487,26 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   è l'unica applicazione del workspace, o un secondo workspace, ferma la lettura. Gli indirizzi chiamati
   sono i `target` del proxy del dev server, il file JSON di `proxyConfig` nelle opzioni di `serve`; un
   proxy che non è un file JSON leggibile, o un target che non è un indirizzo, ferma la lettura.
+- **Terraform** (`c4-read-terraform.yaml`), dopo i lettori dei container. La dichiarazione Terraform si
+  valuta ambiente per ambiente senza eseguire Terraform e senza leggere lo stato: codice del modulo
+  radice, `values.tfvars`, file `*_override.tf` e `backend.tf` della directory d'ambiente
+  (`<modulo radice>/environments/<ambiente>`), default delle variabili, `locals`, argomenti e output dei
+  moduli, output del remote state di un altro workspace del repository. Una variabile senza valore nel
+  repository e' un valore sconosciuto, scritto `{var.nome}`; un `count` o un `for_each` sconosciuto di
+  una risorsa dei nodi, o un'espressione che il valutatore non conosce, ferma la lettura con file e riga.
+  `environments` associa a ogni ambiente del modello la sua directory d'ambiente; una directory che non
+  vi compare entra negli ambienti con cui scambia remote state. `instances` istanzia un modulo radice
+  per ogni directory di un glob, con il nome della directory in una variabile. I nodi si annidano per
+  identificativo Azure: sottoscrizione (quella del provider della risorsa), gruppo di risorse, rete
+  virtuale, subnet, piano di hosting; un'applicazione sta nel suo piano, il piano nella subnet a cui
+  l'applicazione si integra (o nel gruppo di risorse), un private endpoint nella sua subnet, un servizio
+  dati nel gruppo di risorse. Un container dei frammenti sta sulla risorsa con il suo nome nel codice o
+  su quella che un frammento dichiara in `hosts`; altrimenti la risorsa e' un nodo dell'infrastruttura.
+  Una risorsa che ospita un container o che gira su un piano, di un tipo che le regole non riconoscono,
+  ferma la lettura nominandola. Lo scrittore mette gli ambienti in `deployment/<repository>.dsl`, da
+  includere nel modello dopo il sistema software, e una vista per ambiente (`deployment_<ambiente>`) in
+  `deployment-views/<repository>.dsl`, da includere nelle viste; il testo di un nodo e' uno per tutti
+  gli ambienti.
 - **Nomi.** Il nome nel codice senza il prefisso comune ai progetti del repository, a segmenti interi e
   più corto di ogni nome. L'identificativo si ricava dal nome completo, così un repository nomina gli
   elementi degli altri senza leggerli. Nel modello di tutto il sistema un'applicazione si chiama con il
@@ -795,6 +816,9 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/C4/C4CodeModel.ps1` | Contratto del frammento del modello C4 generato, incluso dai lettori: file di progetto letti, container, componenti, relazioni, indirizzi di avvio e chiamati e il loro legame |
 | `CI/Scripts/C4/Read-C4DotNet10Model.ps1` | Lettore .NET 10 (`c4-read-dotnet10.yaml`): applicazioni come container, progetti di produzione come componenti, regole di .NET 10; un progetto di un'altra versione ferma la lettura |
 | `CI/Scripts/C4/Read-C4Angular18Model.ps1` | Lettore Angular 18 (`c4-read-angular18.yaml`): l'applicazione come container, cartelle di funzionalità e moduli di base come componenti; un workspace di un'altra versione ferma la lettura |
+| `CI/Scripts/C4/Read-C4TerraformModel.ps1` | Lettore Terraform (`c4-read-terraform.yaml`): ambienti di deployment con i nodi annidati per identificativo Azure e le istanze dei container dei frammenti; una risorsa di hosting di un tipo che le regole non riconoscono ferma la lettura |
+| `CI/Scripts/C4/TerraformCode.ps1` | Blocchi dei file Terraform e riferimenti delle loro espressioni seguiti per nome fino alle risorse, condivisi dai lettori dell'infrastruttura |
+| `CI/Scripts/C4/TerraformValues.ps1` | Valori della dichiarazione Terraform di un ambiente: espressioni, funzioni, variabili, locals, moduli, override e remote state, con i valori sconosciuti |
 | `CI/Scripts/C4/Write-C4ModelText.ps1` | Testo del modello C4 di tutto il sistema (`c4-describe.yaml`): stesure del modello linguistico (`C4_TEXT_PROVIDER`) corrette in modo deterministico o rimandate al modello, catalogo unico di persone e sistemi esterni controllato dal modello, revisione di tutto il modello con prove verificate nella configurazione di produzione, testo salvato un container alla volta e ripreso al rilancio, correzioni elencate |
 | `CI/Scripts/C4/Export-C4CodeModel.ps1` | Parte del modello C4 generata dai frammenti di un repository sorgente e dal testo del sistema (`c4-generate.yaml`), con il contesto delle persone e dei sistemi esterni: errore sui file di progetto che nessun lettore legge, confronto in modalità `check` |
 | `CI/Scripts/AzureRepos/Publish-PullRequest.ps1` | Porta su un ramo le cartelle che la pipeline ha scritto e apre una PR Azure Repos (`azureRepos-pull-request.yaml`), con completamento automatico, cancellazione del ramo e bozza a scelta: riparte dai commit già sul ramo, nessuna PR senza differenze, una PR attiva si aggiorna, descrizione completata da un file |

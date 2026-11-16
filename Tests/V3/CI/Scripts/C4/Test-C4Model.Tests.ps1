@@ -251,6 +251,16 @@ Describe "Funzionalità: Testo del modello sulla parte generata dal codice" {
             Mutate   = { param($d) Edit-Docs $d 'docs/architecture/c4/generated/contoso.shop.ai.dsl' '"Api" "Riceve le richieste"' '"Api" ""' }
         }
         @{
+            difetto  = 'il nodo di deployment generato "snet-engine" senza descrizione'
+            elemento = '^modello C4: elemento generato senza descrizione \(snet-engine\)'
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/c4/workspace.dsl' "            deploymentNode `"Azure`" {" "            deploymentNode `"Azure`" {`n                deploymentNode `"snet-engine`" `"`" `"Microsoft.Network/virtualNetworks/subnets`" `"Generato`" {`n                    infrastructureNode `"pe-api`" `"Espone l'API`" `"Microsoft.Network/privateEndpoints`" `"Generato`"`n                }" }
+        }
+        @{
+            difetto  = 'il nodo infrastrutturale generato "pe-api" senza descrizione'
+            elemento = '^modello C4: elemento generato senza descrizione \(pe-api\)'
+            Mutate   = { param($d) Edit-Docs $d 'docs/architecture/c4/workspace.dsl' "            deploymentNode `"Azure`" {" "            deploymentNode `"Azure`" {`n                deploymentNode `"snet-engine`" `"La subnet`" `"Microsoft.Network/virtualNetworks/subnets`" `"Generato`" {`n                    infrastructureNode `"pe-api`" `"`" `"Microsoft.Network/privateEndpoints`" `"Generato`"`n                }" }
+        }
+        @{
             difetto  = 'la relazione generata da "UseCase" a "Engine" senza cio'' che passa'
             elemento = '^modello C4: relazione generata senza cio'' che passa \(UseCase -> Engine\)'
             Mutate   = { param($d) Edit-Docs $d 'docs/architecture/c4/generated/contoso.shop.ai.dsl' '"Esegue i comandi del dominio"' '""' }

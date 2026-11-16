@@ -6,7 +6,7 @@
 . "$PSScriptRoot/../../Common/Fixtures/Documentation/DocumentationFixture.ps1"
 
 $C4ScriptsDirectory = Resolve-Path "$PSScriptRoot/../../../../../../V3/CI/Scripts"
-$C4Readers = @{ dotnet10 = 'C4/Read-C4DotNet10Model.ps1'; angular18 = 'C4/Read-C4Angular18Model.ps1'; consumer = "$PSScriptRoot/Read-C4ConsumerModel.ps1" }
+$C4Readers = @{ dotnet10 = 'C4/Read-C4DotNet10Model.ps1'; angular18 = 'C4/Read-C4Angular18Model.ps1'; consumer = "$PSScriptRoot/Read-C4ConsumerModel.ps1"; terraform = 'C4/Read-C4TerraformModel.ps1' }
 $C4SourceRepositories = 'Contoso.Shop.AI,Contoso.Shop.Bff.Web,Contoso.Shop.Client.Web'
 
 function New-Project([string]$Sdk = 'Microsoft.NET.Sdk', [string[]]$References = @(), [string]$Properties = '', [string]$Items = '') {

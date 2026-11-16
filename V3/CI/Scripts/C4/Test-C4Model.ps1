@@ -52,11 +52,20 @@ function Test-ContextViewsWithoutTechnicalElements($Workspace) {
     $technical.Keys | Where-Object { $shown -contains $_ } | ForEach-Object { New-Issue $ModelScope 'elemento tecnico nella vista di contesto' $technical[$_] }
 }
 
+function Get-DeploymentElements($Nodes) {
+    foreach ($node in @($Nodes | Where-Object { $_ })) {
+        $node
+        @($node.infrastructureNodes) | Where-Object { $_ }
+        Get-DeploymentElements $node.children
+    }
+}
+
 function Get-ModelElements($Workspace) {
     $systems = @($Workspace.model.softwareSystems | Where-Object { $_ })
     $containers = @($systems | ForEach-Object { @($_.containers) } | Where-Object { $_ })
     $components = @($containers | ForEach-Object { @($_.components) } | Where-Object { $_ })
-    return @($Workspace.model.people | Where-Object { $_ }) + $systems + $containers + $components
+    $deployment = @(Get-DeploymentElements $Workspace.model.deploymentNodes)
+    return @($Workspace.model.people | Where-Object { $_ }) + $systems + $containers + $components + $deployment
 }
 
 function Test-GeneratedElementsDescribed($Elements) {

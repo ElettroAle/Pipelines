@@ -6,6 +6,10 @@
 # componenti e le relazioni. Ogni elemento dichiara in sources le cartelle del suo codice, che il
 # generatore del testo del modello legge. Lo scrittore unisce i frammenti di un repository senza conoscere le
 # tecnologie che li hanno prodotti.
+# Un frammento puo' dichiarare le risorse dell'infrastruttura che ospitano un container (hosts, con
+# l'indirizzo Terraform <modulo radice>/<indirizzo> senza chiavi d'istanza) e gli ambienti di deployment
+# (deployment: per ambiente i nodi annidati, ognuno con il testo che lo descrive, i figli e i container
+# che vi girano).
 # Un frammento puo' dichiarare anche gli indirizzi a cui un container si avvia in locale (addresses) e
 # quelli che chiama in locale (calls), ciascuno con il file che lo dichiara: un indirizzo chiamato a cui si
 # avvia un solo container di qualunque repository e' la relazione fra i due.
@@ -63,7 +67,7 @@ function Get-FragmentPath([string]$Technology) {
     return Join-Path $FragmentDirectory "$($Repository.ToLowerInvariant()).$Technology.json"
 }
 
-function Write-C4Fragment([string]$Technology, [string[]]$Manifests, $Containers, $Relationships, $Addresses = @(), $Calls = @()) {
+function Write-C4Fragment([string]$Technology, [string[]]$Manifests, $Containers, $Relationships, $Addresses = @(), $Calls = @(), $Hosts = @(), $Deployment = @()) {
     New-Item -ItemType Directory -Force -Path $FragmentDirectory | Out-Null
     $fragment = [ordered]@{
         manifests     = @($Manifests | Where-Object { $_ })
@@ -71,8 +75,14 @@ function Write-C4Fragment([string]$Technology, [string[]]$Manifests, $Containers
         relationships = @($Relationships | Where-Object { $_ })
         addresses     = @($Addresses | Where-Object { $_ })
         calls         = @($Calls | Where-Object { $_ })
+        hosts         = @($Hosts | Where-Object { $_ })
+        deployment    = @($Deployment | Where-Object { $_ })
     }
-    [IO.File]::WriteAllText((Join-Path (Resolve-Path $FragmentDirectory).Path (Split-Path (Get-FragmentPath $Technology) -Leaf)), (ConvertTo-Json $fragment -Depth 10))
+    [IO.File]::WriteAllText((Join-Path (Resolve-Path $FragmentDirectory).Path (Split-Path (Get-FragmentPath $Technology) -Leaf)), (ConvertTo-Json $fragment -Depth 40))
+}
+
+function New-C4Host([string]$Container, [string]$Resource) {
+    return [ordered]@{ container = $Container; resource = $Resource }
 }
 
 function New-C4Relationship([string]$Source, [string]$Target) {
