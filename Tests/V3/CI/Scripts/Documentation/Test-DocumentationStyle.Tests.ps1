@@ -43,10 +43,12 @@ BeforeAll {
             $glossary = Read-Units $glossaryPart
             $verdict = [ordered]@{}
             $schema = if ($Request.output_config) { $Request.output_config.format.schema } else { $Request.response_format.json_schema.schema }
-            $schema.properties.PSObject.Properties | ForEach-Object { $verdict[$_.Name] = [Collections.Generic.List[object]]::new() }
+            $omitted = Join-Path $State 'omit-rule'
+            $omit = if ((Test-Path $omitted) -and -not $user.Contains('REGOLE CHE LA RISPOSTA PRECEDENTE NON HA GIUDICATO')) { (Get-Content -Raw $omitted).Trim() }
+            elseif (Test-Path (Join-Path $State 'omit-always')) { (Get-Content -Raw (Join-Path $State 'omit-always')).Trim() }
+            $schema.properties.rules.items.properties.rule.enum | Where-Object { $_ -ne $omit } | ForEach-Object { $verdict[$_] = [Collections.Generic.List[object]]::new() }
             foreach ($rule in $Rules) {
-                $property = $schema.properties.PSObject.Properties | Where-Object { $_.Value.description -eq $rule.rule } | Select-Object -First 1
-                if (-not $property) { continue }
+                if (-not $verdict.Contains($rule.rule)) { continue }
                 if ($rule.until -and $user.Contains($rule.until)) { continue }
                 foreach ($unit in ($section | Where-Object { ($_.Marked -or $rule.everywhere) -and $_.Text.Contains($rule.match) })) {
                     $find = if ($rule.find) { $rule.find } else { $rule.match }
@@ -56,10 +58,10 @@ BeforeAll {
                     if ($null -ne $replacement) { $fix = @{ kind = 'replace'; unit = $target; find = $find; text = $replacement } }
                     elseif ($rule.insert) { $fix = @{ kind = 'insert'; unit = $target; find = ''; text = $rule.insert } }
                     elseif ($rule.glossaryInsert) { $fix = @{ kind = 'insert'; unit = $glossary[0].Number; find = ''; text = $rule.glossaryInsert } }
-                    $verdict[$property.Name].Add(@{ unit = $unit.Number; excerpt = $rule.match; explanation = 'viola la regola'; fix = $fix })
+                    $verdict[$rule.rule].Add(@{ unit = $unit.Number; excerpt = $rule.match; explanation = 'viola la regola'; fix = $fix })
                 }
             }
-            return $verdict
+            return @{ rules = @($verdict.Keys | ForEach-Object { @{ rule = $_; violations = @($verdict[$_]) } }) }
         }
 
         $listener = [Net.HttpListener]::new()
@@ -103,7 +105,7 @@ BeforeAll {
             elseif ($status -eq 200) {
                 $rulesFile = Join-Path $State 'rules.json'
                 $rules = if (Test-Path $rulesFile) { @(Get-Content -Raw $rulesFile | ConvertFrom-Json) } else { @() }
-                $content = New-Verdict $request $rules | ConvertTo-Json -Depth 8 -Compress
+                $content = New-Verdict $request $rules | ConvertTo-Json -Depth 10 -Compress
                 $payload = if ($anthropic) {
                     @{ content = @(@{ type = 'thinking'; thinking = ''; signature = 'firma' }, @{ type = 'text'; text = $content }); stop_reason = 'end_turn'; usage = @{ input_tokens = 100; output_tokens = 10 } } | ConvertTo-Json -Depth 6 -Compress
                 }
@@ -497,8 +499,9 @@ Describe "Funzionalità: Verifica della documentazione architetturale — giudiz
 
         It "E la risposta ha una voce per ogni regola della guida" {
             $schema = $request.response_format.json_schema.schema
-            @($schema.properties.PSObject.Properties | ForEach-Object { $_.Value.description }) | Should -Be @($Filler, $SelfReference)
-            $schema.required | Should -Be @('regola_1', 'regola_2')
+            $schema.required | Should -Be @('rules')
+            $schema.properties.rules.items.required | Should -Be @('rule', 'violations')
+            $schema.properties.rules.items.properties.rule.enum | Should -Be @($Filler, $SelfReference)
         }
 
         It "E la verifica nomina le tre violazioni" {
@@ -916,12 +919,12 @@ Describe "Test-DocumentationStyle — cosa si manda al modello" {
         $request.model | Should -Be 'giudice'
         $request.response_format.type | Should -Be 'json_schema'
         $request.response_format.json_schema.strict | Should -BeTrue
-        $request.response_format.json_schema.schema.properties.regola_1.items.required | Should -Be @('unit', 'excerpt', 'explanation', 'fix')
+        $request.response_format.json_schema.schema.properties.rules.items.properties.violations.items.required | Should -Be @('unit', 'excerpt', 'explanation', 'fix')
     }
 
     It "Le regole sono i titoli della parte Regole, non quelli degli esempi" {
         Invoke-StyleCheck (New-Docs) | Out-Null
-        @((Get-StubRequests)[0].response_format.json_schema.schema.properties.PSObject.Properties).Count | Should -Be 2
+        @((Get-StubRequests)[0].response_format.json_schema.schema.properties.rules.items.properties.rule.enum).Count | Should -Be 2
     }
 
     It "Chiede il seme configurato" {
@@ -1530,6 +1533,61 @@ Describe "Funzionalità: Modello linguistico delle pipeline di documentazione" {
         It "E il passo non usa il credito Azure" {
             $routes | ForEach-Object { $_.authorization | Should -BeNullOrEmpty }
             Test-Path $probe.Called | Should -BeFalse
+        }
+    }
+
+    Context "Scenario: lo schema della risposta non cresce con le regole della guida" {
+        BeforeAll {
+            Reset-Stub
+            $rules = 1..30 | ForEach-Object { "### Regola numero $_`n`nUna regola della guida.`n" }
+            $docs = New-Docs
+            $docs['docs/STYLE.md'] = "# Guida di stile`n`n## Regole`n`n" + ($rules -join "`n")
+            $res = Invoke-StyleCheck $docs 'enforce' @{ STYLE_JUDGE_PROVIDER = 'anthropic'; STYLE_JUDGE_MODEL = 'claude-sonnet-5-5'; ANTHROPIC_API_KEY = 'chiave-anthropic-di-prova' }
+            $schema = (Get-StubRequests)[0].output_config.format.schema
+        }
+
+        It "Dato una guida con trenta regole, allora la richiesta a Claude ha una sola definizione della violazione" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            ([regex]::Matches(($schema | ConvertTo-Json -Depth 30 -Compress), '"excerpt":')).Count | Should -Be 1
+        }
+
+        It "E le trenta regole sono i valori ammessi della voce" {
+            @($schema.properties.rules.items.properties.rule.enum) | Should -Be @(1..30 | ForEach-Object { "Regola numero $_" })
+        }
+    }
+
+    Context "Scenario: una risposta che salta una regola" {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(@{ match = 'gira su Azure'; rule = $Filler })
+            [IO.File]::WriteAllText((Join-Path $StubState 'omit-rule'), $SelfReference)
+            $res = Invoke-StyleCheck (New-Docs) 'enforce'
+            $requests = @(Get-StubRequests | Where-Object { (Get-UserMessage $_) -like '*SEZIONE DA GIUDICARE (02-vincoli.md)*' })
+        }
+
+        It "Allora il giudice chiede una seconda volta solo la regola mancante" {
+            $requests.Count | Should -Be 2
+            Get-UserMessage $requests[1] | Should -BeLike "*REGOLE CHE LA RISPOSTA PRECEDENTE NON HA GIUDICATO*- $SelfReference"
+            Get-UserMessage $requests[1] | Should -Not -BeLike "*- $Filler*"
+        }
+
+        It "E la violazione della prima risposta resta" {
+            $res.ExitCode | Should -Be 1 -Because $res.Output
+            Get-Issues $res.Output | Where-Object { $_ -like "Vincoli: $Filler («gira su Azure»*" } | Should -Not -BeNullOrEmpty -Because $res.Output
+        }
+    }
+
+    Context "Scenario: una regola che il modello non giudica mai" {
+        BeforeAll {
+            Reset-Stub
+            [IO.File]::WriteAllText((Join-Path $StubState 'omit-always'), $SelfReference)
+            $res = Invoke-StyleCheck (New-Docs) 'enforce'
+        }
+
+        It "Allora la verifica non passa e nomina la regola" {
+            $res.ExitCode | Should -Be 1 -Because $res.Output
+            @(Get-StubRequests).Count | Should -Be 2
+            Get-Issues $res.Output | Where-Object { $_ -like "*verifica non eseguita*il modello non ha giudicato le regole: $SelfReference*" } | Should -Not -BeNullOrEmpty -Because $res.Output
         }
     }
 
