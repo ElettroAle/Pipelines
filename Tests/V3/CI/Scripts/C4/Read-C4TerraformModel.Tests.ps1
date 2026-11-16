@@ -13,6 +13,8 @@ BeforeAll {
     . "$PSScriptRoot/Fixtures/TerraformFixture.ps1"
 
     function Set-FileText([System.Collections.IDictionary]$Files, [string]$Path, [string]$Old, [string]$New) {
+        # Su Windows il checkout porta le here-string della fixture a CRLF.
+        $Files[$Path] = $Files[$Path] -replace "`r`n", "`n"
         if (-not $Files[$Path].Contains($Old)) { throw "Testo assente da ${Path}: $Old" }
         $Files[$Path] = $Files[$Path].Replace($Old, $New)
     }
