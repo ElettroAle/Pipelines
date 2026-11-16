@@ -1,0 +1,107 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# ── CI Step: Registrazione delle decisioni ───────────────────────────────────
+#
+# Dopo l'integrazione nel ramo principale di un repository sorgente, l'ADR di ogni Task arrivato nel ramo
+# principale entra nel corpus delle decisioni, accettato, senza modifiche al testo
+# (V3/CI/Scripts/Adr/Register-Decisions.ps1), e una PR in auto-complete lo porta nel ramo principale del
+# repository delle decisioni. Le integrazioni sono le PR completate nel ramo principale dei repository
+# sorgente dal punto di partenza registrato in baselineFile; per una sorgente "Repo:ramo" sono promozioni,
+# e i Task vengono dalle PR verso quel ramo che la promozione contiene. L'ADR del Task e' la sua
+# descrizione in Markdown; una riga che comincia con l'etichetta della sostituzione nella lingua del
+# documento (es. "Sostituisce") e nomina una decisione la sostituisce. Esiti:
+#   - decisioni registrate: le decisioni e il punto di partenza vanno nella PR dal ramo branch;
+#   - Task senza ADR, ADR non in Markdown o decisione respinta dalla verifica del corpus: il corpus non
+#     cambia, si apre un work item di tipo workItemType che nomina il Task, la PR e il motivo;
+#   - nessun Task: nessuna PR, e il punto di partenza resta;
+#   - passo fallito: nulla cambia, la run successiva riprende dallo stesso punto di partenza.
+# Senza punto di partenza il passo lo registra senza registrare decisioni. Una PR del ramo branch ancora
+# aperta si unisce prima di registrare, cosi' numeri e Task restano unici. Il checkout deve portare tutta
+# la storia (fetchDepth: 0). L'identita' della build deve leggere i repository sorgente e i work item,
+# contribuire al repository, creare rami, contribuire alle PR e creare work item.
+#
+# Riusato da:
+#   il consumer, nel job che segue l'integrazione nel ramo principale dei repository sorgente
+#
+# Parametri
+# ─────────
+#   sources            → repository sorgente del progetto: "Repo" se le PR vanno nel ramo principale,
+#                        "Repo:ramo" se vanno nel ramo di sviluppo e arrivano con una promozione [REQUIRED]
+#   decisionsDirectory → cartella degli ADR (default: docs/decisions)
+#   baselineFile       → file con l'istante dell'ultima registrazione (default: .decisions-baseline)
+#   language           → lingua del documento, per le sezioni e l'etichetta della sostituzione (default: IT)
+#   workItemType       → tipo del work item di una decisione che non entra (default: Bug)
+#   branch             → ramo della PR (default: decisions/register)
+#   title              → titolo della PR (default: docs(decisions): decisions of the work arrived in main)
+#   targetBranch       → ramo principale, dei repository sorgente e delle decisioni (default: main)
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: sources
+    type: object
+
+  - name: decisionsDirectory
+    type: string
+    default: 'docs/decisions'
+
+  - name: baselineFile
+    type: string
+    default: '.decisions-baseline'
+
+  - name: language
+    type: string
+    default: 'IT'
+
+  - name: workItemType
+    type: string
+    default: 'Bug'
+
+  - name: branch
+    type: string
+    default: 'decisions/register'
+
+  - name: title
+    type: string
+    default: 'docs(decisions): decisions of the work arrived in main'
+
+  - name: targetBranch
+    type: string
+    default: 'main'
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: PowerShell@2
+    displayName: 'Decisions of the work arrived in ${{ parameters.targetBranch }}'
+    inputs:
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Adr/Register-Decisions.ps1'
+      workingDirectory: '$(Build.SourcesDirectory)'
+      pwsh: true
+    env:
+      ADR_REGISTER_SOURCES: ${{ join(';', parameters.sources) }}
+      DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}
+      ADR_REGISTER_BASELINE: ${{ parameters.baselineFile }}
+      ADR_REGISTER_BRANCH: ${{ parameters.branch }}
+      ADR_REGISTER_WORK_ITEM_TYPE: ${{ parameters.workItemType }}
+      ADR_REGISTER_DESCRIPTION_FILE: '$(Agent.TempDirectory)/decision-registration.md'
+      DOCUMENT_LANGUAGE: ${{ parameters.language }}
+      TARGET_BRANCH: ${{ parameters.targetBranch }}
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+  - template: azureRepos-pull-request.yaml
+    parameters:
+      paths:
+        - ${{ parameters.decisionsDirectory }}
+        - ${{ parameters.baselineFile }}
+      branch: ${{ parameters.branch }}
+      title: ${{ parameters.title }}
+      descriptionFile: '$(Agent.TempDirectory)/decision-registration.md'
+      targetBranch: ${{ parameters.targetBranch }}
+      templatesDirectory: ${{ parameters.templatesDirectory }}
+      condition: and(succeeded(), eq(variables['decisionRegistrationChanged'], 'True'))
