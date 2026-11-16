@@ -349,9 +349,11 @@ Modello C4 (`c4-verify.yaml`, `CI/Scripts/C4/Test-C4Model.ps1`):
   nessuna relazione viene da fuori del codice, nemmeno per ripeterne una generata. Un riferimento a un elemento che nessuna
   parte contiene rende il modello non valido, e l'errore nomina l'identificativo.
 - Ogni vista si disegna come nella wiki (`CI/Scripts/C4/ViewImages.ps1`): dall'alto in basso e da sinistra
-  a destra, con gli spazi di default e stretti, e resta il disegno che si rimpicciolisce meno per entrare in
-  una pagina di `pageWidth` per `pageHeight` pixel (default 1200 per 1600). Il log ne dà misure,
-  disposizione e scala. Se anche quel disegno scende sotto `minScale` (default 0.6) un avviso segnala la
+  a destra, con gli spazi di default e stretti, con i ranghi come escono e con i ranghi più larghi di 3, 5
+  o 8 elementi a capo (frecce nascoste fra un elemento e quello tante posizioni dopo, come `unflatten` di
+  Graphviz), e resta il disegno che si rimpicciolisce meno per entrare in una pagina di `pageWidth` per
+  `pageHeight` pixel (default 1200 per 1600). PlantUML disegna fino a 16384 pixel per lato, senza il
+  ritaglio di default a 4096. Il log ne dà misure, disposizione, ranghi e scala. Se anche quel disegno scende sotto `minScale` (default 0.6) un avviso segnala la
   vista come troppo piena, senza fermare la verifica: una vista troppo piena si snellisce nel modello. La
   direzione scritta nel modello è solo il punto di partenza.
 - **Requisiti.** Java 17 o successivo per la Structurizr CLI (versione fissata, SHA-256 verificato) e per

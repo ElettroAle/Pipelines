@@ -4,6 +4,7 @@
 # PlantUML, e il layout smetana e' compreso nel jar: non servono Graphviz ne' la rete.
 
 $PlantUmlVersion = '1.2026.8'
+$PlantUmlLimitSize = 16384
 $PlantUmlJar = @{ Name = "plantuml-$PlantUmlVersion.jar"; Sha256 = '5E1ECFA8ECD32C90B03BBF3B1EB6F020943F98AB0FCF4032BE31A0002EE2C462' }
 
 function Get-PlantUmlJar {
@@ -37,8 +38,9 @@ function ConvertTo-PlantUmlPng([hashtable]$Diagrams, [string]$Java) {
     New-Item -ItemType Directory -Force -Path $workDir | Out-Null
     try {
         foreach ($key in $Diagrams.Keys) { [IO.File]::WriteAllText((Join-Path $workDir "$key.puml"), $Diagrams[$key]) }
-        # Smetana anche dove Graphviz c'e': lo stesso modello da' lo stesso disegno su ogni agent.
-        $output = & $Java '-Djava.awt.headless=true' -jar $jar -tpng '-Playout=smetana' -charset UTF-8 (Join-Path $workDir '*.puml') 2>&1
+        # Smetana anche dove Graphviz c'e': lo stesso modello da' lo stesso disegno su ogni agent. PlantUML
+        # ritaglia di default i disegni a 4096 pixel: una vista grande si misura e si pubblica intera.
+        $output = & $Java '-Djava.awt.headless=true' "-DPLANTUML_LIMIT_SIZE=$PlantUmlLimitSize" -jar $jar -tpng '-Playout=smetana' -charset UTF-8 (Join-Path $workDir '*.puml') 2>&1
         $exitCode = $LASTEXITCODE
         $global:LASTEXITCODE = 0
         if ($exitCode -ne 0) { throw "PlantUML non disegna i diagrammi: $(@($output | ForEach-Object { "$_" }) -join ' ')" }

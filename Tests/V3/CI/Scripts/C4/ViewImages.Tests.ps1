@@ -27,6 +27,11 @@ BeforeAll {
         return $bytes
     }
 
+    function New-FanOutDiagram([int]$Targets, [string]$Measures) {
+        $relations = 1..$Targets | ForEach-Object { "Rel(sistema.api, sistema.risorsa$_, `"Usa`", `$techn=`"`", `$tags=`"`", `$link=`"`")" }
+        return (@('@startuml', 'top to bottom direction', "' misure $Measures", 'Container(sistema.api, "Api")') + $relations + 'SHOW_LEGEND(true)', '@enduml') -join "`n"
+    }
+
     function New-Diagram([string]$TopBottom, [string]$LeftRight, [string]$Direction = 'top to bottom direction', [string]$Compact = '') {
         $tight = if ($Compact) { $Compact } else { "tbs=$TopBottom lrs=$LeftRight" }
         return "@startuml`n$Direction`n' misure tb=$TopBottom lr=$LeftRight $tight`nPerson(utente, `"Utente`")`n@enduml`n"
@@ -40,7 +45,9 @@ BeforeAll {
             $text = $Diagrams[$key]
             $direction = if ($text -match '(?m)^left to right direction') { 'lr' } else { 'tb' }
             if ($text -match '(?m)^skinparam nodesep') { $direction += 's' }
-            $null = $text -match " $direction=(\d+)x(\d+)"
+            $hidden = ([regex]::Matches($text, '(?m)^\S+ -\[hidden\]-> \S+$')).Count
+            if ($hidden -and $text -match " $direction$hidden=(\d+)x(\d+)") { }
+            else { $null = $text -match " $direction=(\d+)x(\d+)" }
             $images[$key] = New-FakePng ([int]$Matches[1]) ([int]$Matches[2])
         }
         return $images
@@ -141,6 +148,86 @@ Describe "Funzionalità: Viste C4 disegnate nella direzione che si legge" {
     }
 }
 
+Describe "Funzionalità: ranghi troppo larghi a capo" {
+
+    BeforeEach {
+        $script:Rendered = @()
+        $script:Sources = @{}
+        Mock ConvertTo-PlantUmlPng { param($Diagrams, $Java) Invoke-FakePlantUml $Diagrams }
+    }
+
+    Context "Scenario: le risorse chiamate da un'applicazione non entrano in una riga" {
+        BeforeEach {
+            $measures = 'tb=3000x900 lr=900x3400 tbs=2700x800 lrs=800x3000 tb6=900x1500 lr6=1500x2000 tb4=1800x1200'
+            $images = ConvertTo-ViewImages @{ container = (New-FanOutDiagram 9 $measures) } 'java'
+        }
+
+        It "Allora resta il disegno con i ranghi a capo" {
+            $images['container'].Layout | Should -Be 'tb'
+            $images['container'].RankWidth | Should -Be 3
+        }
+
+        It "E la vista si legge" {
+            Test-ViewReadable $images['container'] | Should -BeTrue
+        }
+
+        It "E la misura nomina la larghezza dei ranghi" {
+            Format-ViewMeasure $images['container'] | Should -Be '900x1500 px in tb, ranghi di 3, scala 1.00 (minima 0.60)'
+        }
+
+        It "E ogni larghezza dei ranghi si disegna in ogni direzione e con ogni spazio" {
+            @($script:Rendered[0] | Where-Object { $_ -like 'container.tb.3' -or $_ -like 'container.lr-stretto.8' }).Count | Should -Be 2
+        }
+    }
+
+    Context "Scenario: i ranghi a capo non rendono il disegno piu' leggibile" {
+        It "Allora resta il disegno senza frecce nascoste" {
+            $images = ConvertTo-ViewImages @{ container = (New-FanOutDiagram 9 'tb=1000x900 lr=900x1000 tbs=1000x900 lrs=900x1000 tb6=900x1500 lr6=1500x900') } 'java'
+            $images['container'].RankWidth | Should -Be 0
+            Format-ViewMeasure $images['container'] | Should -Be '1000x900 px in tb, scala 1.00 (minima 0.60)'
+        }
+    }
+
+    Context "Scenario: il rango piu' largo non supera tutte le larghezze provate" {
+        It "Allora si disegnano solo le larghezze che il rango supera" {
+            $null = ConvertTo-ViewImages @{ contesto = (New-FanOutDiagram 4 'tb=900x700 lr=700x900 tbs=900x700 lrs=700x900') } 'java'
+            $script:Rendered[0] | Sort-Object | Should -Be @('contesto.lr', 'contesto.lr-stretto', 'contesto.lr-stretto.3', 'contesto.lr.3', 'contesto.tb', 'contesto.tb-stretto', 'contesto.tb-stretto.3', 'contesto.tb.3')
+        }
+    }
+}
+
+Describe "Funzionalità: ranghi di un diagramma C4-PlantUML" {
+
+    It "Un rango piu' largo va a capo con frecce nascoste fra un elemento e quello tante posizioni dopo" {
+        $diagram = "@startuml`nRel(a, b, `"x`")`nRel(a, c, `"x`")`nRel(a, d, `"x`")`nRel(a, e, `"x`")`nRel(a, f, `"x`")`nSHOW_LEGEND(true)`n@enduml`n"
+        Add-RankWraps $diagram 2 | Should -Be "@startuml`nRel(a, b, `"x`")`nRel(a, c, `"x`")`nRel(a, d, `"x`")`nRel(a, e, `"x`")`nRel(a, f, `"x`")`nSHOW_LEGEND(true)`nb -[hidden]-> d`nc -[hidden]-> e`nd -[hidden]-> f`n@enduml`n"
+    }
+
+    It "Un rango che entra nella larghezza lascia il diagramma com'e'" {
+        $diagram = "@startuml`nRel(a, b, `"x`")`nRel(a, c, `"x`")`n@enduml"
+        Add-RankWraps $diagram 2 | Should -Be $diagram
+    }
+
+    It "Il rango di un elemento e' il cammino piu' lungo che lo raggiunge" {
+        $ranks = Get-DiagramRanks "Rel(q, t, `"x`")`nRel(a, b, `"x`")`nRel(b, p, `"x`")`nRel(p, t, `"x`")"
+        $ranks['q'], $ranks['a'], $ranks['p'], $ranks['t'] | Should -Be @(0, 0, 2, 3)
+    }
+
+    It "Una relazione all'indietro non fa girare il calcolo in tondo" {
+        $ranks = Get-DiagramRanks "Rel(a, b, `"x`")`nRel(b, a, `"x`")`nRel(a, c, `"x`")"
+        $ranks['a'], $ranks['b'], $ranks['c'] | Should -Be @(0, 1, 1)
+    }
+
+    It "Gli identificativi con il punto e le relazioni rientrate si leggono come li scrive Structurizr" {
+        $ranks = Get-DiagramRanks "  Rel_D(dxp.api, dxp.store, `"x`", `$techn=`"y`")"
+        $ranks['dxp.api'], $ranks['dxp.store'] | Should -Be @(0, 1)
+    }
+
+    It "Un elemento senza relazioni non ha rango" {
+        (Get-DiagramRanks "Person(utente, `"Utente`")").Count | Should -Be 0
+    }
+}
+
 Describe "Funzionalità: disposizione di un diagramma C4-PlantUML" {
 
     It "La riga della direzione si sostituisce e il resto del diagramma resta com'e'" {
@@ -171,5 +258,29 @@ Describe "Funzionalità: pagina e scala minima dichiarate dalla pipeline" {
             $env:C4_PAGE_WIDTH = ''; $env:C4_PAGE_HEIGHT = ''; $env:C4_MIN_SCALE = ''
             . "$PSScriptRoot/../../../../../V3/CI/Scripts/C4/ViewImages.ps1"
         }
+    }
+}
+
+Describe "Funzionalità: ranghi a capo disegnati da PlantUML" {
+
+    BeforeAll {
+        . "$PSScriptRoot/../../../../../V3/CI/Scripts/C4/Structurizr.ps1"
+        $previousPath = $env:PATH
+        $env:PATH = ($env:PATH -split [IO.Path]::PathSeparator | Where-Object { -not (Test-Path (Join-Path $_ 'dot*')) }) -join [IO.Path]::PathSeparator
+        $resources = 1..30 | ForEach-Object { "    ContainerDb(Negozio.Risorsa$_, `"Risorsa $_`", `$techn=`"Azure`", `$descr=`"Conserva i dati della parte $_.`", `$tags=`"`", `$link=`"`")" }
+        $relations = 1..30 | ForEach-Object { "Rel(Negozio.Api, Negozio.Risorsa$_, `"Legge e scrive i dati`", `$techn=`"HTTPS`", `$tags=`"`", `$link=`"`")" }
+        # Come la esporta la Structurizr CLI: identificativi con il punto, separatore spento, confine del sistema.
+        $view = (@('@startuml', 'set separator none', 'title Negozio - Containers', '', 'top to bottom direction', '', '!include <C4/C4>', '!include <C4/C4_Context>', '!include <C4/C4_Container>', '',
+                'System_Boundary("Negozio_boundary", "Negozio", $tags="") {', '    Container(Negozio.Api, "Api", $techn="ASP.NET Core", $descr="Espone le API del negozio.", $tags="", $link="")') +
+            $resources + '}' + '' + $relations + '' + 'SHOW_LEGEND(true)' + '@enduml') -join "`n"
+        $images = ConvertTo-ViewImages @{ container = $view } (Get-StructurizrJava)
+    }
+
+    AfterAll { $env:PATH = $previousPath }
+
+    It "Una vista con trenta risorse chiamate da un'applicazione si legge con i ranghi a capo" {
+        Format-ViewMeasure $images['container'] | Write-Host
+        $images['container'].RankWidth | Should -BeGreaterThan 0
+        Test-ViewReadable $images['container'] | Should -BeTrue
     }
 }
