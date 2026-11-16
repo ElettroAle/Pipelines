@@ -258,6 +258,17 @@ resource "azurerm_static_web_app" "site" {
             (Get-NodePath (Get-DeploymentEnvironment $result.Fragment 'prod').nodes { param($node) @($node.instances) -contains 'contoso_infrastructure_mail' }) | Should -Be @('var.subscription_id', 'rg-north-prod')
         }
 
+        It "accetta in hosts una risorsa dichiarata senza istanze in nessun ambiente" {
+            $files = New-TerraformRepository
+            $files['source/Modules/WebApp/windows.tf'] = "resource `"azurerm_windows_web_app`" `"this`" {`n  count           = 0`n  name            = var.name`n  service_plan_id = var.service_plan_id`n}`n"
+            $fragments = New-ContainerFragments
+            $infrastructure = $fragments['contoso.infrastructure.azure.json'] | ConvertFrom-Json
+            $infrastructure.hosts += [pscustomobject]@{ container = 'contoso_shop_ai_api'; resource = 'App/module.api/azurerm_windows_web_app.this' }
+            $fragments['contoso.infrastructure.azure.json'] = $infrastructure | ConvertTo-Json -Depth 10
+            $result = Invoke-TerraformReader $files $fragments
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+        }
+
         It "segnala un nome di hosts assente dalla dichiarazione" {
             $fragments = New-ContainerFragments
             $fragments['contoso.infrastructure.customers.json'] = [ordered]@{ containers = @(); relationships = @(); hosts = @([ordered]@{ container = 'contoso_infrastructure_mail'; name = 'acs-west-prod' }) } | ConvertTo-Json -Depth 10

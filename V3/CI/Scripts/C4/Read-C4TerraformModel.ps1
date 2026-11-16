@@ -232,6 +232,7 @@ function Get-Resources($Environment, [string[]]$HostPatterns) {
             $pattern = "$($Environment.Root)/$("$($module.Path -replace '\[[^\]]*\]', '')/$type.$($block.Labels[1])".TrimStart('/'))"
             $candidate = $Rules.ContainsKey($type) -or $type -eq 'azapi_resource' -or $block.Attributes['service_plan_id'] -or $HostPatterns -contains $pattern
             if (-not $candidate) { continue }
+            [void]$script:DeclaredPatterns.Add($pattern)
             foreach ($entry in (Get-TfInstances $module $block)) {
                 $address = "$($module.Path)/$type.$($block.Labels[1])$(Format-TfKey $entry.Key)".TrimStart('/')
                 if ($entry.Unknown) {
@@ -272,7 +273,9 @@ function Get-ModelContainers {
 }
 
 # Per ogni chiave di risorsa, i container che ospita: per nome nel codice in qualunque ambiente, o per
-# l'indirizzo o il nome Azure che un frammento dichiara in hosts.
+# l'indirizzo o il nome Azure che un frammento dichiara in hosts. Un indirizzo dichiarato senza istanze in
+# nessun ambiente (un'alternativa di count, come l'app Windows di un modulo che sceglie il sistema) non ospita
+# nulla e non e' un rilievo.
 function Get-ContainerHosts($Model, $Items) {
     $byName = @{}
     foreach ($item in $Items) {
@@ -293,7 +296,7 @@ function Get-ContainerHosts($Model, $Items) {
         $matched = if ($entry.name) { @($byName["$($entry.name)".ToLowerInvariant()]) } else { @($Items | Where-Object { $_.Pattern -eq $entry.resource -or $_.Key -eq $entry.resource } | ForEach-Object Key) }
         $matched = @($matched | Where-Object { $_ } | Sort-Object -Unique)
         $wanted = if ($entry.name) { $entry.name } else { $entry.resource }
-        if (-not $matched) { $issues.Add((New-Issue $Repository 'risorsa che ospita un container assente dalla dichiarazione' "$($entry.container): $wanted")); continue }
+        if (-not $matched -and ($entry.name -or -not $script:DeclaredPatterns.Contains($entry.resource))) { $issues.Add((New-Issue $Repository 'risorsa che ospita un container assente dalla dichiarazione' "$($entry.container): $wanted")); continue }
         $matched | ForEach-Object { & $add $_ $entry.container }
     }
     return [pscustomobject]@{ Hosted = $hosted; Issues = $issues.ToArray() }
@@ -437,6 +440,7 @@ function Get-ReadIssues {
         $missing = @($environments | Where-Object { -not @($_.Directories | Where-Object { $EnvironmentMap.Values -contains $_.Name }).Count })
         if ($missing) { return $missing | ForEach-Object { New-Issue $Repository 'ambiente senza directory nella dichiarazione' "$($_.Name)=$($EnvironmentMap[$_.Name])" } }
         $model = Get-ModelContainers
+        $script:DeclaredPatterns = [System.Collections.Generic.HashSet[string]]::new()
         $hostPatterns = @($model.Hosts | ForEach-Object { $_.resource } | Where-Object { $_ })
         $itemsByEnvironment = [ordered]@{}
         foreach ($environment in $environments) {
