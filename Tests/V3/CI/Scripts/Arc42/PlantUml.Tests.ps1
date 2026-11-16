@@ -60,6 +60,17 @@ Describe "PlantUml — disegno dei diagrammi C4" {
         }
     }
 
+    Context "Un diagramma piu' alto di 4096 pixel" {
+        It "Si disegna intero, senza il ritaglio di default di PlantUML" {
+            $chain = 1..40 | ForEach-Object { "System(passo$_, `"Passo $_`", `$descr=`"Un passo della catena.`")" }
+            $relations = 1..39 | ForEach-Object { "Rel(passo$_, passo$($_ + 1), `"Passa a`")" }
+            $diagram = (@('@startuml', 'top to bottom direction', '!include <C4/C4_Context>') + $chain + $relations + '@enduml') -join "`n"
+            $png = (ConvertTo-PlantUmlPng @{ catena = $diagram } $Java)['catena']
+            $height = ([int]$png[20] -shl 24) -bor ([int]$png[21] -shl 16) -bor ([int]$png[22] -shl 8) -bor [int]$png[23]
+            $height | Should -BeGreaterThan 4096
+        }
+    }
+
     Context "Un diagramma non valido" {
         It "Il disegno fallisce e lo dice" {
             { ConvertTo-PlantUmlPng @{ rotto = "@startuml`nPerson(`n@enduml`n" } $Java } | Should -Throw '*PlantUML*'
