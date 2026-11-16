@@ -5,8 +5,9 @@
 # Porta su un ramo le cartelle o i file che la pipeline ha scritto nel checkout di un repository Azure
 # Repos e apre una PR verso targetBranch (V3/CI/Scripts/AzureRepos/Publish-PullRequest.ps1). Le cartelle
 # indicate si sostituiscono per intero con quelle scritte dalla pipeline. Il ramo puo' gia' portare i
-# commit di un passo precedente: si riparte da li'. Se il contenuto non differisce da targetBranch non si
-# apre nessuna PR; una PR attiva sullo stesso ramo si aggiorna. L'identita' della build deve poter
+# commit di un passo precedente: si riparte da li' e si integra l'ultimo commit di targetBranch, che fuori
+# dalle cartelle prevale, cosi' la PR non resta in conflitto. Se il contenuto non differisce da targetBranch
+# non si apre nessuna PR; una PR attiva sullo stesso ramo si aggiorna. L'identita' della build deve poter
 # contribuire al repository, creare rami e contribuire alle PR; il repository e' quello di origin del
 # checkout, nel progetto della pipeline.
 #

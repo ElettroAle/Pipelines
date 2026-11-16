@@ -2,7 +2,8 @@
 
 # Porta su un ramo del repository della cartella di lavoro le cartelle o i file di PULL_REQUEST_PATHS,
 # come la pipeline li ha scritti, e apre una PR verso PULL_REQUEST_TARGET. Il ramo puo' gia' esistere
-# con i commit di un passo precedente: si riparte da li'. Se le cartelle sul ramo non differiscono dal
+# con i commit di un passo precedente: si riparte da li' e si integra l'ultimo commit di PULL_REQUEST_TARGET,
+# che fuori dalle cartelle prevale, cosi' la PR resta integrabile. Se le cartelle sul ramo non differiscono dal
 # ramo di destinazione non si apre nessuna PR, e un ramo rimasto senza PR si cancella. Una PR gia'
 # attiva sullo stesso ramo si aggiorna. Il repository e' quello di origin, nel progetto della pipeline.
 # PULL_REQUEST_DESCRIPTION_FILE aggiunge alla descrizione un file scritto da un passo precedente, se
@@ -95,10 +96,45 @@ function New-BranchWorktree([bool]$BranchExists) {
     return $worktree
 }
 
+function Get-CommitIdentity {
+    $name = if ($env:BUILD_REQUESTEDFOR) { $env:BUILD_REQUESTEDFOR } else { 'Pipeline' }
+    $email = if ($env:BUILD_REQUESTEDFOREMAIL) { $env:BUILD_REQUESTEDFOREMAIL } else { 'pipeline@noreply.local' }
+    return @('-c', "user.name=$name", '-c', "user.email=$email")
+}
+
+# Un ramo nato da un commit vecchio della destinazione cambia le stesse righe che la destinazione ha cambiato
+# dopo, e la PR resta in conflitto per sempre: le run successive scrivono lo stesso contenuto e non fanno commit.
+function Merge-Target([string]$Worktree) {
+    $targetRef = "refs/remotes/origin/$Target"
+    git -C $Worktree merge-base --is-ancestor $targetRef HEAD
+    if ($LASTEXITCODE -eq 0) { return }
+    $identity = Get-CommitIdentity
+    git -C $Worktree @identity merge -q --no-commit --no-ff -X theirs $targetRef 2>&1 | Out-Null
+    git -C $Worktree rev-parse -q --verify MERGE_HEAD 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "$Target non integrato nel ramo $Branch" }
+}
+
+# Fuori dalle cartelle proposte il ramo non ha niente da proporre: un conflitto rimasto si risolve con la destinazione.
+function Resolve-Conflicts([string]$Worktree) {
+    $targetRef = "refs/remotes/origin/$Target"
+    foreach ($file in @(git -C $Worktree diff --name-only --diff-filter=U | Sort-Object -Unique)) {
+        git -C $Worktree cat-file -e "${targetRef}:$file" 2>$null
+        if ($LASTEXITCODE -eq 0) { Invoke-Git $Worktree checkout $targetRef -- $file | Out-Null }
+        else { Invoke-Git $Worktree rm -q -- $file | Out-Null }
+    }
+}
+
+function Test-Merging([string]$Worktree) {
+    git -C $Worktree rev-parse -q --verify MERGE_HEAD 2>&1 | Out-Null
+    $merging = $LASTEXITCODE -eq 0
+    $global:LASTEXITCODE = 0
+    return $merging
+}
+
 function Copy-Paths([string]$Worktree) {
     foreach ($path in $Paths) {
         $relative = Get-RepositoryPath $path
-        Invoke-Git $Worktree rm -r -q --ignore-unmatch -- $relative | Out-Null
+        Invoke-Git $Worktree rm -r -q -f --ignore-unmatch -- $relative | Out-Null
         $destination = Join-Path $Worktree $relative
         Remove-Item -Recurse -Force $destination -ErrorAction SilentlyContinue
         if (Test-Path $path) {
@@ -111,10 +147,9 @@ function Copy-Paths([string]$Worktree) {
 
 function Save-Branch([string]$Worktree) {
     git -C $Worktree diff --cached --quiet
-    if ($LASTEXITCODE -eq 0) { return $false }
-    $name = if ($env:BUILD_REQUESTEDFOR) { $env:BUILD_REQUESTEDFOR } else { 'Pipeline' }
-    $email = if ($env:BUILD_REQUESTEDFOREMAIL) { $env:BUILD_REQUESTEDFOREMAIL } else { 'pipeline@noreply.local' }
-    Invoke-Git $Worktree -c "user.name=$name" -c "user.email=$email" commit -q -m $Title | Out-Null
+    if ($LASTEXITCODE -eq 0 -and -not (Test-Merging $Worktree)) { return $false }
+    $identity = Get-CommitIdentity
+    Invoke-Git $Worktree @identity commit -q -m $Title | Out-Null
     Invoke-Git $Worktree push -q origin "HEAD:refs/heads/$Branch" | Out-Null
     return $true
 }
@@ -158,7 +193,9 @@ function Publish-PullRequest {
     $branchExists = Test-RemoteBranch $Branch
     $worktree = New-BranchWorktree $branchExists
     try {
+        if ($branchExists) { Merge-Target $worktree }
         Copy-Paths $worktree
+        Resolve-Conflicts $worktree
         $pushed = Save-Branch $worktree
         if (-not (Test-BranchDiffers $worktree)) {
             Write-Host "Nessuna differenza da ${Target} in $($Paths -join ', '): nessuna PR"
