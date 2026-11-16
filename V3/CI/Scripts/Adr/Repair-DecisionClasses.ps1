@@ -190,8 +190,10 @@ function Set-StructurePart([Collections.Generic.List[string]]$Lines, [string]$St
     $Lines.InsertRange($range.Start + 1, [string[]]$body)
 }
 
+# Il modello a volte scrive la nota gia' come voce, con il segno dell'elenco e il numero: il numero
+# della voce e' quello della versione nuova, una volta sola.
 function Add-VersionEntry([Collections.Generic.List[string]]$Lines, [int]$Version, [string]$Note) {
-    $entry = "- ${Version}: $("$Note".Trim())"
+    $entry = "- ${Version}: $("$Note".Trim() -replace '^(?:-\s+)?(?:\d+\s*:\s*)+', '')"
     $range = Get-PartRange $Lines.ToArray() $VersionsSection
     if (-not $range) {
         while ($Lines.Count -and -not $Lines[$Lines.Count - 1].Trim()) { $Lines.RemoveAt($Lines.Count - 1) }
