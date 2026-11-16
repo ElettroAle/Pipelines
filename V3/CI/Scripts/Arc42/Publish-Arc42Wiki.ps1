@@ -10,6 +10,8 @@
 # lo stesso commit allega alla wiki e che la pagina WIKI_ROOT nomina.
 
 . "$PSScriptRoot/../Common/MarkdownText.ps1"
+. "$PSScriptRoot/../Common/WikiNames.ps1"
+. "$PSScriptRoot/../Reference/ReferenceLinks.ps1"
 . "$PSScriptRoot/../C4/Structurizr.ps1"
 . "$PSScriptRoot/../C4/ViewImages.ps1"
 . "$PSScriptRoot/Arc42Document.ps1"
@@ -33,15 +35,6 @@ $MaxPushAttempts = 3
 $AttachmentsFolder = '.attachments'
 $LinkPattern = '(\[[^\]]*\]\()([^)\s]+)(\))'
 $ExternalLinkPattern = '^(?:[a-z][a-z0-9+.-]*:|#)'
-# Il nome di file di una pagina scrive gli spazi come trattini, quindi codifica il trattino stesso
-# e i caratteri che un nome di file non ammette; il simbolo di percentuale va per primo.
-$EncodedCharacters = @('%', '-', ':', '<', '>', '*', '?', '|', '#', '"', '\', '/')
-
-function ConvertTo-WikiName([string]$Title) {
-    $name = $Title
-    foreach ($character in $EncodedCharacters) { $name = $name.Replace($character, ('%{0:X2}' -f [int][char]$character)) }
-    return $name.Replace(' ', '-')
-}
 
 function ConvertTo-RepositoryPath([string]$Path) {
     return ([IO.Path]::GetRelativePath((Get-Location).Path, $Path) -replace '\\', '/')
@@ -356,6 +349,14 @@ function Get-ViewImages([hashtable]$ShownViews) {
     return $pngs
 }
 
+# I link alla reference stanno solo nelle pagine della wiki: il documento unico, che chi lo riceve legge
+# fuori dalla wiki, resta senza.
+function Add-ReferenceLinksToPages([hashtable]$Contents) {
+    if (-not $env:REFERENCE_ROOT) { return }
+    $entries = Read-ReferenceIndex (Join-Path $wikiDirectory "$AttachmentsFolder/$(ConvertTo-WikiName $env:REFERENCE_ROOT)/reference-index.json")
+    foreach ($source in @($Contents.Keys)) { $Contents[$source] = Add-ReferenceLinks $Contents[$source] $entries }
+}
+
 function Publish-Arc42Wiki {
     if (-not $wikiDirectory -or -not (Test-Path (Join-Path $wikiDirectory '.git'))) { throw "WIKI_DIRECTORY non indica un checkout della wiki: '$wikiDirectory'" }
     $formats = Get-DocumentFormats "$env:DOCUMENT_FORMATS"
@@ -368,6 +369,7 @@ function Publish-Arc42Wiki {
     foreach ($page in $pagesBySource.Values) { $contents[$page.Source] = Convert-PageBody $page $pagesBySource $views $shownViews }
     $images = Get-ViewImages $shownViews
     $documents = if ($formats) { New-Arc42Document $pages $pagesBySource $views $images $formats } else { [ordered]@{} }
+    Add-ReferenceLinksToPages $contents
     Publish-Document $pages $contents $images $documents
 }
 

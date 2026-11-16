@@ -16,6 +16,10 @@
 # (publish/<progetto>/<progetto>.zip), da cui ogni deploy prende il proprio pacchetto.
 # Senza `publishProjects` si pubblica il solo `projectName`, come sempre.
 #
+# Con `openApiDocuments` il job di compilazione pubblica, dopo build e test, le specifiche OpenAPI
+# scritte dalla build nell'artefatto `openapi` (CI/Common/Steps/dotnet-openapi-publish.yaml): i percorsi
+# sono relativi al checkout dell'applicazione e una specifica assente fa fallire la run.
+#
 # ─────────────────────────────────────────────────────────────────────────────
 
 parameters:
@@ -97,6 +101,12 @@ parameters:
     type: string
     default: ''
 
+  # Specifiche OpenAPI scritte dalla build, relative al checkout dell'applicazione.
+  # Vuoto: nessun artefatto openapi.
+  - name: openApiDocuments
+    type: object
+    default: []
+
 variables:
   - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/dev') }}:
     - group: "development"
@@ -156,6 +166,11 @@ stages:
           parameters:
             enableSonar: ${{ parameters.enableSonar }}
             sonarServiceConnection: ${{ parameters.sonarServiceConnection }}
+        - ${{ if ne(length(parameters.openApiDocuments), 0) }}:
+          - template: ../Common/Steps/dotnet-openapi-publish.yaml
+            parameters:
+              documents: ${{ parameters.openApiDocuments }}
+              sourceDirectory: '$(Agent.BuildDirectory)/s/${{ parameters.projectName }}'
 
       publishSteps:
         - ${{ if eq(length(parameters.publishProjects), 0) }}:

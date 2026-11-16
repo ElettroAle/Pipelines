@@ -45,6 +45,7 @@ V3/
 │   └── Scripts/                # Una cartella per strumento o standard
 │       ├── Common/             # Usati da più cartelle (verifiche, lingua, Markdown)
 │       ├── Adr/  Arc42/  C4/  Mermaid/  Documentation/  ScenarioCoverage/
+│       ├── Reference/          # Reference generata dal codice nella wiki (reference-publish.yaml)
 │       └── Release/
 │           ├── cliff.toml      # Regole Conventional Commits condivise
 │           ├── GitCliff.ps1

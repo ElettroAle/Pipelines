@@ -254,6 +254,35 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
         }
     }
 
+    Context "Scenario: la prima menzione di una voce della reference porta alla sua pagina" {
+        BeforeAll {
+            $wiki = New-Wiki
+            Set-WikiFile $wiki.Seed '.attachments/Reference/reference-index.json' '{"entries":[{"kind":"api","name":"BFF","url":"https://wiki/Reference/API/BFF"}]}'
+            Add-WikiCommit $wiki.Seed 'Reference'
+            Invoke-Git $wiki.Checkout pull -q origin wikiMaster | Out-Null
+            $docs = New-ValidDocs
+            $docs['docs/architecture/c4/workspace.dsl'] = $null
+            foreach ($path in @($docs.Keys)) {
+                if ($docs[$path] -is [string]) { $docs[$path] = $docs[$path] -replace '(?m)^<!-- vista: [\w-]+\*? -->\r?\n', '' }
+            }
+            $previousReferenceRoot = $env:REFERENCE_ROOT
+            $env:REFERENCE_ROOT = 'Reference'
+            try { $res = Invoke-WikiPublish $docs $wiki }
+            finally { $env:REFERENCE_ROOT = $previousReferenceRoot }
+            $page = Get-WikiPage $wiki 'Architettura/1.-Introduzione-e-obiettivi.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora la prima menzione diventa un link alla pagina della reference" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $page | Should -Match ([regex]::Escape('([BFF](https://wiki/Reference/API/BFF))'))
+        }
+
+        It "E le menzioni successive restano testo" {
+            ([regex]::Matches($page, [regex]::Escape('](https://wiki/Reference/API/BFF)'))).Count | Should -Be 1
+        }
+    }
+
     Context "Scenario: una vista tolta dal documento perde la sua immagine" {
         BeforeAll {
             $wiki = New-Wiki

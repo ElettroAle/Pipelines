@@ -30,6 +30,8 @@ Tests/
     │   ├── Documentation/      # Test-Documentation, Test-DocumentationStyle, Update-Documentation
     │   ├── LanguageModel/      # LanguageModel, Foundry, Anthropic
     │   │   └── Fixtures/       # Endpoint finto di un fornitore, Azure CLI finta che segna se viene chiamata
+    │   ├── Reference/          # Publish-Reference, ReferenceLinks, ReferenceSources, ReferenceTemplates
+    │   │   └── Fixtures/       # Moduli Terraform, specifiche OpenAPI e Taskfile finti, wiki locale
     │   ├── Release/            # GitCliff, Set-Versioning, Verify-SemVer, New-ReleaseNotes, Test-PublishedArtifact
     │   │   └── Fixtures/       # valid-commits.txt, invalid-commits.txt, usati da Verify-SemVer.Tests
     │   └── ScenarioCoverage/   # ScenarioCoverage.Tests.ps1
@@ -302,6 +304,22 @@ degli entry point `quality-arc42` e `quality-docs`.
 | Foundry | Chat completions con token Entra ID, deployment, json_schema stretto con il nome, livello di ragionamento e seme solo se dichiarati, token chiesto alla Azure CLI una volta, token non ottenuto, seme rifiutato tolto per le richieste successive, 400 non ripetuto, `Retry-After`, tentativi esauriti, endpoint o modello mancanti |
 | Anthropic | `/v1/messages` con `x-api-key` e `anthropic-version`, `max_tokens` predefinito e dichiarato, system e unico messaggio dell'utente, schema invariato in `output_config.format`, `effort` solo se dichiarato, nessun campionamento, seme, `thinking` o risposta precompilata; testo letto dopo i blocchi di ragionamento, token usati, `refusal` e `max_tokens` come errori, risposta senza testo; 429 con `retry-after`, 529, 5xx, tentativi esauriti, 400 non ripetuto con il messaggio dell'API; chiave o modello mancanti |
 | Scelta del fornitore nei template | `documentation-style`, `c4-describe`, `flows-verify`, `adr-classes-verify`: `foundry` di default, `AzureCLI@2` sulla service connection con Foundry, `PowerShell@2` senza Azure CLI con Anthropic e chiave mappata in `ANTHROPIC_API_KEY` da `$(anthropicApiKey)`, fornitore passato allo script, stesse variabili nelle due varianti; `styleProvider` e `styleAnthropicApiKey` negli entry point; riparazione dei diagrammi e proposta delle classi con Anthropic senza endpoint |
+
+#### `Publish-Reference.Tests.ps1`, `ReferenceLinks.Tests.ps1`, `ReferenceSources.Tests.ps1`, `ReferenceTemplates.Tests.ps1`
+
+Le sorgenti sono i moduli Terraform, le specifiche OpenAPI e il Taskfile finti di `Fixtures/ReferenceFixture.ps1`;
+la wiki e' un repository git locale con un origin bare; la board e' l'endpoint locale di Azure DevOps di
+`Adr/Fixtures/AzureDevOpsStub.ps1`. terraform-docs si scarica alla prima esecuzione (`TERRAFORM_DOCS_PATH` lo evita).
+
+| Suite | Scenario testato |
+|---|---|
+| Reference generata dal codice | Pagina di ogni modulo con variabili e output descritti e l'elenco delle risorse; pagina di ogni API con endpoint, parametri, risposte e descrizione; comandi con descrizione e parametri; release notes nella pagina radice; risorsa senza descrizione elencata e fuori dal Bug; prima menzione di modulo, API e task nelle pagine sotto le radici indicate |
+| Reference che cambia con il codice | Variabile aggiunta, endpoint aggiunto, task tolto con un commit della generazione; voce senza descrizione (variabile, endpoint, task) che apre un Bug con la voce e il repository |
+| Scrittura della reference nella wiki | Generazione senza cambiamenti senza commit, resto della wiki e ordine della radice, indice delle voci, pagina tolta dal codice, push ripetuto sopra il commit nuovo, specifica assente, wiki non indicata |
+| Bug delle voci senza descrizione | Bug aperto riscritto, ricerca per tipo senza i work item chiusi, descrizione per un tipo diverso da Bug, repository in regola che non tocca la board |
+| `ReferenceLinks.ps1` | Prima menzione, nome piu' lungo, parole intere, titoli, blocchi di codice, link, immagini e tag lasciati, codice in linea esatto, idempotenza, indice |
+| `ReferenceSources.ps1` | Taskfile con include piatti e con spazio dei nomi, task interni, descrizioni, parametri; endpoint ordinati, riferimenti risolti; moduli letti con terraform-docs, senza fonti dati; errori di lettura |
+| Template | Script di `dotnet-openapi-publish.yaml` che raccoglie le specifiche e fallisce su una assente; `openApiDocuments` in `GitFlow/publish-dotNet.yaml`; variabili di `reference-publish.yaml` uguali a quelle lette dallo script; `referenceRoot` nella pubblicazione arc42 |
 
 #### `ScenarioCoverage.Tests.ps1` (14 suite, 25 test)
 

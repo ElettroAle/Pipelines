@@ -27,6 +27,9 @@
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #   documentFormats    → formati del documento unico da allegare, 'pdf' e 'docx' (default: nessuno)
 #   nodeVersion        → versione di Node.js per Chrome headless (default: 22.x)
+#   referenceRoot      → radice della reference nella wiki (reference-publish.yaml): la prima menzione di
+#                        ogni sua voce nelle pagine diventa un link, il documento unico resta senza
+#                        (default: nessuna)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -69,6 +72,10 @@ parameters:
     type: string
     default: '22.x'
 
+  - name: referenceRoot
+    type: string
+    default: ''
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
@@ -98,4 +105,5 @@ steps:
       WIKI_ROOT: ${{ parameters.wikiRoot }}
       WIKI_BRANCH: ${{ parameters.wikiBranch }}
       DOCUMENT_FORMATS: ${{ join(',', parameters.documentFormats) }}
+      REFERENCE_ROOT: ${{ parameters.referenceRoot }}
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)
