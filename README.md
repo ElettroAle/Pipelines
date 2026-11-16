@@ -689,6 +689,16 @@ pubblicazione:
 - Un commit solo nel repository git della wiki tocca soltanto `wikiRoot`, le sue immagini e la sua voce in
   testa all'ordine della radice: le altre pagine della wiki restano come sono. Se la wiki cambia nel
   frattempo, il push si riprova sopra il commit nuovo; se non cambia nulla, nessun commit.
+- Con `documentFormats` (`['pdf', 'docx']`, o uno dei due) le stesse pagine diventano anche un documento unico,
+  `.attachments/<wikiRoot>/<wikiRoot>.pdf` e `.docx`, che la pagina `wikiRoot` nomina e che lo stesso commit allega
+  alla wiki (`CI/Scripts/Arc42/Arc42Document.ps1`). Il documento ha la versione del commit sotto il titolo,
+  l'indice e le sezioni numerate; le decisioni sono sottosezioni della sezione 9 con il loro stato; le viste C4
+  sono le stesse immagini della wiki e i diagrammi Mermaid PNG disegnati da Chrome headless. I link alle
+  sezioni e alle decisioni diventano rimandi nel documento; quelli al repository e alle altre risorse di Azure
+  DevOps testo, perche' il documento si legge anche senza accesso. pandoc (versione fissata, SHA-256
+  verificato) scrive il Word e l'HTML che Chrome headless stampa in PDF A4; lo step installa Node.js e, su
+  Linux, le librerie di Chrome con `ensure-chrome-libraries.yaml`. La stessa fonte da' gli stessi file: le
+  date nel documento sono quelle del commit, e una pubblicazione senza modifiche non crea commit.
 
 ```yaml
 resources:
@@ -714,6 +724,7 @@ extends:
     checkoutRepository: self
     wikiRepository: project_wiki
     language: 'EN'                      # lingua del documento, come arc42Language della quality
+    documentFormats: ['pdf', 'docx']    # documento unico allegato alla wiki (default: nessuno)
 ```
 
 ---
@@ -804,6 +815,9 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/Common/VerificationGate.ps1` | Parte comune degli script di verifica della documentazione: modalità `off`/`warn`/`enforce`, rilievi `##vso[task.logissue]`, codice di uscita |
 | `CI/Scripts/Common/MarkdownText.ps1` | Lettura delle sezioni Markdown di un documento (blocchi, parti, marcatori di vista, diagrammi) e misure di leggibilità (frasi, parole, indice Gulpease) |
 | `CI/Scripts/C4/Structurizr.ps1` | Scarica la Structurizr CLI (versione fissata, SHA-256 verificato), sceglie un Java 17 o successivo ed esporta il modello C4 in JSON e le viste in C4-PlantUML |
+| `CI/Scripts/Arc42/Arc42Document.ps1` | Documento unico in PDF e Word dalle pagine della wiki (`documentFormats` di `publish-arc42-wiki.yaml`): sezioni numerate con indice, decisioni sotto la sezione 9, viste C4 e diagrammi Mermaid come immagini, link interni come rimandi e link ad Azure DevOps come testo |
+| `CI/Scripts/Pandoc/Pandoc.ps1` | Scarica pandoc (versione fissata, SHA-256 verificato, `PANDOC_PATH` per uno gia' presente) e converte un Markdown con la data della fonte (`SOURCE_DATE_EPOCH`) |
+| `CI/Scripts/Browser/Browser.ps1`, `CI/Scripts/Browser/Renderer/` | Installa con `npm ci` mermaid-cli, puppeteer e Chrome headless fissati dal lockfile; disegna i diagrammi Mermaid in PNG e stampa un HTML in PDF con la data della fonte |
 | `CI/Scripts/Arc42/PlantUml.ps1` | Scarica PlantUML (versione fissata, SHA-256 verificato) e disegna i diagrammi in PNG con una sola JVM, layout smetana |
 | `CI/Scripts/Common/DocumentLanguage.ps1` | Carica da `CI/Scripts/Common/Languages/<lingua>.psd1` le convenzioni della lingua del documento (`DOCUMENT_LANGUAGE`, default `IT`); una lingua senza file fa fallire lo script nominandola |
 | `CI/Scripts/Mermaid/Mermaid.ps1`, `CI/Scripts/Mermaid/Parser/` | Installa con `npm ci` il parser Mermaid fissato dal lockfile e ricava, per ogni diagramma, il tipo (con partecipanti e chiamate di un diagramma di sequenza, classi di un diagramma delle classi) o l'errore con la riga |

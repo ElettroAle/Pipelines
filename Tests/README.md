@@ -21,6 +21,9 @@ Tests/
     │   │   └── Fixtures/Documentation/  # Documento valido e template arc42 italiano ufficiale, usati dai test della documentazione
     │   ├── Adr/                # Test-AdrCorpus, Test-DecisionClasses, Repair-DecisionClasses
     │   ├── Arc42/              # Test-Arc42Document, Publish-Arc42Wiki, PlantUml
+    │   │   └── Fixtures/       # Letture di un Word e di un PDF di Chrome: titoli numerati, indice, testo, link, immagini
+    │   ├── Pandoc/             # Pandoc
+    │   ├── Browser/            # Browser
     │   ├── C4/                 # Lettori, testo, scrittore e verifica del modello C4
     │   │   └── Fixtures/       # Repository sorgente finti, lettore del consumer, finto modello del testo
     │   ├── Mermaid/            # Test-MermaidDiagrams, Test-DiagramFlows, Sync-DiagramLabels, Repair-DiagramFlows

@@ -15,6 +15,9 @@
     AdrCodeStructureSection = 'Struttura nel codice'
     AdrCodeFlowSection = 'Flusso nel codice'
     WikiRoot       = 'Architettura'
+    DocumentLang   = 'it'
+    DocumentVersion = 'Versione {0}'
+    TableOfContents = 'Indice'
     StatusColumn   = 'Stato'
     StatusLabels   = @{ proposed = 'proposta'; accepted = 'accettata'; rejected = 'respinta'; deprecated = 'deprecata'; superseded = 'sostituita' }
     StatusNotices  = @{ superseded = 'DECISIONE SOSTITUITA. Al suo posto vale la'; deprecated = 'DECISIONE DEPRECATA. Non vale piu'' e nessuna decisione la sostituisce.'; rejected = 'DECISIONE RESPINTA. Resta come traccia della discussione.' }

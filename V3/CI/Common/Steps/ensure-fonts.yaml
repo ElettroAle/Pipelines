@@ -4,6 +4,7 @@
 #
 # Garantisce i font di sistema con cui Java misura e disegna il testo, per
 # PlantUML: senza fontconfig si ferma con "InternalError ... FontManagerFactory".
+# Gli stessi font servono a Chrome headless per il documento in PDF.
 # Un agent che li ha gia' non installa nulla; uno che non li ha li installa con
 # sudo, una volta per macchina.
 #
