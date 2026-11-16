@@ -9,11 +9,13 @@
     un origin bare sul ramo wikiMaster, gia' popolato con le release note e una pagina che la
     pubblicazione non possiede. Lo script gira come in pipeline: richiede Java 17 o successivo per
     esportare e disegnare le viste C4 (STRUCTURIZR_JAVA, JAVA_HOME_17_X64 o JAVA_HOME). PLANTUML_JAR
-    evita lo scaricamento di PlantUML.
+    evita lo scaricamento di PlantUML. Il documento in PDF e Word richiede Node.js per Chrome headless;
+    PANDOC_PATH evita lo scaricamento di pandoc.
 #>
 
 BeforeAll {
     . "$PSScriptRoot/../Common/Fixtures/Documentation/DocumentationFixture.ps1"
+    . "$PSScriptRoot/Fixtures/DocumentReaders.ps1"
     $ScriptPath = Resolve-Path "$PSScriptRoot/../../../../../V3/CI/Scripts/Arc42/Publish-Arc42Wiki.ps1"
     $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
     $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-arc42-wiki-$(New-Guid)"
@@ -60,8 +62,9 @@ BeforeAll {
         return [pscustomobject]@{ Root = $root; Origin = $origin; Seed = $seed; Checkout = $checkout }
     }
 
-    function Invoke-WikiPublish([System.Collections.IDictionary]$Docs, $Wiki, [string]$Language = '') {
+    function Invoke-WikiPublish([System.Collections.IDictionary]$Docs, $Wiki, [string]$Language = '', [string]$Formats = '') {
         return Invoke-DocsScript $ScriptPath $Docs @{
+            DOCUMENT_FORMATS      = $Formats
             DOCUMENT_LANGUAGE     = $Language
             WIKI_DIRECTORY        = $Wiki.Checkout
             SYSTEM_COLLECTIONURI  = 'https://dev.azure.com/Org/'
@@ -486,6 +489,189 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
             $page | Should -Match ([regex]::Escape('![contesto](/.attachments/Architecture/contesto.png)'))
             $page | Should -Not -Match '<!-- view:'
             Test-Png (Get-WikiFileBytes $wiki '.attachments/Architecture/contesto.png') | Should -BeTrue
+        }
+    }
+}
+
+
+# Gli scenari del documento del requisito 1539 «La documentazione architetturale si legge nella wiki e come
+# documento PDF e Word», con il testo dei criteri di accettazione: un It per ogni Allora e ogni E. Il repository
+# non ha un runner Gherkin per PowerShell, quindi gli schemi e i loro esempi sono Context di Pester.
+Describe "Funzionalità: Documentazione architetturale nella wiki e come documento" {
+
+    BeforeAll {
+        $DocumentVersion = 'Versione 01234567'
+        $SectionTitles = @('Introduzione e obiettivi', 'Vincoli di architettura', 'Ambito e contesto del sistema', 'Strategia della soluzione',
+            'Building Block View', 'Runtime View', 'Deployment View', 'Concetti trasversali', 'Decisioni di progettazione',
+            'Requisiti di Qualità', 'Rischi e debiti tecnici', 'Glossario')
+        $AzureDevOpsLink = '^https?://([\w-]+\.)*(dev\.azure\.com|visualstudio\.com)([:/?#]|$)'
+
+        function Read-PublishedDocument([string]$Format, [byte[]]$Bytes) {
+            if ($Format -eq 'Word') {
+                $word = Read-WordDocument $Bytes
+                return [pscustomobject]@{
+                    Text     = $word.Text
+                    Headings = $word.Headings
+                    Index    = $word.Index -and $word.Text.Contains('Indice')
+                    Links    = @($word.Links | Where-Object { -not $_.Target.StartsWith('#') } | ForEach-Object Target)
+                    Linked   = (@($word.Links | ForEach-Object Text) -join "`n")
+                    Images   = $word.Images.Count
+                }
+            }
+            $pdf = Read-PdfDocument $Bytes
+            $headings = foreach ($title in $pdf.Outline) {
+                if ($title -notmatch '^(\d+(?:\.\d+)*) (.+)$') { continue }
+                [pscustomobject]@{ Level = $Matches[1].Split('.').Count; Number = $Matches[1]; Title = $Matches[2] }
+            }
+            return [pscustomobject]@{
+                Text     = $pdf.Text
+                Headings = @($headings)
+                Index    = $pdf.Outline -contains 'Indice'
+                Links    = $pdf.Links
+                Linked   = ''
+                Images   = $pdf.Images.Count
+            }
+        }
+
+        function Get-PublishedState($Wiki) {
+            return @{
+                Home = Get-WikiPage $Wiki 'Architettura.md'
+                Page = Get-WikiPage $Wiki 'Architettura/5.-Building-Block-View.md'
+                Png  = Get-WikiFileBytes $Wiki '.attachments/Architettura/contenitori.png'
+                PDF  = Get-WikiFileBytes $Wiki '.attachments/Architettura/Architettura.pdf'
+                Word = Get-WikiFileBytes $Wiki '.attachments/Architettura/Architettura.docx'
+            }
+        }
+
+        $wiki = New-Wiki
+        $docs = New-ValidDocs
+        Add-DecisionIndex $docs
+        $docs['docs/decisions/0012-canale-eventi-di-sessione.md'] = (@(
+                '---', 'status: accepted', '---', '',
+                "# Canale eventi di sessione posseduto dall'hub", '',
+                '## Contesto e problema', '',
+                'La scelta nasce dal [Task 1600](https://dev.azure.com/Org/Progetto/_workitems/edit/1600) e dalla [PR 1300](https://dev.azure.com/Org/Progetto/_git/Architettura.Repo/pullrequest/1300).', '',
+                '## Opzioni considerate', '',
+                "- Il canale nell'hub, descritto nella [pagina della wiki](https://dev.azure.com/Org/Progetto/_wiki/wikis/Progetto.wiki/1/Canale) e nella build <https://org.visualstudio.com/Progetto/_build>.",
+                '- Il canale nel BFF, come propone [MADR](https://adr.github.io/madr/).', '',
+                '## Esito della decisione', '',
+                "Il canale vive nell'hub, come in [0001-esempio](0001-esempio.md) e secondo la [guida](../STYLE.md).") -join "`n") + "`n"
+        $first = Invoke-WikiPublish $docs $wiki '' 'pdf, docx'
+        $before = Get-PublishedState $wiki
+        $commitsBeforeChange = Get-WikiCommitCount $wiki
+        Edit-Docs $docs 'docs/architecture/c4/workspace.dsl' 'bff -> motore "inoltra"' "bff -> motore `"inoltra`"`n        bff -> motore `"consegna gli eventi di sessione al client`""
+        $second = Invoke-WikiPublish $docs $wiki '' 'pdf, docx'
+        $after = Get-PublishedState $wiki
+        $commitsAfterChange = Get-WikiCommitCount $wiki
+        $third = Invoke-WikiPublish $docs $wiki '' 'pdf, docx'
+    }
+    AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+    Context "Schema dello scenario: documento scaricabile" {
+
+        Context "Esempio: <formato>" -ForEach @(
+            @{ formato = 'PDF'; File = 'Architettura.pdf' }
+            @{ formato = 'Word'; File = 'Architettura.docx' }
+        ) {
+            BeforeAll { $document = Read-PublishedDocument $formato $before[$formato] }
+
+            It 'Allora la home rimanda al documento in <formato> della versione in "main"' {
+                $first.ExitCode | Should -Be 0 -Because $first.Output
+                $before.Home | Should -Match ([regex]::Escape("- [$File](/.attachments/Architettura/$File)"))
+                ($document.Text -replace '\s+', '') | Should -Match ([regex]::Escape(($DocumentVersion -replace '\s+', '')))
+            }
+
+            It "E il documento contiene le dodici sezioni arc42 numerate, l'indice, i diagrammi disegnati e le decisioni" {
+                $sections = @($document.Headings | Where-Object Level -EQ 1)
+                @($sections | ForEach-Object Number) | Should -Be @(1..12 | ForEach-Object { "$_" })
+                @($sections | ForEach-Object { $_.Title.Trim() }) | Should -Be $SectionTitles
+                $document.Index | Should -BeTrue
+                $document.Images | Should -Be 8 -Because 'sette viste C4 e un diagramma Mermaid'
+                $decisions = @($document.Headings | Where-Object { $_.Level -eq 2 -and $_.Number -like '9.*' -and $_.Title.Trim() -match '^\d{4} ' } | ForEach-Object { $_.Title.Trim() })
+                $decisions | Should -Be @('0001 Esempio', '0012 Canale eventi di sessione')
+            }
+        }
+    }
+
+    Context "Schema dello scenario: documento leggibile da chi non accede ad Azure DevOps" {
+
+        Context "Esempio: <formato>" -ForEach @(
+            @{ formato = 'PDF' }
+            @{ formato = 'Word' }
+        ) {
+            BeforeAll { $document = Read-PublishedDocument $formato $before[$formato] }
+
+            It 'Allora la decisione nomina "PR 1300" e "Task 1600" come testo, senza link' {
+                $text = $document.Text -replace '\s+', ''
+                $text | Should -Match 'PR1300'
+                $text | Should -Match 'Task1600'
+                $document.Linked | Should -Not -Match 'PR 1300|Task 1600'
+                @($document.Links | Where-Object { $_ -match 'pullrequest/1300|edit/1600' }) | Should -BeNullOrEmpty
+            }
+
+            It "E il documento non contiene link a pagine della wiki, a PR, a work item o ad altre risorse interne di Azure DevOps" {
+                @($document.Links | Where-Object { $_ -match $AzureDevOpsLink }) | Should -BeNullOrEmpty
+                $document.Links | Should -Contain 'https://adr.github.io/madr/'
+            }
+        }
+    }
+
+    Context "Schema dello scenario: modifica visibile ovunque" {
+
+        Context "Esempio: <dove>" -ForEach @(
+            @{ dove = 'la pagina "Vista dei building block"'; Kind = 'Page' }
+            @{ dove = 'il documento PDF'; Kind = 'PDF' }
+            @{ dove = 'il documento Word'; Kind = 'Word' }
+        ) {
+            It "Allora il diagramma dei container mostra la relazione nuova" {
+                $second.ExitCode | Should -Be 0 -Because $second.Output
+                $commitsAfterChange | Should -Be ($commitsBeforeChange + 1)
+                [Convert]::ToHexString($after.Png) | Should -Not -Be ([Convert]::ToHexString($before.Png)) -Because 'la vista dei container cambia con la relazione nuova'
+                switch ($Kind) {
+                    'Page' { $after.Page | Should -Match ([regex]::Escape('![contenitori](/.attachments/Architettura/contenitori.png)')) }
+                    'Word' {
+                        $pngs = @((Read-WordDocument $after.Word).Images | ForEach-Object { [Convert]::ToHexString($_) })
+                        $pngs | Should -Contain ([Convert]::ToHexString($after.Png))
+                        $pngs | Should -Not -Contain ([Convert]::ToHexString($before.Png))
+                    }
+                    'PDF' {
+                        $size = Get-PngDimensions $after.Png
+                        $previousSize = Get-PngDimensions $before.Png
+                        $image = @((Read-PdfDocument $after.PDF).Images | Where-Object { $_.Width -eq $size.Width -and $_.Height -eq $size.Height })
+                        $previous = @((Read-PdfDocument $before.PDF).Images | Where-Object { $_.Width -eq $previousSize.Width -and $_.Height -eq $previousSize.Height })
+                        $image.Count | Should -Be 1
+                        $previous.Count | Should -Be 1
+                        $image[0].Hash | Should -Not -Be $previous[0].Hash
+                    }
+                }
+            }
+        }
+    }
+
+    Context "Scenario: il documento della stessa versione non cambia" {
+
+        It "Allora una nuova pubblicazione senza modifiche non crea commit" {
+            $third.ExitCode | Should -Be 0 -Because $third.Output
+            Get-WikiCommitCount $wiki | Should -Be $commitsAfterChange
+            $third.Output | Should -Match "La wiki mostra gia' il documento"
+        }
+    }
+
+    Context "Scenario: formato del documento non supportato" {
+        BeforeAll {
+            $unsupportedWiki = New-Wiki
+            $commits = Get-WikiCommitCount $unsupportedWiki
+            $res = Invoke-WikiPublish (New-ValidDocs) $unsupportedWiki '' 'pdf, odt'
+        }
+        AfterAll { Remove-Item -Recurse -Force $unsupportedWiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora la pubblicazione fallisce e nomina il formato" {
+            $res.ExitCode | Should -Be 1
+            Get-Issues $res.Output | Should -Match 'formato del documento non supportato: odt'
+        }
+
+        It "E la wiki non cambia" {
+            Get-WikiCommitCount $unsupportedWiki | Should -Be $commits
         }
     }
 }
