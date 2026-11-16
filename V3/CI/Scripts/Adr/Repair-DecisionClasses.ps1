@@ -9,7 +9,8 @@
 # la rimandano, fino a CLASSES_REPAIR_MAX_DRAFTS stesure; poi la decisione resta com'era e la verifica la
 # segnala. Il modello propone e non respinge: una decisione non accettata non ferma il passo.
 # Ogni decisione accettata va in un commit sul ramo di avanzamento (PROGRESS_BRANCH) con il registro: una
-# run rilanciata riprende da li' senza richiamare il modello per le decisioni gia' accettate.
+# run rilanciata riprende da li', applicando il lavoro salvato sopra il testo corrente di main, senza
+# richiamare il modello per le decisioni gia' accettate.
 
 . "$PSScriptRoot/../LanguageModel/LanguageModel.ps1"
 . "$PSScriptRoot/DecisionClasses.ps1"
@@ -288,20 +289,98 @@ function Get-ProgressFile([string]$Path) {
     return ($content -join "`n") + "`n"
 }
 
-# Le decisioni e il registro del ramo di avanzamento, gia' accettati da una run interrotta, tornano nella
-# copia di lavoro se la verifica li accetta ancora.
+function Get-PartText([string]$Text, [string]$Name) {
+    $lines = $Text -split "`r?`n"
+    $range = Get-PartRange $lines $Name
+    if (-not $range -or $range.End - $range.Start -le 1) { return '' }
+    return ($lines[($range.Start + 1)..($range.End - 1)] -join "`n").Trim()
+}
+
+function Get-VersionEntries([string]$Text) {
+    $lines = $Text -split "`r?`n"
+    $range = Get-PartRange $lines $VersionsSection
+    if (-not $range -or $range.End - $range.Start -le 1) { return @() }
+    return @($lines[($range.Start + 1)..($range.End - 1)] | Where-Object { $_ -match '^-\s+\d+:' } | ForEach-Object { $_.TrimEnd() })
+}
+
+function Get-CommonCount([string[]]$Left, [string[]]$Right) {
+    $count = 0
+    while ($count -lt $Left.Count -and $count -lt $Right.Count -and $Left[$count] -ceq $Right[$count]) { $count++ }
+    return $count
+}
+
+function Get-Governs([string]$Text) {
+    return @((Get-FrontMatter $Text)[$GovernsField] | Where-Object { $_ })
+}
+
+# Una decisione accepted cambia solo con una versione nuova: il testo da cui il modello e' partito e' quello
+# della storia di main con le sole voci di versione comuni al ramo di avanzamento.
+function Find-MainText([string]$Path, [string[]]$Entries) {
+    $relative = Get-RepositoryPath $Path
+    foreach ($commit in @(git log --format=%H HEAD -- $relative 2>$null)) {
+        $content = git show "${commit}:$relative" 2>$null
+        if ($LASTEXITCODE -ne 0) { continue }
+        $text = ($content -join "`n") + "`n"
+        $found = @(Get-VersionEntries $text)
+        if ($found.Count -eq $Entries.Count -and (Get-CommonCount $found $Entries) -eq $Entries.Count) { return $text }
+    }
+    $global:LASTEXITCODE = 0
+    return $null
+}
+
+# Il lavoro del modello sul ramo, rispetto al testo da cui e' partito, applicato sopra il testo corrente di
+# main: le voci di governs per classi che main non governa, la struttura se main non l'ha cambiata, e una
+# versione nuova con le righe delle versioni del ramo.
+function Get-ResumedText([string]$Base, [string]$Progress, [string]$Current, [string[]]$Notes, $Types) {
+    $baseGoverns = Get-Governs $Base
+    $currentGoverns = Get-Governs $Current
+    $governed = @((Get-GovernedTypes $Types $currentGoverns).FullName)
+    $additions = @(Get-Governs $Progress | Where-Object { $baseGoverns -cnotcontains $_ } |
+            Where-Object { @((Get-GovernedTypes $Types @($_)).FullName | Where-Object { $governed -cnotcontains $_ }).Count })
+    $baseStructure = Get-PartText $Base $StructureSection
+    $structure = Get-PartText $Progress $StructureSection
+    if ($structure -ceq $baseStructure -or (Get-PartText $Current $StructureSection) -cne $baseStructure) { $structure = '' }
+    $draft = [pscustomobject]@{ governs = $additions; structure = $structure; version = ($Notes -join '; ') }
+    return Get-DraftText $Current $draft $currentGoverns
+}
+
+# Le voci di versione del ramo oltre quelle comuni con main sono il lavoro del modello; se main non ha voci
+# oltre quelle comuni, il modello e' partito dal testo corrente.
+function Get-ResumedDecision([string]$Path, [string]$Progress, [string]$Current, $Types) {
+    $saved = @(Get-VersionEntries $Progress)
+    $own = @(Get-VersionEntries $Current)
+    $common = Get-CommonCount $saved $own
+    $notes = @($saved | Select-Object -Skip $common | ForEach-Object { $_ -replace '^-\s+(\d+:\s*)+', '' })
+    if (-not $notes) { return $null }
+    $base = if ($own.Count -eq $common) { $Current } else { Find-MainText $Path @($saved | Select-Object -First $common) }
+    if ($null -eq $base) { return $null }
+    return Get-ResumedText $base $Progress $Current $notes $Types
+}
+
+# Le decisioni del ramo di avanzamento, gia' accettate da una run interrotta, tornano nella copia di lavoro
+# applicate sopra main, se la verifica le accetta ancora. Il registro del ramo si unisce a quello di main,
+# tranne le classi che il modello aveva aggiunto a governs e che la decisione ripresa non governa: tornano
+# candidate.
 function Resume-Progress($Decisions, $Types, [hashtable]$Ledger) {
     if (-not (Test-ProgressBranch)) { return }
     $saved = Read-Candidates (Get-ProgressFile $CandidatesFile)
-    foreach ($id in $saved.Keys) { $Ledger[$id] = @(@($Ledger[$id]) + @($saved[$id]) | Where-Object { $_ } | Sort-Object -Unique) }
+    $lost = @{}
     foreach ($decision in $Decisions) {
         $path = $decision.Section.File.FullName
         $progress = Get-ProgressFile $path
         $current = [IO.File]::ReadAllText($path)
         if ($null -eq $progress -or ($progress -replace "`r`n", "`n") -eq ($current -replace "`r`n", "`n")) { continue }
-        [IO.File]::WriteAllText($path, $progress)
-        if (@(Get-DecisionFindings $decision.Id $Types)) { [IO.File]::WriteAllText($path, $current); continue }
-        Write-Host "Decisione $($decision.Id) ripresa dal ramo $ProgressBranch"
+        $resumed = Get-ResumedDecision $path $progress $current $Types
+        if ($resumed) {
+            [IO.File]::WriteAllText($path, $resumed)
+            if (@(Get-DecisionFindings $decision.Id $Types)) { [IO.File]::WriteAllText($path, $current) }
+            else { Write-Host "Decisione $($decision.Id) ripresa dal ramo $ProgressBranch" }
+        }
+        $kept = @((Get-GovernedTypes $Types (Get-Governs ([IO.File]::ReadAllText($path)))).FullName)
+        $lost[$decision.Id] = @((Get-GovernedTypes $Types (Get-Governs $progress)).FullName | Where-Object { $kept -cnotcontains $_ })
+    }
+    foreach ($id in $saved.Keys) {
+        $Ledger[$id] = @(@($Ledger[$id]) + @($saved[$id]) | Where-Object { $_ -and @($lost[$id]) -cnotcontains $_ } | Sort-Object -Unique)
     }
 }
 
