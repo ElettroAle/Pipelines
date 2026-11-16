@@ -85,6 +85,29 @@ BeforeAll {
         Invoke-Git $other push -q origin "HEAD:refs/heads/$Branch" | Out-Null
     }
 
+    function Push-Main($Checkout, [System.Collections.IDictionary]$Files, [string[]]$Removed = @(), [string]$Message) {
+        $other = Join-Path (New-Directory 'main') 'docs'
+        Invoke-Git ([IO.Path]::GetTempPath()) clone -q $Checkout.Origin $other 2>$null | Out-Null
+        Write-Files $other $Files
+        $Removed | ForEach-Object { Remove-Item (Join-Path $other $_) }
+        Save-Commit $other $Message
+        Invoke-Git $other push -q origin HEAD:main | Out-Null
+    }
+
+    function Test-MergesCleanly($Checkout) {
+        git -C $Checkout.Origin merge-tree --write-tree main "refs/heads/$Branch" 2>&1 | Out-Null
+        $clean = $LASTEXITCODE -eq 0
+        $global:LASTEXITCODE = 0
+        return $clean
+    }
+
+    function Test-ContainsTarget($Checkout) {
+        git -C $Checkout.Origin merge-base --is-ancestor main "refs/heads/$Branch"
+        $contains = $LASTEXITCODE -eq 0
+        $global:LASTEXITCODE = 0
+        return $contains
+    }
+
     function New-OriginRepository([string]$Repository) {
         $source = Join-Path (New-Directory 'source') $Repository
         Invoke-Git ([IO.Path]::GetTempPath()) init -q -b main $source | Out-Null
@@ -240,6 +263,67 @@ Describe 'Publish-PullRequest' {
             Get-OriginFile $checkout "refs/heads/$Branch" "$Generated/contoso.shop.ai.text.json" | Should -Be '{"testo":1}'
             Get-OriginFile $checkout "refs/heads/$Branch" "$Generated/contoso.shop.ai.dsl" | Should -Be 'nuova'
         }
+    }
+
+    Context 'con il ramo rimasto indietro rispetto alla destinazione' {
+        BeforeAll {
+            Reset-Stub -Active @(@{ pullRequestId = 77; createdBy = @{ id = 'build-identity' } })
+            $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'base'; 'README.md' = 'leggimi' }
+            Push-Branch $checkout @{ "$Generated/contoso.shop.ai.dsl" = 'del ramo' } 'docs: C4 model of Contoso.Shop.AI'
+            Push-Main $checkout @{ "$Generated/contoso.shop.ai.dsl" = 'cambiata in main'; 'README.md' = 'leggimi aggiornato' } -Message 'Merged PR 7: decisioni riviste'
+            Write-Files $checkout.Clone @{ "$Generated/contoso.shop.ai.dsl" = 'nuova' }
+            $result = Invoke-PullRequest $checkout
+        }
+
+        It 'termina senza errori' { $result.ExitCode | Should -Be 0 -Because $result.Output }
+
+        It 'porta sul ramo l''ultimo commit della destinazione' { Test-ContainsTarget $checkout | Should -BeTrue }
+
+        It 'porta sul ramo le cartelle come le ha scritte la pipeline' {
+            Get-OriginFile $checkout "refs/heads/$Branch" "$Generated/contoso.shop.ai.dsl" | Should -Be 'nuova'
+        }
+
+        It 'porta sul ramo i file fuori dalle cartelle come nella destinazione' {
+            Get-OriginFile $checkout "refs/heads/$Branch" 'README.md' | Should -Be 'leggimi aggiornato'
+        }
+
+        It 'lascia la PR integrabile nella destinazione senza conflitti' { Test-MergesCleanly $checkout | Should -BeTrue }
+    }
+
+    Context 'con il ramo indietro e un file fuori dalle cartelle cambiato da entrambi' {
+        BeforeAll {
+            Reset-Stub
+            $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'base'; 'altro.md' = 'base'; 'tolto.md' = 'base' }
+            Push-Branch $checkout @{ "$Generated/contoso.shop.ai.dsl" = 'del ramo'; 'altro.md' = 'del ramo'; 'tolto.md' = 'del ramo' } 'avanzo di una pipeline precedente'
+            Push-Main $checkout @{ 'altro.md' = 'di main' } -Removed @('tolto.md') -Message 'Merged PR 8: pulizia'
+            Write-Files $checkout.Clone @{ "$Generated/contoso.shop.ai.dsl" = 'nuova' }
+            $result = Invoke-PullRequest $checkout
+        }
+
+        It 'termina senza errori' { $result.ExitCode | Should -Be 0 -Because $result.Output }
+
+        It 'tiene il file cambiato come nella destinazione' { Get-OriginFile $checkout "refs/heads/$Branch" 'altro.md' | Should -Be 'di main' }
+
+        It 'toglie il file che la destinazione ha tolto' { Get-OriginFile $checkout "refs/heads/$Branch" 'tolto.md' | Should -BeNullOrEmpty }
+
+        It 'lascia la PR integrabile nella destinazione senza conflitti' { Test-MergesCleanly $checkout | Should -BeTrue }
+    }
+
+    Context 'con il ramo indietro e le cartelle gia'' uguali a quelle scritte' {
+        BeforeAll {
+            Reset-Stub -Active @(@{ pullRequestId = 77; createdBy = @{ id = 'build-identity' } })
+            $checkout = New-Checkout @{ "$Generated/contoso.shop.ai.dsl" = 'base'; 'README.md' = 'leggimi' }
+            Push-Branch $checkout @{ "$Generated/contoso.shop.ai.dsl" = 'nuova' } 'docs: C4 model of Contoso.Shop.AI'
+            Push-Main $checkout @{ 'README.md' = 'leggimi aggiornato' } -Message 'Merged PR 9: leggimi'
+            Write-Files $checkout.Clone @{ "$Generated/contoso.shop.ai.dsl" = 'nuova' }
+            $result = Invoke-PullRequest $checkout
+        }
+
+        It 'termina senza errori' { $result.ExitCode | Should -Be 0 -Because $result.Output }
+
+        It 'porta comunque sul ramo l''ultimo commit della destinazione' { Test-ContainsTarget $checkout | Should -BeTrue }
+
+        It 'non apre una seconda PR' { @(Get-StubRequests | Where-Object method -EQ 'POST').Count | Should -Be 0 }
     }
 
     Context 'con un file che la pipeline non scrive piu''' {
