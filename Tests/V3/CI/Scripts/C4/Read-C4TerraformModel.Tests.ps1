@@ -249,6 +249,22 @@ resource "azurerm_static_web_app" "site" {
             $result.Output | Should -Match 'servizio del modello che la dichiarazione non ospita \(contoso_infrastructure_kv_contoso_prod'
         }
 
+        It "ospita un container sulle risorse che hosts nomina con il nome Azure" {
+            $fragments = New-ContainerFragments
+            $grouped = [ordered]@{ containers = @([ordered]@{ id = 'contoso_infrastructure_mail'; name = 'Invio email dei clienti'; codeName = 'Invio email dei clienti'; tags = @(); components = @() }); relationships = @(); hosts = @([ordered]@{ container = 'contoso_infrastructure_mail'; name = 'ACS-NORTH-PROD' }) }
+            $fragments['contoso.infrastructure.customers.json'] = $grouped | ConvertTo-Json -Depth 10
+            $result = Invoke-TerraformReader (New-TerraformRepository) $fragments
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            (Get-NodePath (Get-DeploymentEnvironment $result.Fragment 'prod').nodes { param($node) @($node.instances) -contains 'contoso_infrastructure_mail' }) | Should -Be @('var.subscription_id', 'rg-north-prod')
+        }
+
+        It "segnala un nome di hosts assente dalla dichiarazione" {
+            $fragments = New-ContainerFragments
+            $fragments['contoso.infrastructure.customers.json'] = [ordered]@{ containers = @(); relationships = @(); hosts = @([ordered]@{ container = 'contoso_infrastructure_mail'; name = 'acs-west-prod' }) } | ConvertTo-Json -Depth 10
+            $result = Invoke-TerraformReader (New-TerraformRepository) $fragments
+            $result.Output | Should -Match 'risorsa che ospita un container assente dalla dichiarazione \(contoso_infrastructure_mail: acs-west-prod'
+        }
+
         It "segnala una risorsa di hosts assente dalla dichiarazione" {
             $fragments = New-ContainerFragments
             $fragments['contoso.infrastructure.azure.json'] = $fragments['contoso.infrastructure.azure.json'].Replace('module.worker', 'module.jobs')

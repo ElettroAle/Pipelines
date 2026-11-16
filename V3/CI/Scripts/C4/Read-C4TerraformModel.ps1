@@ -272,7 +272,7 @@ function Get-ModelContainers {
 }
 
 # Per ogni chiave di risorsa, i container che ospita: per nome nel codice in qualunque ambiente, o per
-# l'indirizzo che un frammento dichiara in hosts.
+# l'indirizzo o il nome Azure che un frammento dichiara in hosts.
 function Get-ContainerHosts($Model, $Items) {
     $byName = @{}
     foreach ($item in $Items) {
@@ -290,8 +290,10 @@ function Get-ContainerHosts($Model, $Items) {
         if ($codeName -and $byName.ContainsKey($codeName)) { $byName[$codeName] | ForEach-Object { & $add $_ $container.id } }
     }
     foreach ($entry in $Model.Hosts) {
-        $matched = @($Items | Where-Object { $_.Pattern -eq $entry.resource -or $_.Key -eq $entry.resource } | ForEach-Object Key | Sort-Object -Unique)
-        if (-not $matched) { $issues.Add((New-Issue $Repository 'risorsa che ospita un container assente dalla dichiarazione' "$($entry.container): $($entry.resource)")); continue }
+        $matched = if ($entry.name) { @($byName["$($entry.name)".ToLowerInvariant()]) } else { @($Items | Where-Object { $_.Pattern -eq $entry.resource -or $_.Key -eq $entry.resource } | ForEach-Object Key) }
+        $matched = @($matched | Where-Object { $_ } | Sort-Object -Unique)
+        $wanted = if ($entry.name) { $entry.name } else { $entry.resource }
+        if (-not $matched) { $issues.Add((New-Issue $Repository 'risorsa che ospita un container assente dalla dichiarazione' "$($entry.container): $wanted")); continue }
         $matched | ForEach-Object { & $add $_ $entry.container }
     }
     return [pscustomobject]@{ Hosted = $hosted; Issues = $issues.ToArray() }
@@ -435,7 +437,7 @@ function Get-ReadIssues {
         $missing = @($environments | Where-Object { -not @($_.Directories | Where-Object { $EnvironmentMap.Values -contains $_.Name }).Count })
         if ($missing) { return $missing | ForEach-Object { New-Issue $Repository 'ambiente senza directory nella dichiarazione' "$($_.Name)=$($EnvironmentMap[$_.Name])" } }
         $model = Get-ModelContainers
-        $hostPatterns = @($model.Hosts | ForEach-Object resource)
+        $hostPatterns = @($model.Hosts | ForEach-Object { $_.resource } | Where-Object { $_ })
         $itemsByEnvironment = [ordered]@{}
         foreach ($environment in $environments) {
             $itemsByEnvironment[$environment.Name] = @($environment.Directories | ForEach-Object { Expand-Instances $_ } | ForEach-Object { $_ } | ForEach-Object { Get-Resources $_ $hostPatterns })

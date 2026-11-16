@@ -7,7 +7,8 @@
 # generatore del testo del modello legge. Lo scrittore unisce i frammenti di un repository senza conoscere le
 # tecnologie che li hanno prodotti.
 # Un frammento puo' dichiarare le risorse dell'infrastruttura che ospitano un container (hosts, con
-# l'indirizzo Terraform <modulo radice>/<indirizzo> senza chiavi d'istanza) e gli ambienti di deployment
+# l'indirizzo Terraform <modulo radice>/<indirizzo> senza chiavi d'istanza in resource o con il nome Azure
+# della risorsa in name) e gli ambienti di deployment
 # (deployment: per ambiente i nodi annidati, ognuno con il testo che lo descrive, i figli e i container
 # che vi girano).
 # Un frammento puo' dichiarare anche gli indirizzi a cui un container si avvia in locale (addresses) e
@@ -81,8 +82,11 @@ function Write-C4Fragment([string]$Technology, [string[]]$Manifests, $Containers
     [IO.File]::WriteAllText((Join-Path (Resolve-Path $FragmentDirectory).Path (Split-Path (Get-FragmentPath $Technology) -Leaf)), (ConvertTo-Json $fragment -Depth 40))
 }
 
-function New-C4Host([string]$Container, [string]$Resource) {
-    return [ordered]@{ container = $Container; resource = $Resource }
+function New-C4Host([string]$Container, [string]$Resource, [string]$Name) {
+    $entry = [ordered]@{ container = $Container }
+    if ($Resource) { $entry.resource = $Resource }
+    if ($Name) { $entry.name = $Name }
+    return $entry
 }
 
 function New-C4Relationship([string]$Source, [string]$Target) {
