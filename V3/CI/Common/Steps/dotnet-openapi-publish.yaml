@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# ── CI Step: specifiche OpenAPI della build .NET ──────────────────────────────
+#
+# Pubblica le specifiche OpenAPI che la build dell'applicazione ha scritto nell'artefatto della run
+# artifactName, da cui la generazione della reference le scarica senza aprire il pacchetto
+# dell'applicazione. Una specifica indicata e assente fa fallire il passo: la reference non deve perdere
+# un'API in silenzio.
+#
+# Riusato da:
+#   CI/GitFlow/publish-dotNet.yaml
+#
+# Parametri
+# ─────────
+#   documents       → percorsi delle specifiche, relativi a sourceDirectory [REQUIRED]
+#   sourceDirectory → checkout dell'applicazione (default: $(Build.SourcesDirectory))
+#   artifactName    → nome dell'artefatto (default: openapi)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: documents
+    type: object
+
+  - name: sourceDirectory
+    type: string
+    default: '$(Build.SourcesDirectory)'
+
+  - name: artifactName
+    type: string
+    default: 'openapi'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - pwsh: |
+      $ErrorActionPreference = 'Stop'
+      $output = Join-Path $env:AGENT_TEMPDIRECTORY $env:OPENAPI_ARTIFACT
+      New-Item -ItemType Directory -Force -Path $output | Out-Null
+      $missing = @()
+      foreach ($document in ($env:OPENAPI_DOCUMENTS -split ';' | Where-Object { $_.Trim() })) {
+        $path = Join-Path $env:OPENAPI_SOURCE_DIRECTORY $document.Trim()
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { $missing += $document.Trim(); continue }
+        Copy-Item -LiteralPath $path -Destination $output
+        Write-Host "Specifica OpenAPI: $document"
+      }
+      if ($missing) {
+        Write-Host "##vso[task.logissue type=error]specifiche OpenAPI assenti dopo la build: $($missing -join ', ')"
+        exit 1
+      }
+      Write-Host "##vso[task.setvariable variable=openApiDirectory]$output"
+    displayName: 'Collect the OpenAPI documents'
+    env:
+      OPENAPI_DOCUMENTS: ${{ join(';', parameters.documents) }}
+      OPENAPI_SOURCE_DIRECTORY: ${{ parameters.sourceDirectory }}
+      OPENAPI_ARTIFACT: ${{ parameters.artifactName }}
+
+  - task: PublishPipelineArtifact@1
+    displayName: 'Publish the OpenAPI documents'
+    inputs:
+      targetPath: '$(openApiDirectory)'
+      artifact: '${{ parameters.artifactName }}'
+      publishLocation: 'pipeline'

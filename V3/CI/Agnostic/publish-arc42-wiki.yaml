@@ -21,6 +21,8 @@
 #   decisionsDirectory → cartella degli ADR (default: docs/decisions)
 #   composeSteps       → step che compongono il documento prima della pubblicazione (default: nessuno)
 #   documentFormats    → formati del documento unico allegato alla wiki, 'pdf' e 'docx' (default: nessuno)
+#   referenceRoot      → radice della reference nella wiki (reference-publish.yaml), i cui link si
+#                        aggiungono alle pagine e non al documento unico (default: nessuna)
 #   pool               → pool del job (default: hosted ubuntu-latest)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -58,6 +60,10 @@ parameters:
   - name: documentFormats
     type: object
     default: []
+
+  - name: referenceRoot
+    type: string
+    default: ''
 
   - name: pool
     type: object
@@ -101,3 +107,4 @@ stages:
               decisionsDirectory: ${{ parameters.decisionsDirectory }}
               sourcesDirectory: '$(Pipeline.Workspace)/s'
               documentFormats: ${{ parameters.documentFormats }}
+              referenceRoot: ${{ parameters.referenceRoot }}

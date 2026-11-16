@@ -1,0 +1,117 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# ── CI Step: Reference generata dal codice ───────────────────────────────────
+#
+# Genera la reference dal codice e la scrive nella wiki git di Azure DevOps sotto wikiRoot, che riscrive
+# per intero (V3/CI/Scripts/Reference/Publish-Reference.ps1): una pagina per modulo Terraform letto con
+# terraform-docs (variabili e output con la descrizione, l'elenco delle risorse), una per API dalle
+# specifiche OpenAPI (ogni endpoint con parametri, risposte e descrizione), quella dei comandi di un
+# Taskfile di go-task (ogni task non interno con descrizione e parametri) e la pagina radice con le
+# release notes. Accanto alle pagine scrive l'indice delle voci in .attachments/<wikiRoot>/, che
+# publish-arc42-wiki.yaml legge con referenceRoot, e collega alla reference la prima menzione di ogni
+# voce nelle pagine sotto linkRoots. Un commit solo nella wiki. Ogni repository con voci senza
+# descrizione (variabili e output dei moduli, endpoint, task) ha un work item di tipo workItemType
+# che le elenca: si apre alla prima generazione e si riscrive alle successive finche' resta aperto.
+# L'identita' della build deve contribuire alla wiki e creare e modificare work item.
+#
+# Riusato da:
+#   il consumer, nel job che segue l'integrazione nel ramo principale dei repository sorgente
+#
+# Parametri
+# ─────────
+#   wikiDirectory      → checkout del repository della wiki [REQUIRED]
+#   language           → lingua delle pagine, es. 'IT' o 'EN' (default: IT)
+#   wikiBranch         → ramo della wiki (default: wikiMaster)
+#   wikiRoot           → pagina sotto cui nasce la reference (default: Reference)
+#   wikiUrl            → indirizzo della wiki nei link (default: la wiki di progetto, <progetto>.wiki)
+#   modulesDirectory   → cartella dei moduli Terraform, uno per sottocartella (default: nessuna)
+#   modulesRepository  → repository dei moduli, nel work item delle voci senza descrizione
+#   taskfile           → Taskfile di go-task (default: nessuno)
+#   taskfileRepository → repository del Taskfile, nel work item delle voci senza descrizione
+#   apis               → API: name, repository, documents (percorsi delle specifiche OpenAPI) (default: nessuna)
+#   releaseNotes       → release notes nella pagina radice: name, page (percorso della pagina nella wiki)
+#   linkRoots          → pagine della wiki, con le sottopagine, da collegare alla reference (default: nessuna)
+#   workItemType       → tipo del work item delle voci senza descrizione (default: Bug)
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: wikiDirectory
+    type: string
+
+  - name: language
+    type: string
+    default: 'IT'
+
+  - name: wikiBranch
+    type: string
+    default: 'wikiMaster'
+
+  - name: wikiRoot
+    type: string
+    default: ''
+
+  - name: wikiUrl
+    type: string
+    default: ''
+
+  - name: modulesDirectory
+    type: string
+    default: ''
+
+  - name: modulesRepository
+    type: string
+    default: ''
+
+  - name: taskfile
+    type: string
+    default: ''
+
+  - name: taskfileRepository
+    type: string
+    default: ''
+
+  - name: apis
+    type: object
+    default: []
+
+  - name: releaseNotes
+    type: object
+    default: []
+
+  - name: linkRoots
+    type: object
+    default: []
+
+  - name: workItemType
+    type: string
+    default: 'Bug'
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: PowerShell@2
+    displayName: 'Publish the reference to the wiki'
+    inputs:
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Reference/Publish-Reference.ps1'
+      pwsh: true
+    env:
+      DOCUMENT_LANGUAGE: ${{ parameters.language }}
+      WIKI_DIRECTORY: ${{ parameters.wikiDirectory }}
+      WIKI_BRANCH: ${{ parameters.wikiBranch }}
+      WIKI_ROOT: ${{ parameters.wikiRoot }}
+      WIKI_URL: ${{ parameters.wikiUrl }}
+      REFERENCE_MODULES_DIRECTORY: ${{ parameters.modulesDirectory }}
+      REFERENCE_MODULES_REPOSITORY: ${{ parameters.modulesRepository }}
+      REFERENCE_TASKFILE: ${{ parameters.taskfile }}
+      REFERENCE_TASKFILE_REPOSITORY: ${{ parameters.taskfileRepository }}
+      REFERENCE_APIS: ${{ convertToJson(parameters.apis) }}
+      REFERENCE_RELEASE_NOTES: ${{ convertToJson(parameters.releaseNotes) }}
+      REFERENCE_LINK_ROOTS: ${{ join(';', parameters.linkRoots) }}
+      REFERENCE_WORK_ITEM_TYPE: ${{ parameters.workItemType }}
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
