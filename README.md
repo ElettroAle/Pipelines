@@ -231,6 +231,38 @@ extends:
 - **Requisiti.** Il repo dichiara il repository resource con alias `infrastructure`; pool Linux
   (Gitleaks gira in docker).
 
+### Verifica delle fonti di una PR (quality-sources)
+
+Build validation che lascia integrare una PR solo se porta le fonti del proprio perché: è collegata ad
+almeno un Task, ogni Task ha nella descrizione l'ADR con le sezioni MADR della lingua (intestazioni di
+secondo livello, in Markdown o in HTML) e il padre di ogni Task è un requisito (Requirement, User Story,
+Product Backlog Item) con i criteri di accettazione o un Bug con i passi di riproduzione. Il contenuto
+dell'ADR non si giudica. Ogni rilievo nomina il work item e la parte mancante, es.
+`Task 1600: manca "Opzioni considerate"`.
+
+```yaml
+trigger: none
+pr: none
+
+resources:
+  repositories:
+    - repository: infrastructure
+      type: github
+      name: <owner>/Pipelines
+      endpoint: <service connection GitHub>
+
+extends:
+  template: V3/CI/Agnostic/quality-sources.yaml@infrastructure
+  parameters:
+    mode: 'enforce'                     # 'off' | 'warn' | 'enforce' (default)
+    language: 'IT'                      # 'IT' (default) | 'EN'
+```
+
+- **Una pipeline, più repository.** La verifica non legge il codice della PR, solo la board: la stessa
+  pipeline può essere la build validation di più repository e rami.
+- **Ripetizione.** La board si legge a ogni run: completati i work item, si rilancia la build.
+- **Permessi.** L'identità della build legge i work item e le PR del repository.
+
 ### Verifica della documentazione (quality-arc42, quality-docs)
 
 Per un repository che tiene un documento in Markdown, una sezione per file. Ogni formato è un modulo:
@@ -799,7 +831,7 @@ Documentazione completa: [`Tests/README.md`](Tests/README.md)
 
 Gli script stanno in `CI/Scripts/`, una cartella per strumento o standard, con le librerie e i dati
 che usano solo loro: `Adr/`, `Arc42/` (con PlantUML), `C4/` (con Structurizr e il contratto del
-frammento), `Mermaid/` (con il parser in `Parser/`), `Documentation/`, `AzureRepos/`, `Release/` (con git-cliff e
+frammento), `Mermaid/` (con il parser in `Parser/`), `Documentation/`, `AzureBoards/`, `AzureRepos/`, `Release/` (con git-cliff e
 `cliff.toml`), `ScenarioCoverage/`, `LanguageModel/` (il modello linguistico dei passi di documentazione).
 `Common/` contiene solo ciò che usano più cartelle: modalità delle verifiche, lingua del documento con
 `Languages/`, lettura del Markdown. I test ricalcano lo stesso
@@ -829,6 +861,7 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/C4/TerraformValues.ps1` | Valori della dichiarazione Terraform di un ambiente: espressioni, funzioni, variabili, locals, moduli, override e remote state, con i valori sconosciuti |
 | `CI/Scripts/C4/Write-C4ModelText.ps1` | Testo del modello C4 di tutto il sistema (`c4-describe.yaml`): stesure del modello linguistico (`C4_TEXT_PROVIDER`) corrette in modo deterministico o rimandate al modello, catalogo unico di persone e sistemi esterni controllato dal modello, revisione di tutto il modello con prove verificate nella configurazione di produzione, testo salvato un container alla volta e ripreso al rilancio, correzioni elencate |
 | `CI/Scripts/C4/Export-C4CodeModel.ps1` | Parte del modello C4 generata dai frammenti di un repository sorgente e dal testo del sistema (`c4-generate.yaml`), con il contesto delle persone e dei sistemi esterni: errore sui file di progetto che nessun lettore legge, confronto in modalità `check` |
+| `CI/Scripts/AzureBoards/Test-PullRequestSources.ps1`, `PullRequestSources.ps1` | Fonti di una PR (`azureBoards-sources-verify.yaml`): almeno un Task collegato, ADR del Task con le sezioni MADR della lingua in Markdown o HTML, padre requisito con i criteri di accettazione o Bug con i passi di riproduzione; ogni rilievo nomina il work item e la parte mancante |
 | `CI/Scripts/AzureRepos/Publish-PullRequest.ps1` | Porta su un ramo le cartelle che la pipeline ha scritto e apre una PR Azure Repos (`azureRepos-pull-request.yaml`), con completamento automatico, cancellazione del ramo e bozza a scelta: riparte dai commit già sul ramo, nessuna PR senza differenze, una PR attiva si aggiorna, descrizione completata da un file |
 | `CI/Scripts/Arc42/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |
 | `CI/Scripts/Mermaid/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni e delle decisioni (`mermaid-verify.yaml`): errore con sezione, file e riga |

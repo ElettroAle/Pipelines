@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# ── CI Agnostic: Quality Sources ─────────────────────────────────────────────
+#
+# Build validation delle fonti di una PR (CI/Common/Steps/azureBoards-sources-verify.yaml): Task con
+# l'ADR, padre con i criteri di accettazione o i passi di riproduzione. Non legge il codice della PR,
+# quindi una sola pipeline puo' servire le policy di piu' repository; si rilancia a mano dopo aver
+# completato i work item.
+#
+# Il repo consumer dichiara il repository resource con alias `infrastructure`:
+# lo script di verifica vive in questo repo.
+#
+# Parametri
+# ─────────
+#   mode             → off | warn | enforce (default: enforce)
+#   language         → lingua delle sezioni degli ADR, es. 'IT' o 'EN' (default: IT)
+#   pool             → pool del job (default: hosted ubuntu-latest)
+#   timeoutInMinutes → timeout del job (default: 10)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: mode
+    type: string
+    default: 'enforce'
+    values: ['off', 'warn', 'enforce']
+
+  - name: language
+    type: string
+    default: 'IT'
+
+  - name: pool
+    type: object
+    default:
+      vmImage: 'ubuntu-latest'
+
+  - name: timeoutInMinutes
+    type: number
+    default: 10
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+jobs:
+  - job: PullRequestSources
+    displayName: 'Pull request sources'
+    pool: ${{ parameters.pool }}
+    timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
+    steps:
+      - checkout: infrastructure
+        path: pipeline-templates
+        fetchDepth: 1
+
+      - template: ../Common/Steps/azureBoards-sources-verify.yaml
+        parameters:
+          mode: ${{ parameters.mode }}
+          language: ${{ parameters.language }}
