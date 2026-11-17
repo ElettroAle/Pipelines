@@ -8,7 +8,8 @@
 # che toccano changePaths; i commit degli aggiornamenti precedenti restano fuori. Le verifiche indicate
 # giudicano ogni stesura, e una stesura che porta rilievi nuovi torna al modello con i motivi, fino a
 # maxDrafts stesure. Esiti:
-#   - stesura accettata: i documenti e il punto di partenza vanno nella PR dal ramo branch;
+#   - stesura accettata: i documenti riscritti e il punto di partenza vanno nella PR dal ramo branch, e
+#     nessun altro file: il checkout e' piu' vecchio del ramo principale e lo riporterebbe indietro;
 #   - stesure tutte scartate: i documenti non cambiano, si apre un work item di tipo workItemType con il
 #     cambiamento e i motivi, e il punto di partenza avanza;
 #   - modello non disponibile: nulla cambia e nessun work item, la run successiva riprende dallo stesso punto;
@@ -245,11 +246,7 @@ steps:
   - template: azureRepos-pull-request.yaml
     parameters:
       paths:
-        - ${{ parameters.docsDirectory }}
-        - ${{ parameters.decisionsDirectory }}
-        - ${{ parameters.baselineFile }}
-        - ${{ each guide in parameters.guides }}:
-          - ${{ guide }}
+        - '$(documentationUpdatePaths)'
       branch: ${{ parameters.branch }}
       title: ${{ parameters.title }}
       descriptionFile: '$(Agent.TempDirectory)/documentation-update.md'

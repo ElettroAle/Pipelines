@@ -255,6 +255,7 @@ Describe 'Punto di partenza e cambiamento' {
             $result = Invoke-Update $repository
             $result.Outcome.Status | Should -Be 'baseline'
             $result.Outcome.Publish | Should -BeTrue
+            $result.Outcome.Paths | Should -Be @('.documentation-baseline')
             (Get-RepositoryFile $repository '.documentation-baseline').Trim() | Should -Be $repository.Head
             Get-ModelEndpointRequests $Model | Should -BeNullOrEmpty
         }
@@ -268,6 +269,7 @@ Describe 'Punto di partenza e cambiamento' {
             $result = Invoke-Update $repository
             $result.Outcome.Status | Should -Be 'unchanged'
             $result.Outcome.Publish | Should -BeFalse
+            $result.Outcome.Paths | Should -BeNullOrEmpty
             Get-ModelEndpointRequests $Model | Should -BeNullOrEmpty
             Invoke-Git -C $repository.Root status --porcelain | Should -BeNullOrEmpty
         }
@@ -322,6 +324,10 @@ Describe 'Stesura accettata' {
     It "Il punto di partenza avanza al commit della run e il passo chiede la PR" {
         (Get-RepositoryFile $repository '.documentation-baseline').Trim() | Should -Be $repository.Head
         $result.Outcome.Publish | Should -BeTrue
+    }
+
+    It 'La PR porta solo i documenti riscritti e il punto di partenza, non le altre sezioni né la parte generata' {
+        $result.Outcome.Paths | Should -Be @($Section, $DecisionPath, '.documentation-baseline')
     }
 
     It 'La descrizione della PR riporta il riassunto e il cambiamento' {
@@ -417,6 +423,7 @@ Describe 'Stesure scartate' {
         It 'Il punto di partenza avanza e il passo chiede la PR con il solo punto di partenza' {
             $result.Outcome.Status | Should -Be 'rejected'
             $result.Outcome.Publish | Should -BeTrue
+            $result.Outcome.Paths | Should -Be @('.documentation-baseline')
             (Get-RepositoryFile $repository '.documentation-baseline').Trim() | Should -Be $repository.Head
             $result.Description | Should -Match 'work item 4242'
         }
@@ -438,6 +445,7 @@ Describe 'Modello senza documenti da cambiare o non disponibile' {
             $result = Invoke-Update $repository
             $result.Outcome.Status | Should -Be 'unchanged'
             $result.Outcome.Publish | Should -BeTrue
+            $result.Outcome.Paths | Should -Be @('.documentation-baseline')
             Invoke-Git -C $repository.Root status --porcelain -- docs | Should -BeNullOrEmpty
             (Get-RepositoryFile $repository '.documentation-baseline').Trim() | Should -Be $repository.Head
             $result.Description | Should -Match 'Nessun documento da cambiare\. Nulla da cambiare\.'
@@ -452,6 +460,7 @@ Describe 'Modello senza documenti da cambiare o non disponibile' {
             $result = Invoke-Update $repository @{ Endpoint = $ClosedEndpoint }
             $result.Outcome.Status | Should -Be 'unavailable'
             $result.Outcome.Publish | Should -BeFalse
+            $result.Outcome.Paths | Should -BeNullOrEmpty
             Invoke-Git -C $repository.Root status --porcelain | Should -BeNullOrEmpty
             Get-ModelEndpointRequests $Boards | Should -BeNullOrEmpty
         }
@@ -511,6 +520,7 @@ Describe 'Update-Documentation.ps1 come in pipeline' {
             $run = Invoke-Script $repository @{}
             $run.ExitCode | Should -Be 0
             $run.Output | Should -Match '##vso\[task\.setvariable variable=documentationUpdateChanged\]True'
+            $run.Output | Should -Match ('##vso\[task\.setvariable variable=documentationUpdatePaths\]' + [regex]::Escape("$Section;.documentation-baseline") + '(\n|$)')
             $run.Output | Should -Match '##\[section\]Documentazione aggiornata'
         }
         finally { Remove-UpdateRepository $repository }
@@ -536,5 +546,19 @@ Describe 'Update-Documentation.ps1 come in pipeline' {
             $run.Output | Should -Match '##vso\[task\.logissue type=error\]aggiornamento della documentazione: endpoint o modello non configurati'
         }
         finally { Remove-UpdateRepository $repository }
+    }
+}
+
+Describe 'documentation-update.yaml propone solo i file scritti' {
+    BeforeAll {
+        $template = [IO.File]::ReadAllText((Resolve-Path "$PSScriptRoot/../../../../../V3/CI/Common/Steps/documentation-update.yaml")) -replace "`r`n", "`n"
+        $script:PullRequestStep = ($template -split '(?m)^  - template: azureRepos-pull-request\.yaml\n', 2)[1]
+    }
+
+    It 'La PR riceve i percorsi che lo script ha scritto, non le cartelle della documentazione e delle decisioni' {
+        $paths = [regex]::Match($PullRequestStep, '(?ms)^      paths:\n(.*?)^      \w').Groups[1].Value
+        $paths | Should -Match '(?m)^        - ''\$\(documentationUpdatePaths\)''$'
+        $paths | Should -Not -Match 'parameters\.docsDirectory'
+        $paths | Should -Not -Match 'parameters\.decisionsDirectory'
     }
 }

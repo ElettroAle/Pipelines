@@ -16,6 +16,7 @@ catch {
 # La PR parte solo se il passo ha scritto qualcosa: con il ramo di un aggiornamento ancora aperto, una
 # copia del ramo principale lo riporterebbe indietro.
 Write-Host "##vso[task.setvariable variable=documentationUpdateChanged]$($outcome.Publish)"
+Write-Host "##vso[task.setvariable variable=documentationUpdatePaths]$($outcome.Paths -join ';')"
 if ($outcome.Status -in 'unavailable', 'rejected') {
     Write-Host "##vso[task.logissue type=warning]$($outcome.Message)"
     Write-Host '##vso[task.complete result=SucceededWithIssues;]'
