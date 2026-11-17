@@ -6,6 +6,7 @@
 #
 # Rispetto alla versione agnostica (CI/Agnostic/quality-dotNet.yaml), aggiunge:
 #   - Validazione titolo PR (Conventional Commits / SemVer) verso branch protetti
+#   - Verifica delle fonti della PR (Task con l'ADR, requisito con i criteri), se attivata
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -83,6 +84,17 @@ parameters:
     type: string
     default: 'dev,staging,main'
 
+  # Gate sulle fonti della PR (Task con l'ADR, padre con i criteri di accettazione):
+  # 'off' di default perche' l'identita' della build deve poter leggere la board.
+  - name: sourcesGateMode
+    type: string
+    default: 'off'
+    values: ['off', 'warn', 'enforce']
+
+  - name: sourcesGateBranches
+    type: string
+    default: 'dev'
+
   - name: pool
     type: object
     default:
@@ -110,6 +122,8 @@ stages:
       workspaceClean: ${{ parameters.workspaceClean }}
       titleGateMode: ${{ parameters.titleGateMode }}
       titleGateBranches: ${{ parameters.titleGateBranches }}
+      sourcesGateMode: ${{ parameters.sourcesGateMode }}
+      sourcesGateBranches: ${{ parameters.sourcesGateBranches }}
       checkoutPipelineTemplates: ${{ ne(parameters.scenarioCoverage, 'off') }}
       buildAndTestSteps:
         # SonarCloud Prepare invoca dotnet direttamente: su un agent senza SDK di sistema

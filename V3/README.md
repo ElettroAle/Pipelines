@@ -31,7 +31,7 @@ V3/
 │   ├── GitFlow/                # Entry point con governance GitFlow
 │   │   ├── Modules/            # Orchestratori specifici GitFlow
 │   │   │   ├── publish.yaml    # Aggiunge Set-Versioning con requireTag da branch e release notes
-│   │   │   └── quality.yaml    # Aggiunge validazione PR title (Conventional Commits, git-cliff)
+│   │   │   └── quality.yaml    # Aggiunge validazione PR title (Conventional Commits, git-cliff) e fonti della PR
 │   │   ├── publish-dotNet.yaml
 │   │   ├── publish-angular.yaml
 │   │   ├── quality-dotNet.yaml
@@ -111,8 +111,8 @@ Branch-conditional: `dev` → `staging` → `main`. Set-Versioning con tagging G
 |---|---|
 | `CI/GitFlow/publish-dotNet.yaml` | CI .NET con SemVer embedded e tagging Git |
 | `CI/GitFlow/publish-angular.yaml` | CI Angular con SemVer e tagging Git |
-| `CI/GitFlow/quality-dotNet.yaml` | Quality .NET + validazione PR title |
-| `CI/GitFlow/quality-angular.yaml` | Quality Angular + validazione PR title |
+| `CI/GitFlow/quality-dotNet.yaml` | Quality .NET + validazione PR title + fonti della PR (`sourcesGateMode`, `off` di default) |
+| `CI/GitFlow/quality-angular.yaml` | Quality Angular + validazione PR title + fonti della PR (`sourcesGateMode`, `off` di default) |
 
 ### TrunkFlow
 Tutto su `main`. La CI produce artifact pre-release, la CD promote taglia il tag SemVer.

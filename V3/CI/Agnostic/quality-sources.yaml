@@ -2,7 +2,7 @@
 
 # ── CI Agnostic: Quality Sources ─────────────────────────────────────────────
 #
-# Build validation delle fonti di una PR (CI/Common/Steps/azureBoards-sources-verify.yaml): Task con
+# Build validation delle fonti di una PR (CI/Common/Jobs/quality-sources.yaml): Task con
 # l'ADR, padre con i criteri di accettazione o i passi di riproduzione. Non legge il codice della PR,
 # quindi una sola pipeline puo' servire le policy di piu' repository; si rilancia a mano dopo aver
 # completato i work item.
@@ -41,16 +41,9 @@ parameters:
 # ─────────────────────────────────────────────────────────────────────────────
 
 jobs:
-  - job: PullRequestSources
-    displayName: 'Pull request sources'
-    pool: ${{ parameters.pool }}
-    timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
-    steps:
-      - checkout: infrastructure
-        path: pipeline-templates
-        fetchDepth: 1
-
-      - template: ../Common/Steps/azureBoards-sources-verify.yaml
-        parameters:
-          mode: ${{ parameters.mode }}
-          language: ${{ parameters.language }}
+  - template: ../Common/Jobs/quality-sources.yaml
+    parameters:
+      mode: ${{ parameters.mode }}
+      language: ${{ parameters.language }}
+      pool: ${{ parameters.pool }}
+      timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
