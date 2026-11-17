@@ -309,7 +309,7 @@ template d'ingresso: lo step `document-directories.yaml` le mette in `DOCS_DIREC
 
 | Convenzione | `IT` | `EN` |
 |---|---|---|
-| Marcatore di vista | `<!-- vista: <chiave> -->`, `<!-- vista: <tipo>* -->` | `<!-- view: <chiave> -->`, `<!-- view: <tipo>* -->` |
+| Marcatore di vista | `<!-- vista: <chiave> -->`, `<!-- vista: <tipo>* -->`, `<!-- vista: <prefisso>* -->` | `<!-- view: <chiave> -->`, `<!-- view: <tipo>* -->`, `<!-- view: <prefisso>* -->` |
 | Tag dei container con vista dei componenti | `Applicazione` | `Application` |
 | Parti della decisione con struttura e flusso nel codice | `Struttura nel codice`, `Flusso nel codice` | `Code structure`, `Code flow` |
 | Pagina della wiki (default di `wikiRoot`) | `Architettura` | `Architecture` |
@@ -373,8 +373,10 @@ Modello C4 (`c4-verify.yaml`, `CI/Scripts/C4/Test-C4Model.ps1`):
   (`Tecnico` in italiano) resta fuori, ad esempio con `exclude "element.tag==Tecnico"`, e compare dalla
   vista dei container in giù.
 - Una sezione mostra una vista con il marcatore di vista (`<!-- vista: <chiave> -->` in italiano), oppure
-  tutte le viste di un tipo, in ordine di chiave, con il tipo e l'asterisco (`<!-- vista: component* -->`):
-  così una vista nuova del modello generato si mostra senza scrivere il suo marcatore. Ogni vista è mostrata
+  tutte le viste di un tipo, in ordine di chiave, con il tipo e l'asterisco (`<!-- vista: component* -->`),
+  oppure, con un prefisso che non è un tipo, le viste la cui chiave inizia con il prefisso
+  (`<!-- vista: deployment_dev* -->`): così una vista nuova del modello generato si mostra senza scrivere
+  il suo marcatore. Ogni vista è mostrata
   da almeno una sezione e ogni marcatore nomina almeno una vista esistente. Senza questo step i marcatori
   non si controllano.
 - La parte generata dal codice (`c4-generate.yaml`) porta il tag `Generato` in italiano: ogni elemento
@@ -547,9 +549,12 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   su quella che un frammento dichiara in `hosts`; altrimenti la risorsa e' un nodo dell'infrastruttura.
   Una risorsa che ospita un container o che gira su un piano, di un tipo che le regole non riconoscono,
   ferma la lettura nominandola. Lo scrittore mette gli ambienti in `deployment/<repository>.dsl`, da
-  includere nel modello dopo il sistema software, e una vista per ambiente (`deployment_<ambiente>`) in
-  `deployment-views/<repository>.dsl`, da includere nelle viste; il testo di un nodo e' uno per tutti
-  gli ambienti.
+  includere nel modello dopo il sistema software, e le viste in `deployment-views/<repository>.dsl`, da
+  includere nelle viste: per ogni ambiente la vista d'insieme (`deployment_<ambiente>`) con i nodi dei
+  primi due livelli (sottoscrizioni e gruppi di risorse) senza il loro contenuto, e una vista per ogni
+  nodo del secondo livello con istanze o nodi dell'infrastruttura (`deployment_<ambiente>_<gruppo>`), con
+  tutto il suo contenuto. Se due gruppi dello stesso ambiente hanno lo stesso nome, la chiave aggiunge
+  quello del nodo che li contiene. Il testo di un nodo e' uno per tutti gli ambienti.
 - **Nomi.** Il nome nel codice senza il prefisso comune ai progetti del repository, a segmenti interi e
   più corto di ogni nome. L'identificativo si ricava dal nome completo, così un repository nomina gli
   elementi degli altri senza leggerli. Nel modello di tutto il sistema un'applicazione si chiama con il

@@ -16,6 +16,7 @@ BeforeAll {
         views = [pscustomobject]@{
             systemContextViews = @([pscustomobject]@{ key = 'contesto' })
             componentViews     = @([pscustomobject]@{ key = 'componenti-worker' }, [pscustomobject]@{ key = 'componenti-api' })
+            deploymentViews    = @([pscustomobject]@{ key = 'deployment_dev_rg-b' }, [pscustomobject]@{ key = 'deployment_dev' }, [pscustomobject]@{ key = 'deployment_dev_rg-a' }, [pscustomobject]@{ key = 'deployment_prod' })
         }
     }
 }
@@ -32,6 +33,14 @@ Describe "Structurizr — viste di un marcatore" {
     }
 
     It "Un tipo senza viste non nomina nessuna vista" {
-        @(Resolve-ViewMarker 'deployment*' $Workspace).Count | Should -Be 0
+        @(Resolve-ViewMarker 'dynamic*' $Workspace).Count | Should -Be 0
+    }
+
+    It "Un marcatore con un prefisso che non e' un tipo e l'asterisco nomina le viste la cui chiave inizia con il prefisso, in ordine di chiave" {
+        Resolve-ViewMarker 'deployment_dev*' $Workspace | Should -Be @('deployment_dev', 'deployment_dev_rg-a', 'deployment_dev_rg-b')
+    }
+
+    It "Un prefisso che nessuna chiave porta non nomina nessuna vista" {
+        @(Resolve-ViewMarker 'deployment_qa*' $Workspace).Count | Should -Be 0
     }
 }
