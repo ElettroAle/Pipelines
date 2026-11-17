@@ -23,6 +23,8 @@
 #   workspaceClean     → pulizia workspace prima del job (default: 'none', nessuna)
 #   titleGateMode      → off | warn | enforce (default: enforce)
 #   titleGateBranches  → branch target, separati da virgola, su cui gira il gate (default: dev,staging,main)
+#   sourcesGateMode    → off | warn | enforce (default: off)
+#   sourcesGateBranches → branch target, separati da virgola, su cui gira il gate delle fonti (default: dev)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -71,6 +73,18 @@ parameters:
     type: string
     default: 'dev,staging,main'
 
+  # Gate sulle fonti della PR: Task con l'ADR e padre con i criteri di accettazione o i
+  # passi di riproduzione. 'off' di default perche' l'identita' della build deve poter
+  # leggere la board: lo attiva il consumer che la concede.
+  - name: sourcesGateMode
+    type: string
+    default: 'off'
+    values: ['off', 'warn', 'enforce']
+
+  - name: sourcesGateBranches
+    type: string
+    default: 'dev'
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 stages:
@@ -104,6 +118,15 @@ stages:
               PR_ID: $(System.PullRequest.PullRequestId)
               SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
+      - template: ../../Common/Jobs/quality-sources.yaml
+        parameters:
+          name: ValidatePRSources
+          mode: ${{ parameters.sourcesGateMode }}
+          pool: ${{ parameters.pool }}
+          condition: >-
+            and(not(canceled()), eq(variables['Build.Reason'], 'PullRequest'), ne('${{ parameters.sourcesGateMode }}', 'off'),
+            containsValue(split('${{ parameters.sourcesGateBranches }}', ','), replace(variables['System.PullRequest.TargetBranch'], 'refs/heads/', '')))
+
       - template: ../../Common/Jobs/quality-build-and-test.yaml
         parameters:
           checkoutRepository: ${{ parameters.checkoutRepository }}
@@ -113,5 +136,5 @@ stages:
           timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
           workspaceClean: ${{ parameters.workspaceClean }}
           checkoutPipelineTemplates: ${{ parameters.checkoutPipelineTemplates }}
-          dependsOn: [ValidatePRTitle]
-          condition: and(not(canceled()), in(dependencies.ValidatePRTitle.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+          dependsOn: [ValidatePRTitle, ValidatePRSources]
+          condition: and(not(canceled()), in(dependencies.ValidatePRTitle.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ValidatePRSources.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))

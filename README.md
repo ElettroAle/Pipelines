@@ -82,6 +82,7 @@ branch, ecc.). Non include validazione SemVer né tagging Git.
 
 **GitFlow** (`CI/GitFlow/`) — estende la logica agnostica aggiungendo:
 - Validazione titolo PR su branch protetti (`main`, `staging`) tramite Conventional Commits
+- Verifica delle fonti della PR (Task con l'ADR, requisito con i criteri), se il consumer la attiva
 - Calcolo automatico della versione SemVer da commit history e tagging Git
 - Branch-conditional variable groups (`dev` → development, `staging` → staging, `main` → production)
 
@@ -260,6 +261,19 @@ extends:
 
 - **Una pipeline, più repository.** La verifica non legge il codice della PR, solo la board: la stessa
   pipeline può essere la build validation di più repository e rami.
+- **Dentro la quality GitFlow.** `GitFlow/quality-dotNet.yaml` e `GitFlow/quality-angular.yaml` hanno
+  la stessa verifica nel job `ValidatePRSources` (`CI/Common/Jobs/quality-sources.yaml`), accanto a
+  `ValidatePRTitle`: gira solo sulle PR verso i rami di `sourcesGateBranches` e BuildAndTest parte solo
+  se nessuno dei due gate fallisce.
+
+  ```yaml
+  extends:
+    template: V3/CI/GitFlow/quality-dotNet.yaml@infrastructure
+    parameters:
+      checkoutRepository: app_repo
+      sourcesGateMode: 'enforce'        # 'off' (default) | 'warn' | 'enforce'
+      sourcesGateBranches: 'dev'        # rami di destinazione, separati da virgola (default: dev)
+  ```
 - **Ripetizione.** La board si legge a ogni run: completati i work item, si rilancia la build.
 - **Permessi.** L'identità della build legge i work item e le PR del repository.
 

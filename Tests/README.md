@@ -21,6 +21,7 @@ Tests/
     │   │   └── Fixtures/Documentation/  # Documento valido e template arc42 italiano ufficiale, usati dai test della documentazione
     │   ├── Adr/                # Test-AdrCorpus, Test-DecisionClasses, Repair-DecisionClasses
     │   ├── Arc42/              # Test-Arc42Document, Publish-Arc42Wiki, PlantUml
+    │   ├── AzureBoards/        # Test-PullRequestSources, PullRequestSourcesTemplates
     │   │   └── Fixtures/       # Letture di un Word e di un PDF di Chrome: titoli numerati, indice, testo, link, immagini
     │   ├── Pandoc/             # Pandoc
     │   ├── Browser/            # Browser
@@ -334,6 +335,17 @@ la wiki e' un repository git locale con un origin bare; la board e' l'endpoint l
 | `ReferenceLinks.ps1` | Prima menzione, nome piu' lungo, parole intere, titoli, blocchi di codice, link, immagini e tag lasciati, codice in linea esatto, idempotenza, indice |
 | `ReferenceSources.ps1` | Taskfile con include piatti e con spazio dei nomi, task interni, descrizioni, parametri; endpoint ordinati, riferimenti risolti; moduli letti con terraform-docs, senza fonti dati; errori di lettura |
 | Template | Script di `dotnet-openapi-publish.yaml` che raccoglie le specifiche e fallisce su una assente; `openApiDocuments` in `GitFlow/publish-dotNet.yaml`; variabili di `reference-publish.yaml` uguali a quelle lette dallo script; `referenceRoot` nella pubblicazione arc42 |
+
+#### `PullRequestSourcesTemplates.Tests.ps1`
+
+Le condition dei job si leggono dal testo dei template con i parametri sostituiti e si valutano con le
+funzioni di espressione di Azure Pipelines che usano (`and`, `not`, `eq`, `ne`, `in`, `split`, `replace`,
+`containsValue`).
+
+| Suite | Scenario testato |
+|---|---|
+| Gate sulle fonti della PR nel modulo di quality GitFlow | `ValidatePRSources` gira sulla PR verso `dev` in `enforce` (`refs/heads/dev` e `dev`), non verso `main` o `staging`, non in una run che non e' una PR, non in `off`; piu' rami scelti dal consumer; default `off` su `dev` nel modulo e nei due entry point, che inoltrano i parametri; job condiviso con checkout del repo dei template e step delle fonti, riusato dalla pipeline agnostica |
+| BuildAndTest dopo i gate della PR | Dipende da `ValidatePRTitle` e `ValidatePRSources`; parte con ogni combinazione di `Succeeded`, `SucceededWithIssues`, `Skipped`, non parte se uno dei due fallisce |
 
 #### `ScenarioCoverage.Tests.ps1` (14 suite, 25 test)
 

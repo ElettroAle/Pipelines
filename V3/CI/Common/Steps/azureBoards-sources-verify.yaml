@@ -11,7 +11,7 @@
 # work item e le PR del repository.
 #
 # Riusato da:
-#   CI/Agnostic/quality-sources.yaml
+#   CI/Common/Jobs/quality-sources.yaml
 #
 # Parametri
 # ─────────

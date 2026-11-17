@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# ── CI Job: Quality — Pull Request Sources ────────────────────────────────────
+#
+# Job template condiviso della verifica delle fonti di una PR (CI/Common/Steps/azureBoards-sources-verify.yaml).
+# Fa il checkout del solo repo dei template: la verifica legge la board, non il codice della PR.
+#
+# Riusato da:
+#   CI/Agnostic/quality-sources.yaml
+#   CI/GitFlow/Modules/quality.yaml
+#
+# Parametri
+# ─────────
+#   name             → nome del job (default: PullRequestSources)
+#   mode             → off | warn | enforce (default: enforce)
+#   language         → lingua delle sezioni degli ADR, es. 'IT' o 'EN' (default: IT)
+#   pool             → pool del job (default: hosted ubuntu-latest)
+#   timeoutInMinutes → timeout del job (default: 10)
+#   condition        → condition del job (default: succeeded())
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: name
+    type: string
+    default: 'PullRequestSources'
+
+  - name: mode
+    type: string
+    default: 'enforce'
+    values: ['off', 'warn', 'enforce']
+
+  - name: language
+    type: string
+    default: 'IT'
+
+  - name: pool
+    type: object
+    default:
+      vmImage: 'ubuntu-latest'
+
+  - name: timeoutInMinutes
+    type: number
+    default: 10
+
+  - name: condition
+    type: string
+    default: 'succeeded()'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+jobs:
+  - job: ${{ parameters.name }}
+    displayName: 'Pull request sources'
+    pool: ${{ parameters.pool }}
+    timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
+    condition: ${{ parameters.condition }}
+    steps:
+      - checkout: infrastructure
+        path: pipeline-templates
+        fetchDepth: 1
+
+      - template: ../Steps/azureBoards-sources-verify.yaml
+        parameters:
+          mode: ${{ parameters.mode }}
+          language: ${{ parameters.language }}
