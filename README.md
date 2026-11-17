@@ -450,9 +450,10 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   altri della sua lista) che nessun frammento dichiara letto ferma la generazione nominando il file, e
   così un frammento che non si legge. Il file generato non si scrive a mano. Scrive anche
   `views/<repository in minuscolo>.dsl`, che le viste del documento includono come cartella
-  (`!include generated/views`). Un repository con applicazioni ha una vista dei container con chiave
-  `container-<gruppo>`: le sue applicazioni e gli elementi con cui hanno relazioni, in entrambe le direzioni.
-  La vista appartiene al sistema che in `workspace.dsl`, accanto alla cartella delle parti generate,
+  (`!include generated/views`). Ogni applicazione ha una vista dei container con chiave
+  `container-<applicazione>`: l'applicazione e gli elementi con cui ha relazioni, in entrambe le direzioni.
+  Una vista con tutte le applicazioni di un repository sommerebbe i loro vicini e non si leggerebbe alla
+  scala minima. La vista appartiene al sistema che in `workspace.dsl`, accanto alla cartella delle parti generate,
   include la cartella `containers`; se il workspace non lo dichiara la generazione si ferma. Un container
   con componenti ha la vista della logica, con l'identificativo del container come chiave, e quella
   dell'accesso ai dati, con chiave `<container>-accesso-dati` in italiano, ciascuna solo se ha componenti.
