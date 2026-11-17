@@ -391,28 +391,39 @@ function Format-Description([string]$Text, $Origin, $Change) {
     return "$Text`n`nCambiamento: $($Origin.Label)`n`n$commits`n"
 }
 
-function New-Outcome([string]$Status, [string]$Message, [bool]$Publish = $false) {
-    return @{ Status = $Status; Message = $Message; Publish = $Publish }
+function New-Outcome([string]$Status, [string]$Message, [bool]$Publish = $false, [string[]]$Paths = @()) {
+    return @{ Status = $Status; Message = $Message; Publish = $Publish; Paths = $Paths }
 }
 
-function Complete-Update($Settings, $Result, $Origin, $Change, [string]$Head) {
+function Get-BaselinePath($Settings) {
+    return Get-RelativePath (Get-FullPath $Settings.BaselineFile)
+}
+
+# La PR porta solo i file che il passo ha scritto: il resto del checkout e' piu' vecchio del ramo principale
+# e riporterebbe indietro cio' che altre pipeline vi hanno integrato nel frattempo.
+function Get-WrittenPaths($Settings, $Documents) {
+    $documents = @($Documents.Keys | Where-Object { [IO.File]::ReadAllText($Documents[$_].Path) -cne $Documents[$_].Original })
+    return @($documents) + (Get-BaselinePath $Settings)
+}
+
+function Complete-Update($Settings, $Result, $Origin, $Change, [string]$Head, $Documents) {
     switch ($Result.Status) {
         'unavailable' { return New-Outcome 'unavailable' "Modello non disponibile, la documentazione resta com'e' e la run successiva riprende da ${Head}: $($Result.Reason)" }
         'empty' {
             Save-Baseline $Settings $Head
             Save-Description $Settings (Format-Description "Nessun documento da cambiare. $($Result.Summary)".Trim() $Origin $Change)
-            return New-Outcome 'unchanged' 'Il cambiamento non chiede di cambiare la documentazione' $true
+            return New-Outcome 'unchanged' 'Il cambiamento non chiede di cambiare la documentazione' $true (Get-BaselinePath $Settings)
         }
         'accepted' {
             Save-Baseline $Settings $Head
             Save-Description $Settings (Format-Description $Result.Summary $Origin $Change)
-            return New-Outcome 'updated' "Documentazione aggiornata: $($Result.Summary)" $true
+            return New-Outcome 'updated' "Documentazione aggiornata: $($Result.Summary)" $true (Get-WrittenPaths $Settings $Documents)
         }
         default {
             $id = New-RejectionWorkItem $Settings $Origin $Change $Result.Rejections
             Save-Baseline $Settings $Head
             Save-Description $Settings (Format-Description "Aggiornamento respinto dalle verifiche a ogni stesura: work item $id." $Origin $Change)
-            return New-Outcome 'rejected' "Aggiornamento respinto a ogni stesura, la documentazione non cambia: work item $id ($($Result.Rejections -join '; '))" $true
+            return New-Outcome 'rejected' "Aggiornamento respinto a ogni stesura, la documentazione non cambia: work item $id ($($Result.Rejections -join '; '))" $true (Get-BaselinePath $Settings)
         }
     }
 }
@@ -422,7 +433,7 @@ function Invoke-DocumentationUpdate($Settings) {
     $baseline = Read-Baseline $Settings
     if (-not $baseline) {
         Save-Baseline $Settings $head
-        return New-Outcome 'baseline' "Punto di partenza registrato: $head" $true
+        return New-Outcome 'baseline' "Punto di partenza registrato: $head" $true (Get-BaselinePath $Settings)
     }
     $change = Get-Change $Settings $baseline
     if (-not $change.Commits) { return New-Outcome 'unchanged' 'Nessun cambiamento da documentare' }
@@ -432,5 +443,5 @@ function Invoke-DocumentationUpdate($Settings) {
     $decisions = Get-Decisions $Settings
     $documents = Get-Documents $Settings $change $decisions
     $result = Write-Update $Settings $client $change $origin $documents (Format-DecisionIndex $decisions)
-    return Complete-Update $Settings $result $origin $change $head
+    return Complete-Update $Settings $result $origin $change $head $documents
 }
