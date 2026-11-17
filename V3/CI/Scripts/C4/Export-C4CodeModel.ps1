@@ -13,6 +13,9 @@
 # La revisione del testo da' a ogni risorsa il suo nome e unisce le copie: una copia non si scrive.
 # Un indirizzo che un container del repository chiama in locale si lega con i frammenti di tutto il
 # sistema: se non vi si avvia nessun container, o piu' d'uno, la generazione si ferma.
+# Gli ambienti di deployment della parte stanno in GENERATED_DIRECTORY/deployment/<repository>.dsl, da
+# includere nel modello dopo il sistema software, e le loro viste, una per ambiente con la chiave
+# deployment_<ambiente>, in GENERATED_DIRECTORY/deployment-views/<repository>.dsl.
 # Le viste della parte stanno in GENERATED_DIRECTORY/views/<repository>.dsl. Un repository con applicazioni
 # ha la vista dei container container-<gruppo>, con le applicazioni e gli elementi con cui hanno relazioni,
 # nel sistema che nel workspace accanto a GENERATED_DIRECTORY include i container generati. Un container
@@ -276,6 +279,42 @@ function Format-Views($Fragments, [string]$System) {
     return ($lines -join "`n") + "`n"
 }
 
+# Gli ambienti di deployment della parte: il modello li accetta solo fuori dal sistema software e dopo i
+# container a cui le istanze rimandano, quindi stanno in un file proprio. Il testo di un nodo e' uno per
+# tutti gli ambienti.
+function Get-DeploymentEnvironments($Fragments) {
+    return @($Fragments | ForEach-Object { @($_.Content.deployment) } | Where-Object { $_ })
+}
+
+function Format-DeploymentNode($Node, [string]$Indent) {
+    $description = Format-Text $script:ModelText.Elements[$Node.text]
+    if ($Node.kind -eq 'infrastructureNode') {
+        return "$Indent$($Node.id) = infrastructureNode $(Format-Text $Node.name) $description $(Format-Text $Node.technology) $(Format-Text $GeneratedTag)"
+    }
+    $lines = @("$Indent$($Node.id) = deploymentNode $(Format-Text $Node.name) $description $(Format-Text $Node.technology) $(Format-Text $GeneratedTag) {")
+    $lines += @($Node.children | Where-Object { $_ } | ForEach-Object { Format-DeploymentNode $_ "$Indent    " })
+    $lines += @($Node.instances | Where-Object { $_ } | ForEach-Object { Get-KeptId $_ } | Select-Object -Unique | ForEach-Object { "$Indent    containerInstance $_" })
+    return $lines + "$Indent}"
+}
+
+function Format-Deployment($Environments) {
+    $lines = @("// Ambienti di deployment generati da $Repository con Export-C4CodeModel.ps1: non si modificano a mano.")
+    foreach ($environment in $Environments) {
+        $lines += "deploymentEnvironment $(Format-Text $environment.name) {"
+        $lines += @($environment.nodes | Where-Object { $_ } | ForEach-Object { Format-DeploymentNode $_ '    ' })
+        $lines += '}'
+    }
+    return ($lines -join "`n") + "`n"
+}
+
+function Format-DeploymentViews($Environments) {
+    $lines = @("// Viste di deployment generate da $Repository con Export-C4CodeModel.ps1: non si modificano a mano.")
+    foreach ($environment in $Environments) {
+        $lines += "deployment * $(Format-Text $environment.name) $(Format-Text "deployment_$(ConvertTo-Identifier $environment.name)") {", '    include *', '    autoLayout lr', '}'
+    }
+    return ($lines -join "`n") + "`n"
+}
+
 function Get-CheckIssues([System.Collections.IDictionary]$Outputs) {
     foreach ($name in $Outputs.Keys) {
         $target = Join-Path $GeneratedDirectory $name
@@ -312,7 +351,7 @@ function Get-GenerationIssues {
     $callIssues = @(Get-CallIssues $calls)
     if ($callIssues) { return $callIssues }
     $script:CallRelationships = Get-C4CallRelationships $calls
-    if (-not @($fragments.Content.containers).Count) { return New-Issue $Repository 'nessuna applicazione riconosciuta' $SourceDirectory }
+    if (-not @($fragments.Content.containers).Count -and -not @(Get-DeploymentEnvironments $fragments).Count) { return New-Issue $Repository 'nessuna applicazione riconosciuta' $SourceDirectory }
 
     $script:ModelText = Get-PartText $text $fragments
     $script:ApplicationNames = Get-C4ApplicationNames @(Read-FragmentContents | ForEach-Object { @($_.containers) })
@@ -321,6 +360,11 @@ function Get-GenerationIssues {
     $script:PartRelationships = @(Get-PartRelationships $fragments)
     $name = $Repository.ToLowerInvariant()
     $outputs = [ordered]@{ "containers/$name.dsl" = Format-Model $fragments; "views/$name.dsl" = Format-Views $fragments $system; 'context.dsl' = Format-Context }
+    $environments = Get-DeploymentEnvironments $fragments
+    if ($environments) {
+        $outputs["deployment/$name.dsl"] = Format-Deployment $environments
+        $outputs["deployment-views/$name.dsl"] = Format-DeploymentViews $environments
+    }
     & $ModeActions[$Mode] $outputs
 }
 

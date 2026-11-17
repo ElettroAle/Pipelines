@@ -259,6 +259,40 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
     }
 
+    Context "Scenario: nodi di deployment descritti" {
+        BeforeAll {
+            . "$PSScriptRoot/Fixtures/TerraformFixture.ps1"
+            Reset-Stub
+            $infrastructure = 'Contoso.Infrastructure'
+            $files = Add-Sources (New-DescribedEngine) $infrastructure (New-TerraformRepository)
+            $root = New-Workspace $files
+            $deploymentEnvironment = @{ SOURCE_REPOSITORIES = "$C4SourceRepositories,$infrastructure"; C4_DEPLOYMENT_ENVIRONMENTS = 'dev=dev-x;sta=sta-x;prod=prod-x'; C4_TERRAFORM_INSTANCES = 'Customers:customer_id=environments/{environment}/data/*' }
+            $res = Invoke-Text $root @($Engine, $infrastructure) @{ $infrastructure = @('terraform') } $deploymentEnvironment
+            $deployment = $res.Generated['deployment/contoso.infrastructure.dsl']
+            $unit = 'contoso_infrastructure_deployment_app'
+            $subnet = 'contoso_infrastructure_app_azurerm_subnet_engine'
+            Remove-Workspace $root
+        }
+
+        It "Allora la generazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E i nodi di un modulo radice sono una parte da descrivere, con un elemento per nodo e non per ambiente" {
+            Get-RequestedUnits | Should -Contain $unit
+            $structure = [regex]::Match((Get-UserMessage (Get-UnitRequests $unit)[0]), '(?s)STRUTTURA DELLA PARTE \(JSON\):\n(.*?)\n\n[A-Z ]+:').Groups[1].Value
+            @([regex]::Matches($structure, [regex]::Escape("`"$subnet`""))) | Should -HaveCount 1
+        }
+
+        It "E la parte dei nodi non compare fra i container del sistema" {
+            Get-StubRequests | ForEach-Object { Get-UserMessage $_ } | Where-Object { $_ -match "ALTRI CONTAINER DEL SISTEMA:(?s:.*)$unit" } | Should -BeNullOrEmpty
+        }
+
+        It "E il nodo ha la descrizione del testo in ogni ambiente" {
+            @([regex]::Matches($deployment, "deploymentNode `"snet-engine`" `"Descrizione di $subnet\.`"")) | Should -HaveCount 3 -Because $deployment
+        }
+    }
+
     Context "Scenario: cosa il generatore manda al modello" {
         BeforeAll {
             Reset-Stub
