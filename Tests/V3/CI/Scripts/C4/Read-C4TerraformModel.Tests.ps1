@@ -334,6 +334,7 @@ Describe 'Export-C4CodeModel.ps1 sugli ambienti di deployment' {
         $result = Invoke-C4Steps $files 'Contoso.Infrastructure' @('C4/Read-C4TerraformModel.ps1', 'C4/Export-C4CodeModel.ps1') 'write' (New-ContainerFragments)
         $deployment = $result.Generated['deployment/contoso.infrastructure.dsl']
         $views = $result.Generated['deployment-views/contoso.infrastructure.dsl']
+        $ProdGroupPrefix = 'contoso_infrastructure_prod_subscriptions_var_subscription_id_resourcegroups_'
     }
 
     AfterAll {
@@ -359,9 +360,39 @@ Describe 'Export-C4CodeModel.ps1 sugli ambienti di deployment' {
         $deployment | Should -Match 'containerInstance contoso_infrastructure_kv_contoso_prod'
     }
 
-    It 'scrive una vista di deployment per ambiente con la sua chiave' {
+    It "scrive per ambiente la vista d'insieme con la sua chiave" {
         $views | Should -Match 'deployment \* "dev" "deployment_dev" \{'
         $views | Should -Match 'deployment \* "prod" "deployment_prod" \{'
+    }
+
+    It "la vista d'insieme mostra i gruppi di risorse senza il loro contenuto" {
+        $overview = Get-Block $views 'deployment \* "prod" "deployment_prod" \{'
+        $overview | Should -Match 'include \*'
+        foreach ($group in 'rg_contoso_prod', 'rg_north_prod', 'rg_south_prod', 'rg_shared_shared') {
+            $overview | Should -Match "exclude `"element\.parent==$($ProdGroupPrefix)$group`""
+        }
+    }
+
+    It 'scrive una vista per ogni gruppo di risorse con contenuto, con il gruppo e tutto il suo contenuto' {
+        foreach ($group in 'rg_contoso_prod', 'rg_north_prod', 'rg_shared_shared') {
+            Get-Block $views "deployment \* `"prod`" `"deployment_prod_$group`" \{" | Should -Match "include $($ProdGroupPrefix)$group\s"
+        }
+    }
+
+    It 'non scrive la vista di un gruppo di risorse senza istanze ne'' nodi dell''infrastruttura' {
+        $views | Should -Not -Match 'deployment_prod_rg_south_prod'
+    }
+
+    It 'distingue con il nome del nodo che li contiene due gruppi con lo stesso nome nello stesso ambiente' {
+        $group = { param($Root) [ordered]@{ id = "${Root}_rg_app"; name = 'rg-app'; technology = 'Group'; kind = 'deploymentNode'; text = 'x'; children = @([ordered]@{ id = "${Root}_rg_app_db"; name = 'db'; technology = 'Db'; kind = 'infrastructureNode'; text = 'x'; children = @(); instances = @() }); instances = @() } }
+        $roots = @('sub-a', 'sub-b') | ForEach-Object { [ordered]@{ id = $_ -replace '-', '_'; name = $_; technology = 'Root'; kind = 'deploymentNode'; text = 'x'; children = @(& $group ($_ -replace '-', '_')); instances = @() } }
+        $fragments = New-ContainerFragments
+        $fragments['contoso.infrastructure.deployment.json'] = [ordered]@{ containers = @(); relationships = @(); deployment = @([ordered]@{ name = 'prod'; nodes = @($roots) }) } | ConvertTo-Json -Depth 10
+        $twins = Invoke-C4Steps ([ordered]@{ 'source/README.md' = "# x`n" }) 'Contoso.Infrastructure' @('C4/Export-C4CodeModel.ps1') 'write' $fragments
+        $twins.ExitCode | Should -Be 0 -Because $twins.Output
+        $twinViews = $twins.Generated['deployment-views/contoso.infrastructure.dsl']
+        Get-Block $twinViews 'deployment \* "prod" "deployment_prod_sub_a_rg_app" \{' | Should -Match 'include sub_a_rg_app\s'
+        Get-Block $twinViews 'deployment \* "prod" "deployment_prod_sub_b_rg_app" \{' | Should -Match 'include sub_b_rg_app\s'
     }
 
     It 'non scrive ambienti per un repository senza dichiarazione di deployment' {
@@ -395,7 +426,22 @@ workspace {
                 })
             $export = Export-StructurizrWorkspace (Join-Path $dir 'workspace.dsl')
             $export.Error | Should -BeNullOrEmpty
-            @($export.Workspace.views.deploymentViews.key) | Should -Be @('deployment_dev', 'deployment_sta', 'deployment_prod')
+            @($export.Workspace.views.deploymentViews.key) | Should -Contain 'deployment_prod'
+            @($export.Workspace.views.deploymentViews.key) | Should -Contain 'deployment_prod_rg_contoso_prod'
+            $names = @{}
+            $nodes = @($export.Workspace.model.deploymentNodes)
+            while ($nodes) {
+                $nodes | ForEach-Object { $names["$($_.id)"] = $_.name; @($_.infrastructureNodes) | Where-Object { $_ } | ForEach-Object { $names["$($_.id)"] = $_.name } }
+                $nodes = @($nodes | ForEach-Object { @($_.children) } | Where-Object { $_ })
+            }
+            $shown = { param($Key) @(($export.Workspace.views.deploymentViews | Where-Object key -EQ $Key).elements | ForEach-Object { $names["$($_.id)"] } | Where-Object { $_ }) }
+            $overview = & $shown 'deployment_prod'
+            $overview | Should -Contain 'rg-contoso-prod'
+            $overview | Should -Not -Contain 'snet-engine'
+            $overview | Should -Not -Contain 'pe-contoso-prod-api'
+            $group = & $shown 'deployment_prod_rg_contoso_prod'
+            $group | Should -Contain 'snet-engine'
+            $group | Should -Not -Contain 'rg-shared-shared'
         }
         finally { Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue }
     }

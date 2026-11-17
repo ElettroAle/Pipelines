@@ -89,13 +89,17 @@ function Export-StructurizrWorkspace([string]$WorkspaceDsl) {
     }
 }
 
-# Un marcatore di vista nomina una vista con la sua chiave, oppure tutte le viste di un tipo con il nome del
-# tipo e l'asterisco (component*: le viste dei componenti), in ordine di chiave: cosi' una vista nuova del
-# modello generato si mostra senza che nessuno scriva il suo marcatore. L'ordine non e' quello del modello
-# perche' Structurizr include i file di una cartella nell'ordine in cui li trova.
+# Un marcatore di vista nomina una vista con la sua chiave, oppure con l'asterisco tutte le viste di un tipo
+# (component*: le viste dei componenti) o, con un prefisso che non e' un tipo, quelle la cui chiave inizia
+# con il prefisso (deployment_dev*), in ordine di chiave: cosi' una vista nuova del modello generato si
+# mostra senza che nessuno scriva il suo marcatore. L'ordine non e' quello del modello perche' Structurizr
+# include i file di una cartella nell'ordine in cui li trova.
 function Resolve-ViewMarker([string]$Marker, $Workspace) {
-    if ($Marker -notmatch '^(?<kind>\w+)\*$') { return @($Marker) }
-    return @($Workspace.views."$($Matches.kind)Views" | Where-Object { $_ } | ForEach-Object key | Sort-Object)
+    if ($Marker -notmatch '^(?<prefix>[\w-]+)\*$') { return @($Marker) }
+    $prefix = $Matches.prefix
+    $kind = $Workspace.views.PSObject.Properties["${prefix}Views"]
+    $views = if ($kind) { @($kind.Value) } else { @($Workspace.views.PSObject.Properties | Where-Object Name -Like '*Views' | ForEach-Object { @($_.Value) } | Where-Object { $_ -and "$($_.key)".StartsWith($prefix) }) }
+    return @($views | Where-Object { $_ } | ForEach-Object key | Sort-Object)
 }
 
 # Esporta ogni vista del workspace in C4-PlantUML: chiave della vista -> testo del diagramma.

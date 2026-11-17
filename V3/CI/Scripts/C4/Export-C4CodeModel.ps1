@@ -14,8 +14,9 @@
 # Un indirizzo che un container del repository chiama in locale si lega con i frammenti di tutto il
 # sistema: se non vi si avvia nessun container, o piu' d'uno, la generazione si ferma.
 # Gli ambienti di deployment della parte stanno in GENERATED_DIRECTORY/deployment/<repository>.dsl, da
-# includere nel modello dopo il sistema software, e le loro viste, una per ambiente con la chiave
-# deployment_<ambiente>, in GENERATED_DIRECTORY/deployment-views/<repository>.dsl.
+# includere nel modello dopo il sistema software, e le loro viste in
+# GENERATED_DIRECTORY/deployment-views/<repository>.dsl: per ambiente quella d'insieme, deployment_<ambiente>,
+# e una per ogni gruppo del secondo livello che contiene qualcosa, deployment_<ambiente>_<gruppo>.
 # Le viste della parte stanno in GENERATED_DIRECTORY/views/<repository>.dsl. Ogni applicazione ha la vista
 # dei container container-<applicazione>, con gli elementi con cui ha relazioni, nel sistema che nel
 # workspace accanto a GENERATED_DIRECTORY include i container generati: una vista con tutte le applicazioni
@@ -306,10 +307,38 @@ function Format-Deployment($Environments) {
     return ($lines -join "`n") + "`n"
 }
 
+# Structurizr non disegna un nodo senza istanze ne' nodi dell'infrastruttura, quindi un gruppo cosi' non ha vista.
+function Test-DeploymentContent($Node) {
+    return $Node.kind -eq 'infrastructureNode' -or @($Node.instances | Where-Object { $_ }).Count -or
+        @($Node.children | Where-Object { $_ -and (Test-DeploymentContent $_) }).Count
+}
+
+# I gruppi di un ambiente sono i nodi del secondo livello; la chiave della vista porta il nome del gruppo e,
+# se un altro gruppo dell'ambiente ha lo stesso nome, quello del nodo che lo contiene.
+function Get-DeploymentGroups($Environment) {
+    $groups = @(foreach ($root in @($Environment.nodes | Where-Object { $_ })) {
+            @($root.children | Where-Object { $_ -and $_.kind -ne 'infrastructureNode' }) | ForEach-Object { [pscustomobject]@{ Node = $_; Root = $root } }
+        })
+    $repeated = @($groups | Group-Object { $_.Node.name } | Where-Object Count -GT 1 | ForEach-Object Name)
+    foreach ($group in $groups) {
+        $name = if ($repeated -contains $group.Node.name) { "$($group.Root.name)_$($group.Node.name)" } else { $group.Node.name }
+        $group | Add-Member -NotePropertyName Slug -NotePropertyValue (ConvertTo-Identifier $name) -PassThru
+    }
+}
+
+# Un ambiente intero non si legge alla scala minima: la vista d'insieme mostra i gruppi senza il loro
+# contenuto e ogni gruppo ha la sua vista con tutto cio' che contiene.
 function Format-DeploymentViews($Environments) {
     $lines = @("// Viste di deployment generate da $Repository con Export-C4CodeModel.ps1: non si modificano a mano.")
     foreach ($environment in $Environments) {
-        $lines += "deployment * $(Format-Text $environment.name) $(Format-Text "deployment_$(ConvertTo-Identifier $environment.name)") {", '    include *', '    autoLayout lr', '}'
+        $key = "deployment_$(ConvertTo-Identifier $environment.name)"
+        $groups = @(Get-DeploymentGroups $environment)
+        $lines += "deployment * $(Format-Text $environment.name) $(Format-Text $key) {", '    include *'
+        $lines += @($groups | ForEach-Object { "    exclude $(Format-Text "element.parent==$($_.Node.id)")" })
+        $lines += '    autoLayout lr', '}'
+        foreach ($group in @($groups | Where-Object { Test-DeploymentContent $_.Node })) {
+            $lines += "deployment * $(Format-Text $environment.name) $(Format-Text "${key}_$($group.Slug)") {", "    include $($group.Node.id)", '    autoLayout lr', '}'
+        }
     }
     return ($lines -join "`n") + "`n"
 }
