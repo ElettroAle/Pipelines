@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# ── CI Step: Guides ──────────────────────────────────────────────────────────
+#
+# Verifica che ogni guida faccia una cosa sola secondo il suo tipo (V3/CI/Scripts/Guides/Test-Guides.ps1):
+# un tutorial ha passi numerati e chiude con la sezione del risultato; una procedura apre con compito,
+# prerequisiti e risultato atteso e non spiega il perche' senza un rimando al documento. Nomi delle parti e
+# segnali della spiegazione seguono la lingua del documento (document-language.yaml). La cartella delle guide
+# viene da GUIDES_DIRECTORY (document-directories.yaml), salvo guidesDirectory.
+#
+# Riusato da:
+#   CI/Agnostic/quality-arc42.yaml
+#
+# Parametri
+# ─────────
+#   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
+#   guidesDirectory    → cartella delle guide (default: $(GUIDES_DIRECTORY))
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: mode
+    type: string
+    default: 'enforce'
+    values: ['off', 'warn', 'enforce']
+
+  - name: guidesDirectory
+    type: string
+    default: '$(GUIDES_DIRECTORY)'
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: PowerShell@2
+    displayName: 'Guides (${{ parameters.mode }})'
+    inputs:
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Guides/Test-Guides.ps1'
+      workingDirectory: '$(Build.SourcesDirectory)'
+      pwsh: true
+    env:
+      GATE_MODE: ${{ parameters.mode }}
+      GUIDES_DIRECTORY: ${{ parameters.guidesDirectory }}

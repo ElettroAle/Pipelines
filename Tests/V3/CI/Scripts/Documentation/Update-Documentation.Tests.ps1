@@ -297,6 +297,30 @@ Describe 'Punto di partenza e cambiamento' {
     }
 }
 
+Describe 'Guide che l aggiornamento puo riscrivere' {
+    It 'Una cartella di guide porta ogni suo file Markdown, un file porta se stesso, un percorso inesistente nulla' {
+        $root = Join-Path ([IO.Path]::GetTempPath()) "pester-docs-update-guides-$(New-Guid)"
+        Write-Files ([ordered]@{
+                'docs/guides/home.md'                 = "# Home`n"
+                'docs/guides/procedures/tenant.md'    = "# Tenant`n"
+                'docs/guides/tutorials/primo.md'      = "# Primo`n"
+                'docs/guides/tutorials/immagine.png'  = 'png'
+                'README.md'                           = "# Leggimi`n"
+            }) $root
+        Push-Location $root
+        try {
+            $documents = Get-Documents @{ DocsDirectory = 'docs/architecture'; Guides = @('docs/guides', 'README.md', 'docs/nessuna') } @{ Files = @() } @()
+        }
+        finally {
+            Pop-Location
+            Remove-Item -Recurse -Force $root
+        }
+
+        @($documents.Keys) | Should -Be @('docs/guides/home.md', 'docs/guides/procedures/tenant.md', 'docs/guides/tutorials/primo.md', 'README.md')
+        @($documents.Values | ForEach-Object IsDecision) | Should -Not -Contain $true
+    }
+}
+
 Describe 'Stesura accettata' {
     BeforeAll {
         $repository = New-UpdateRepository -Change $QueueChange

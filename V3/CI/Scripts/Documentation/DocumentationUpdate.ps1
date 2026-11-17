@@ -242,7 +242,8 @@ function Get-Documents($Settings, $Change, $Decisions) {
     }
     foreach ($guide in $Settings.Guides) {
         $path = Get-FullPath $guide
-        if (Test-Path $path -PathType Leaf) { $documents[(Get-RelativePath $path)] = New-Document $path $false }
+        $files = if (Test-Path $path -PathType Container) { @(Get-ChildItem $path -File -Recurse -Filter '*.md' | Sort-Object FullName | ForEach-Object FullName) } elseif (Test-Path $path -PathType Leaf) { @($path) } else { @() }
+        foreach ($file in $files) { $documents[(Get-RelativePath $file)] = New-Document $file $false }
     }
     foreach ($decision in $Decisions) {
         $relative = Get-RelativePath $decision.Path

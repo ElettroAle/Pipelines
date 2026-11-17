@@ -10,7 +10,13 @@
     DataAccessViewSuffix = 'accesso-dati'
     TextLanguage   = 'italiano'
     AdrSections    = @('Contesto e problema', 'Opzioni considerate', 'Esito della decisione')
-    StyleRuleParts = @{ Common = 'Regole'; Sections = 'Regole delle sezioni'; Decisions = 'Regole delle decisioni' }
+    StyleRuleParts = @{ Common = 'Regole'; Sections = 'Regole delle sezioni'; Decisions = 'Regole delle decisioni'; Guides = 'Regole delle guide' }
+    Guides         = @{
+        HomePage = 'Home'; TutorialsRoot = 'Tutorial'; ProceduresRoot = 'Procedure'
+        TutorialResult = 'Risultato'; ProcedureOpening = @('Compito', 'Prerequisiti', 'Risultato atteso')
+        ExplanationMarkers = @('perché', 'poiché', 'dato che', 'il motivo', 'la ragione')
+        MissingResult = 'risultato mancante'; ProcedureOpeningIssue = 'apertura della procedura'; ExplanationIssue = 'spiegazione fuori posto'
+    }
     AdrVersionsSection = 'Versioni'
     AdrSupersedesLabel = 'Sostituisce'
     AdrCodeStructureSection = 'Struttura nel codice'

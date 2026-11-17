@@ -254,6 +254,7 @@ parametri di formato e senza condizioni sul formato.
 | `flows-verify.yaml` | `Test-DiagramFlows.ps1`, con `Sync-DiagramLabels.ps1` e, con `endpoint`, `Repair-DiagramFlows.ps1` in modalità `fix` | flussi fatti degli elementi del modello C4, riconosciuti per identificativo, e delle classi delle decisioni; in una PR, diagrammi allineati ai nomi del modello e riparati da un modello linguistico quando il modello C4 toglie o aggiunge elementi | C4, Mermaid |
 | `documentation-verify.yaml` | `Test-Documentation.ps1` | rimandi esistenti, soglie numeriche di leggibilità | nessun formato |
 | `documentation-style.yaml` | `Test-DocumentationStyle.ps1` | giudizio dello stile con la guida del repository | nessun formato |
+| `guides-verify.yaml` | `Test-Guides.ps1` | guide che fanno una cosa sola: un tutorial finisce con il risultato, una procedura apre con compito, prerequisiti e risultato atteso, nessuna delle due spiega il perché senza un rimando | Diátaxis |
 | `documentation-update.yaml` | `Update-Documentation.ps1`, poi `Publish-PullRequest.ps1` | dopo un cambiamento nel ramo principale un modello linguistico riscrive i documenti toccati, le verifiche indicate giudicano ogni stesura, e una PR in auto-complete la porta nel ramo principale; respinta a ogni stesura apre un work item, con il modello non disponibile si riprende alla run successiva | nessun formato |
 | `adr-register.yaml` | `Register-Decisions.ps1`, poi `Publish-PullRequest.ps1` | dopo un'integrazione nel ramo principale dei repository sorgente l'ADR in Markdown di ogni Task arrivato nel ramo principale entra nel corpus, accettato e senza modifiche al testo, con una PR in auto-complete; un Task senza ADR, un ADR non in Markdown o una decisione respinta dalla verifica del corpus aprono un work item; una run fallita si recupera con la successiva | MADR |
 
@@ -274,6 +275,13 @@ nuova è un file nuovo in `Languages/`, senza toccare gli script.
 template d'ingresso: lo step `document-directories.yaml` le mette in `DOCS_DIRECTORY` e
 `DECISIONS_DIRECTORY` per tutto il job, e gli step che il consumer inietta (`c4-verify.yaml`,
 `mermaid-verify.yaml`, `flows-verify.yaml`) le usano senza ripeterle. Un parametro passato allo step vince sulla dichiarazione.
+
+**Guide.** Con `guidesDirectory` (default nessuna) `quality-arc42` verifica anche le guide della
+piattaforma: i tutorial in `<guidesDirectory>/tutorials`, le procedure in `<guidesDirectory>/procedures` e la
+home della wiki in `<guidesDirectory>/home.md`. `guides-verify.yaml` controlla la forma di ogni guida, i
+controlli comuni ne verificano rimandi e leggibilità, e il giudizio dello stile le giudica con le regole
+comuni e quelle della parte «Regole delle guide» della guida di stile, senza correggerne i titoli di secondo
+livello. Le stesse cartelle passano a `publish-arc42-wiki` e, come voce di `guides`, a `documentation-update`.
 
 | Convenzione | `IT` | `EN` |
 |---|---|---|
@@ -728,6 +736,10 @@ pubblicazione:
   verificato) scrive il Word e l'HTML che Chrome headless stampa in PDF A4; lo step installa Node.js e, su
   Linux, le librerie di Chrome con `ensure-chrome-libraries.yaml`. La stessa fonte da' gli stessi file: le
   date nel documento sono quelle del commit, e una pubblicazione senza modifiche non crea commit.
+- Con `guidesDirectory` la home delle guide diventa la pagina `Home`, la prima della wiki; i tutorial e le
+  procedure diventano sottopagine delle radici `Tutorial` e `Procedure` (`Tutorials` e `How-to guides` in
+  inglese), che seguono `wikiRoot` nell'ordine della radice. Il documento unico contiene, dopo le sezioni,
+  i tutorial e le procedure, non la home: un rimando alla home vi resta testo.
 
 ```yaml
 resources:
@@ -840,6 +852,8 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/Documentation/Test-Documentation.ps1` | Controlli comuni a ogni documento (`documentation-verify.yaml`): rimandi esistenti, soglie numeriche di leggibilità |
 | `CI/Scripts/Documentation/Update-Documentation.ps1`, `DocumentationUpdate.ps1` | Aggiornamento della documentazione (`documentation-update.yaml`) con il modello linguistico (`DOCS_UPDATE_PROVIDER`): cambiamento dai commit dopo il punto di partenza registrato nel repository, esclusi quelli degli aggiornamenti precedenti; stesure giudicate dalle verifiche indicate, scartate solo per rilievi nuovi e rimandate con i motivi; versione nuova delle decisioni cambiate con la voce che nomina l'origine; work item per un aggiornamento respinto a ogni stesura; con il modello non disponibile nulla cambia e il punto di partenza resta |
 | `CI/Scripts/Documentation/Test-DocumentationStyle.ps1` | Giudizio dello stile di un documento (`documentation-style.yaml`) con il modello linguistico (`STYLE_JUDGE_PROVIDER`) che riceve la guida di stile del repository come istruzioni |
+| `CI/Scripts/Guides/Test-Guides.ps1` | Verifica delle guide di `GUIDES_DIRECTORY` (`guides-verify.yaml`, controlli in `GuideChecks.ps1`): risultato dei tutorial, apertura delle procedure, spiegazioni senza rimando |
+| `CI/Scripts/Common/Guides.ps1` | Guide di un documento ordinate per tipo (tutorial, procedure, home), lette dalle verifiche, dall'aggiornamento e dalla pubblicazione nella wiki |
 | `CI/Scripts/LanguageModel/LanguageModel.ps1` | Contratto del modello linguistico dei passi di documentazione: `New-LanguageModel` crea il client del fornitore scelto (`foundry`, il default, o `anthropic`), `Invoke-LanguageModel` restituisce la risposta letta secondo lo schema e i token usati. Ogni altro file della cartella è il modulo di un fornitore |
 | `CI/Scripts/LanguageModel/Foundry.ps1` | Fornitore Foundry: chat completions Azure OpenAI con token Entra ID della Azure CLI, risposta in JSON schema stretto, livello di ragionamento, seme tolto se il deployment lo rifiuta |
 | `CI/Scripts/LanguageModel/Anthropic.ps1` | Fornitore Anthropic: API Messages a consumo con la chiave `ANTHROPIC_API_KEY` (senza chiave il passo fallisce nominandola), risposta in `output_config.format` JSON schema, livello di ragionamento in `output_config.effort`, `max_tokens` (default 32000); un rifiuto o una risposta troncata sono errori |

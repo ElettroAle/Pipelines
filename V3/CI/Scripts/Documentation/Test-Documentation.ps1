@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Controlli oggettivi che valgono per ogni documento, qualunque sia il suo formato: rimandi a
-# file, ancore e decisioni esistenti e soglie numeriche di leggibilita'. La struttura la
-# verifica il modulo del formato, lo stile lo giudica Test-DocumentationStyle.ps1.
+# file, ancore e decisioni esistenti e soglie numeriche di leggibilita', nelle sezioni e nelle guide
+# di GUIDES_DIRECTORY. La struttura la verifica il modulo del formato, lo stile lo giudica
+# Test-DocumentationStyle.ps1.
 
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
 . "$PSScriptRoot/../Common/MarkdownText.ps1"
+. "$PSScriptRoot/../Common/Guides.ps1"
 
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
 $decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }
@@ -52,8 +54,16 @@ function Test-References($Section) {
     }
 }
 
+function Get-GuideSections([string]$Directory) {
+    return @(Get-GuideFiles $Directory | ForEach-Object {
+            $content = ConvertFrom-MarkdownSection ([IO.File]::ReadAllText($_.File.FullName))
+            $title = if ($content.Title) { $content.Title } else { $_.File.Name }
+            [pscustomobject]@{ File = $_.File; Title = $title; Content = $content }
+        })
+}
+
 function Get-DocumentationIssues {
-    $sections = Get-DocumentSections $docsDirectory
+    $sections = @(Get-DocumentSections $docsDirectory) + @(Get-GuideSections (Get-GuidesDirectory))
     $sections | ForEach-Object { Test-References $_ }
     $sections | ForEach-Object { Test-Readability $_ }
 }

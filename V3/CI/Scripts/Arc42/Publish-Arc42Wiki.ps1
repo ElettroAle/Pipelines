@@ -8,9 +8,12 @@
 # WIKI_ROOT, le sue immagini e la sua voce nell'ordine della radice: il resto della wiki resta com'e'.
 # Con DOCUMENT_FORMATS (pdf, docx) le stesse pagine diventano anche un documento unico (Arc42Document.ps1), che
 # lo stesso commit allega alla wiki e che la pagina WIKI_ROOT nomina.
+# Le guide di GUIDES_DIRECTORY (Guides.ps1) diventano pagine sotto le radici dei tutorial e delle procedure,
+# e la loro home la prima pagina della wiki; il documento unico contiene tutorial e procedure, non la home.
 
 . "$PSScriptRoot/../Common/MarkdownText.ps1"
 . "$PSScriptRoot/../Common/WikiNames.ps1"
+. "$PSScriptRoot/../Common/Guides.ps1"
 . "$PSScriptRoot/../Reference/ReferenceLinks.ps1"
 . "$PSScriptRoot/../C4/Structurizr.ps1"
 . "$PSScriptRoot/../C4/ViewImages.ps1"
@@ -22,6 +25,7 @@ $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/a
 $decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }
 $wikiDirectory = $env:WIKI_DIRECTORY
 $wikiRoot = if ($env:WIKI_ROOT) { $env:WIKI_ROOT } else { $DocumentLanguage.WikiRoot }
+$guidesDirectory = Get-GuidesDirectory
 $wikiBranch = if ($env:WIKI_BRANCH) { $env:WIKI_BRANCH } else { 'wikiMaster' }
 $repositoryUrl = "$($env:SYSTEM_COLLECTIONURI)$($env:SYSTEM_TEAMPROJECT)/_git/$($env:BUILD_REPOSITORY_NAME)"
 $sourceVersion = if ($env:BUILD_SOURCEVERSION) { $env:BUILD_SOURCEVERSION.Substring(0, [math]::Min(8, $env:BUILD_SOURCEVERSION.Length)) } else { 'locale' }
@@ -101,6 +105,27 @@ function Get-DocumentPages {
         if ($decisionsParent) { $decisionsParent.Children.Add($decision) } else { $topLevel.Add($decision) }
     }
     return , $topLevel
+}
+
+function Get-GuidePages {
+    $homePage = $null
+    $roots = [ordered]@{}
+    foreach ($guide in @(Get-GuideFiles $guidesDirectory)) {
+        $source = ConvertTo-RepositoryPath $guide.File.FullName
+        $markdown = Read-Markdown $guide.File.FullName
+        if ($guide.Type -eq 'home') {
+            $homePage = New-Page $source $DocumentLanguage.Guides.HomePage '' $markdown
+            continue
+        }
+        if (-not $markdown.Title) { throw "${source}: la guida non ha un titolo" }
+        if (-not $roots.Contains($guide.Type)) {
+            $rootTitle = if ($guide.Type -eq 'tutorial') { $DocumentLanguage.Guides.TutorialsRoot } else { $DocumentLanguage.Guides.ProceduresRoot }
+            $roots[$guide.Type] = New-Page (ConvertTo-RepositoryPath (Split-Path $guide.File.FullName)) $rootTitle '' ([pscustomobject]@{ Body = '' })
+        }
+        $root = $roots[$guide.Type]
+        $root.Children.Add((New-Page $source (ConvertTo-PlainText $markdown.Title) $root.WikiPath $markdown))
+    }
+    return [pscustomobject]@{ Home = $homePage; Roots = @($roots.Values) }
 }
 
 function Get-AllPages($Pages) {
@@ -247,13 +272,14 @@ function Write-PageTree($Pages, [string]$Folder, [hashtable]$Contents) {
     Write-WikiFile "$Folder/.order" ((@($Pages | ForEach-Object Name) -join "`n") + "`n")
 }
 
-# L'ordine della radice elenca anche le pagine che la pubblicazione non possiede: si aggiunge solo
-# la voce del documento, in testa, se manca.
-function Update-RootOrder([string]$RootName) {
+# L'ordine della radice elenca anche le pagine che la pubblicazione non possiede: si aggiungono in
+# testa solo le voci che mancano, e la home va sempre per prima.
+function Update-RootOrder([string[]]$Names, [string]$First) {
     $orderFile = Join-Path $wikiDirectory '.order'
     $entries = if (Test-Path $orderFile) { @([IO.File]::ReadAllLines($orderFile) | Where-Object { $_.Trim() }) } else { @() }
-    if ($entries -contains $RootName) { return }
-    [IO.File]::WriteAllText($orderFile, ((@($RootName) + $entries) -join "`n") + "`n")
+    $entries = @($Names | Where-Object { $entries -notcontains $_ }) + $entries
+    if ($First) { $entries = @($First) + @($entries | Where-Object { $_ -ne $First }) }
+    [IO.File]::WriteAllText($orderFile, ($entries -join "`n") + "`n")
 }
 
 function Write-ViewImages([hashtable]$Images) {
@@ -265,10 +291,18 @@ function Write-ViewImages([hashtable]$Images) {
 }
 
 # La pagina radice rimanda ai file del documento, che stanno accanto alle immagini.
-function Write-Document($Pages, [hashtable]$Contents, [hashtable]$Images, [System.Collections.IDictionary]$Documents) {
+function Write-Document($Pages, [hashtable]$Contents, [hashtable]$Images, [System.Collections.IDictionary]$Documents, $Guides) {
     $rootName = ConvertTo-WikiName $wikiRoot
     $imagesFolder = "$AttachmentsFolder/$rootName"
-    Remove-Item -Recurse -Force (Join-Path $wikiDirectory $rootName), (Join-Path $wikiDirectory "$rootName.md"), (Join-Path $wikiDirectory $imagesFolder) -ErrorAction SilentlyContinue
+    $guideRoots = @($Guides.Roots | ForEach-Object Name)
+    $homeName = if ($Guides.Home) { $Guides.Home.Name } else { $null }
+    $guidePaths = @($homeName | Where-Object { $_ } | ForEach-Object { "$_.md" }) + @($guideRoots | ForEach-Object { $_, "$_.md" })
+    Remove-Item -Recurse -Force (@($rootName, "$rootName.md", $imagesFolder) + $guidePaths | ForEach-Object { Join-Path $wikiDirectory $_ }) -ErrorAction SilentlyContinue
+    if ($homeName) { Write-WikiFile "$homeName.md" $Contents[$Guides.Home.Source] }
+    foreach ($root in $Guides.Roots) {
+        Write-WikiFile "$($root.Name).md" "[[_TOSP_]]`n"
+        Write-PageTree $root.Children $root.Name $Contents
+    }
     $rootPage = @('[[_TOSP_]]')
     if ($Documents.Count) { $rootPage += @('') + @($Documents.Keys | ForEach-Object { "- [$_](/$imagesFolder/$_)" }) }
     Write-WikiFile "$rootName.md" (($rootPage -join "`n") + "`n")
@@ -279,14 +313,14 @@ function Write-Document($Pages, [hashtable]$Contents, [hashtable]$Images, [Syste
         New-Item -ItemType Directory -Force -Path (Split-Path $path) | Out-Null
         [IO.File]::WriteAllBytes($path, $Documents[$file])
     }
-    Update-RootOrder $rootName
-    return [pscustomobject]@{ RootName = $rootName; ImagesFolder = $imagesFolder }
+    Update-RootOrder (@($homeName | Where-Object { $_ }) + @($rootName) + $guideRoots) $homeName
+    return [pscustomobject]@{ RootName = $rootName; ImagesFolder = $imagesFolder; Guides = $guidePaths }
 }
 
 # git add rifiuta un percorso che non c'e' e non e' mai stato pubblicato: le immagini mancano a un
 # documento senza viste C4.
 function Get-DocumentPaths($Written) {
-    $paths = @("$($Written.RootName).md", $Written.RootName, '.order')
+    $paths = @("$($Written.RootName).md", $Written.RootName, '.order') + $Written.Guides
     $imagesPublished = Test-Path (Join-Path $wikiDirectory $Written.ImagesFolder)
     if ($imagesPublished -or (git -C $wikiDirectory ls-files -- $Written.ImagesFolder)) { $paths += $Written.ImagesFolder }
     return $paths
@@ -298,7 +332,7 @@ function Invoke-WikiGit {
     return $output
 }
 
-function Publish-Document($Pages, [hashtable]$Contents, [hashtable]$Images, [System.Collections.IDictionary]$Documents) {
+function Publish-Document($Pages, [hashtable]$Contents, [hashtable]$Images, [System.Collections.IDictionary]$Documents, $Guides) {
     $authorization = if ($env:SYSTEM_ACCESSTOKEN) { @('-c', "http.extraheader=AUTHORIZATION: bearer $env:SYSTEM_ACCESSTOKEN") } else { @() }
     $name = if ($env:BUILD_REQUESTEDFOR) { $env:BUILD_REQUESTEDFOR } else { 'Architecture Wiki' }
     $email = if ($env:BUILD_REQUESTEDFOREMAIL) { $env:BUILD_REQUESTEDFOREMAIL } else { 'architecture-wiki@noreply.local' }
@@ -308,7 +342,7 @@ function Publish-Document($Pages, [hashtable]$Contents, [hashtable]$Images, [Sys
     for ($attempt = 1; $attempt -le $MaxPushAttempts; $attempt++) {
         Invoke-WikiGit @authorization fetch -q origin $wikiBranch | Out-Null
         Invoke-WikiGit reset -q --hard FETCH_HEAD | Out-Null
-        $written = Write-Document $Pages $Contents $Images $Documents
+        $written = Write-Document $Pages $Contents $Images $Documents $Guides
         Invoke-WikiGit add -A -- @(Get-DocumentPaths $written) | Out-Null
         git -C $wikiDirectory diff --cached --quiet
         if ($LASTEXITCODE -eq 0) {
@@ -361,16 +395,20 @@ function Publish-Arc42Wiki {
     if (-not $wikiDirectory -or -not (Test-Path (Join-Path $wikiDirectory '.git'))) { throw "WIKI_DIRECTORY non indica un checkout della wiki: '$wikiDirectory'" }
     $formats = Get-DocumentFormats "$env:DOCUMENT_FORMATS"
     $pages = Get-DocumentPages
-    $pagesBySource = @{}
-    foreach ($page in (Get-AllPages $pages)) { $pagesBySource[$page.Source] = $page }
+    $guides = Get-GuidePages
+    $documentPages = @($pages) + @($guides.Roots)
+    $documentPagesBySource = @{}
+    foreach ($page in (Get-AllPages $documentPages)) { $documentPagesBySource[$page.Source] = $page }
+    $pagesBySource = $documentPagesBySource.Clone()
+    if ($guides.Home) { $pagesBySource[$guides.Home.Source] = $guides.Home }
     $views = Get-Views
     $shownViews = @{}
     $contents = @{}
     foreach ($page in $pagesBySource.Values) { $contents[$page.Source] = Convert-PageBody $page $pagesBySource $views $shownViews }
     $images = Get-ViewImages $shownViews
-    $documents = if ($formats) { New-Arc42Document $pages $pagesBySource $views $images $formats } else { [ordered]@{} }
+    $documents = if ($formats) { New-Arc42Document $documentPages $documentPagesBySource $views $images $formats } else { [ordered]@{} }
     Add-ReferenceLinksToPages $contents
-    Publish-Document $pages $contents $images $documents
+    Publish-Document $pages $contents $images $documents $guides
 }
 
 try { Publish-Arc42Wiki }

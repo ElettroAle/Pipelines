@@ -39,7 +39,7 @@
 #   guide              → guida di stile del documento (default: docs/STYLE.md)
 #   docsDirectory      → cartella delle sezioni del documento (default: docs/architecture)
 #   decisionsDirectory → cartella degli ADR (default: docs/decisions)
-#   guides             → altri file Markdown che l'aggiornamento puo' riscrivere (default: nessuno)
+#   guides             → altri file Markdown, o cartelle di file Markdown, che l'aggiornamento puo' riscrivere (default: nessuno)
 #   changePaths        → cartelle o file il cui cambiamento si documenta (default: decisionsDirectory e
 #                        <docsDirectory>/c4/generated)
 #   baselineFile       → file con l'ultimo commit documentato (default: .documentation-baseline)

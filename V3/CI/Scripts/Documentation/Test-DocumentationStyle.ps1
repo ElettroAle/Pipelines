@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# Giudica lo stile delle sezioni e delle decisioni di un documento con un modello linguistico: la guida
+# Giudica lo stile delle sezioni, delle decisioni e delle guide di un documento con un modello linguistico: la guida
 # di stile del repository e' l'istruzione del modello, e la pipeline non conosce nessuna regola. Ogni
 # tipo di documento ha il suo profilo: le regole che valgono per lui e i titoli che il suo modello impone.
 # In una PR si giudicano le righe cambiate dall'ultimo giudizio di ogni file; con STYLE_FIX le correzioni
@@ -10,10 +10,13 @@
 
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
 . "$PSScriptRoot/../Common/MarkdownText.ps1"
+. "$PSScriptRoot/../Common/Guides.ps1"
 . "$PSScriptRoot/../LanguageModel/LanguageModel.ps1"
 
 $docsDirectory = if ($env:DOCS_DIRECTORY) { $env:DOCS_DIRECTORY } else { 'docs/architecture' }
 $decisionsDirectory = if ($env:DECISIONS_DIRECTORY) { $env:DECISIONS_DIRECTORY } else { 'docs/decisions' }
+$guidesDirectory = Get-GuidesDirectory
+$documentPaths = @($docsDirectory, $decisionsDirectory) + @($guidesDirectory | Where-Object { $_ })
 $guidePath = if ($env:STYLE_GUIDE) { $env:STYLE_GUIDE } else { 'docs/STYLE.md' }
 $glossaryFileName = $env:DOCS_GLOSSARY
 $targetBranch = $env:TARGET_BRANCH -replace '^refs/heads/', '' -replace '^\$\(.*\)$', ''
@@ -142,10 +145,13 @@ function Get-GuideRules([string]$Guide) {
     return @($selected | ForEach-Object { [pscustomobject]@{ Part = $_.Part; Title = $_.Title; Text = ($_.Lines -join "`n").Trim() } })
 }
 
-function Select-ProfileRules($Rules, [string]$Kind) {
+function Get-ProfilePart([string]$Kind) {
     $parts = $DocumentLanguage.StyleRuleParts
-    $own = if ($Kind -eq 'decision') { $parts.Decisions } else { $parts.Sections }
-    return @($Rules | Where-Object { $_.Part -in @($parts.Common, $own) })
+    return @{ decision = $parts.Decisions; guide = $parts.Guides; section = $parts.Sections }[$Kind]
+}
+
+function Select-ProfileRules($Rules, [string]$Kind) {
+    return @($Rules | Where-Object { $_.Part -in @($DocumentLanguage.StyleRuleParts.Common, (Get-ProfilePart $Kind)) })
 }
 
 # Le regole di un tipo di documento, indipendenti dalla parte in cui stanno e dal loro ordine: spostare
@@ -171,25 +177,30 @@ function Remove-GuidePart([string]$Guide, [string]$Part) {
     return $kept -join "`n"
 }
 
-# Il titolo di primo livello di una sezione e' quello del template arc42, e i titoli di secondo livello
-# di una decisione sono le parti del modello MADR: li verificano i controlli oggettivi, non si correggono.
+# Il titolo di primo livello di una sezione e' quello del template arc42, i titoli di secondo livello
+# di una decisione sono le parti del modello MADR e quelli di una guida le parti del suo tipo: li
+# verificano i controlli oggettivi, non si correggono.
 function New-DocumentProfile([string]$Kind, $Setup) {
-    $parts = $DocumentLanguage.StyleRuleParts
-    $decision = $Kind -eq 'decision'
-    $other = if ($decision) { $parts.Sections } else { $parts.Decisions }
+    $section = $Kind -eq 'section'
+    $guide = $Setup.Guide
+    foreach ($other in @('section', 'decision', 'guide') | Where-Object { $_ -ne $Kind }) { $guide = Remove-GuidePart $guide (Get-ProfilePart $other) }
     $applicable = Select-ProfileRules $Setup.Rules $Kind
     $rules = @($applicable | ForEach-Object Title)
-    $titles = if ($decision) { 'I titoli di secondo livello sono le parti del modello della decisione: non si correggono.' } else { 'Il titolo di primo livello è quello del modello del documento: non si corregge.' }
+    $titles = @{
+        section  = 'Il titolo di primo livello è quello del modello del documento: non si corregge.'
+        decision = 'I titoli di secondo livello sono le parti del modello della decisione: non si correggono.'
+        guide    = 'I titoli di secondo livello sono le parti della guida: non si correggono.'
+    }[$Kind]
     return @{
         Kind               = $Kind
         RulesKey           = Get-RulesKey $applicable
-        Label              = if ($decision) { 'DECISIONE DA GIUDICARE' } else { 'SEZIONE DA GIUDICARE' }
-        LockedHeadingLevel = if ($decision) { 2 } else { 1 }
-        WholeOnGuide       = -not $decision
-        Reference          = if ($decision) { '' } else { $Setup.Reference }
-        NamedByFile        = $decision
+        Label              = @{ section = 'SEZIONE DA GIUDICARE'; decision = 'DECISIONE DA GIUDICARE'; guide = 'GUIDA DA GIUDICARE' }[$Kind]
+        LockedHeadingLevel = if ($section) { 1 } else { 2 }
+        WholeOnGuide       = $Kind -ne 'decision'
+        Reference          = if ($section) { $Setup.Reference } else { '' }
+        NamedByFile        = -not $section
         Rules              = $rules
-        System             = $Instructions.Replace('{TITOLI}', $titles) + (Remove-GuidePart $Setup.Guide $other)
+        System             = $Instructions.Replace('{TITOLI}', $titles) + $guide
         Schema             = New-FindingsSchema $rules
     }
 }
@@ -221,7 +232,7 @@ function Get-ChangedLines([string[]]$Range) {
     $changed = @{}
     $file = $null
     $previous = ''
-    git -c core.quotePath=false diff -U0 --no-color --no-ext-diff --relative @Range -- $docsDirectory $decisionsDirectory $guidePath @referencePaths | ForEach-Object {
+    git -c core.quotePath=false diff -U0 --no-color --no-ext-diff --relative @Range -- @documentPaths $guidePath @referencePaths | ForEach-Object {
         if ($previous.StartsWith('--- ') -and $_ -match '^\+\+\+ (?:b/)?(.+?)\t?$') {
             $file = if ($Matches[1] -eq '/dev/null') { $null } else { $Matches[1] }
             if ($file -and -not $changed.ContainsKey($file)) { $changed[$file] = [Collections.Generic.HashSet[int]]::new() }
@@ -656,7 +667,7 @@ function Update-TitleReferences($Document, $Glossary, [string]$Before, [string]$
         }
     }
     $memoryPaths = @($inMemory | ForEach-Object { [IO.Path]::GetFullPath($_.Path) })
-    foreach ($file in (Get-ChildItem -Path $docsDirectory, $decisionsDirectory -Filter '*.md' -File -Recurse -ErrorAction SilentlyContinue)) {
+    foreach ($file in (Get-ChildItem -Path $documentPaths -Filter '*.md' -File -Recurse -ErrorAction SilentlyContinue)) {
         if ($file.FullName -in $memoryPaths) { continue }
         $raw = [IO.File]::ReadAllText($file.FullName)
         $updated = Update-ReferenceText $raw $file.FullName $change
@@ -924,7 +935,8 @@ function Undo-IneffectiveCorrections($Applied, $Findings, [hashtable]$Rejections
 }
 
 function Test-ObjectiveChecks([string]$RelativePath) {
-    foreach ($check in 'Test-Documentation.ps1', '../Adr/Test-AdrCorpus.ps1') {
+    $checks = @('Test-Documentation.ps1', '../Adr/Test-AdrCorpus.ps1') + @($(if ($guidesDirectory) { '../Guides/Test-Guides.ps1' }))
+    foreach ($check in $checks) {
         $output = & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -File "$PSScriptRoot/$check" 2>&1
         $output | ForEach-Object { Write-Host $_ }
         if ($LASTEXITCODE -eq 0) { continue }
@@ -934,25 +946,25 @@ function Test-ObjectiveChecks([string]$RelativePath) {
 }
 
 function Show-Corrections {
-    git diff --quiet -- $docsDirectory $decisionsDirectory
+    git diff --quiet -- @documentPaths
     if ($LASTEXITCODE -eq 0) { return $false }
     $global:LASTEXITCODE = 0
     Write-Host '##[group]Correzioni del giudizio dello stile'
-    git -c core.quotePath=false --no-pager diff --stat -- $docsDirectory $decisionsDirectory | ForEach-Object { Write-Host $_ }
-    git -c core.quotePath=false --no-pager diff -- $docsDirectory $decisionsDirectory | ForEach-Object { Write-Host $_ }
+    git -c core.quotePath=false --no-pager diff --stat -- @documentPaths | ForEach-Object { Write-Host $_ }
+    git -c core.quotePath=false --no-pager diff -- @documentPaths | ForEach-Object { Write-Host $_ }
     Write-Host '##[endgroup]'
     return $true
 }
 
 function Test-Corrected {
-    git diff --quiet -- $docsDirectory $decisionsDirectory
+    git diff --quiet -- @documentPaths
     $corrected = $LASTEXITCODE -ne 0
     $global:LASTEXITCODE = 0
     return $corrected
 }
 
 function Undo-Corrections {
-    git checkout -q -- $docsDirectory $decisionsDirectory 2>&1 | Out-Null
+    git checkout -q -- @documentPaths 2>&1 | Out-Null
     $global:LASTEXITCODE = 0
 }
 
@@ -1022,7 +1034,7 @@ function Publish-Judgement($Publisher, [string]$Subject, [string[]]$Trailers) {
             if ($LASTEXITCODE -ne 0) { return New-Issue $JudgeScope 'correzioni non pubblicate' "copia del ramo non creata: $out" }
             $Publisher.Worktree = $worktree
         }
-        git diff --full-index --binary --output=$patchFile -- $docsDirectory $decisionsDirectory
+        git diff --full-index --binary --output=$patchFile -- @documentPaths
         if ((Get-Item $patchFile).Length -gt 0) {
             $out = git -C $Publisher.Worktree apply --3way --whitespace=nowarn $patchFile 2>&1
             if ($LASTEXITCODE -ne 0) { return New-Issue $JudgeScope 'correzioni non pubblicate' "correzioni non applicabili al ramo: $out" }
@@ -1037,7 +1049,7 @@ function Publish-Judgement($Publisher, [string]$Subject, [string[]]$Trailers) {
         $out = git -C $Publisher.Worktree @authorization push -q origin "HEAD:refs/heads/$($Publisher.Side)" 2>&1
         if ($LASTEXITCODE -ne 0) { return New-Issue $JudgeScope 'correzioni non pubblicate' "push sul ramo di appoggio $($Publisher.Side) non riuscito: $out" }
         $Publisher.Commits++
-        git add -- $docsDirectory $decisionsDirectory
+        git add -- @documentPaths
         Write-Host "Ramo di appoggio $($Publisher.Side) aggiornato: $Subject"
     }
     finally {
@@ -1084,8 +1096,10 @@ function Get-StyleIssues {
     }
     $sectionProfile = New-DocumentProfile 'section' $setup
     $decisionProfile = New-DocumentProfile 'decision' $setup
+    $guideProfile = New-DocumentProfile 'guide' $setup
 
     $reviews = @($sections | Where-Object { -not $glossaryFile -or $_.FullName -ne $glossaryFile.FullName } | ForEach-Object { @{ File = $_; Profile = $sectionProfile } })
+    $reviews += @(Get-GuideFiles $guidesDirectory | ForEach-Object { @{ File = $_.File; Profile = $guideProfile } })
     if ($scope.PullRequest) {
         $openDecisions = Get-SectionFiles $decisionsDirectory | Where-Object { (Get-DecisionStatus $_.FullName) -notin $ClosedStatuses }
         $reviews += @($openDecisions | ForEach-Object { @{ File = $_; Profile = $decisionProfile } })
@@ -1162,4 +1176,4 @@ Invoke-Verification {
     $issues = @(Get-StyleIssues)
     if (-not $issues -and $script:Tolerated) { Write-ToleratedFindings $script:Tolerated }
     $issues
-} "Stile del documento in $docsDirectory conforme alla guida" 'Giudizio dello stile disattivato'
+} "Stile del documento in $($documentPaths -join ', ') conforme alla guida" 'Giudizio dello stile disattivato'

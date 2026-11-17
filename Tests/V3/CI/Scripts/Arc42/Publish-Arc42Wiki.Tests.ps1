@@ -62,8 +62,9 @@ BeforeAll {
         return [pscustomobject]@{ Root = $root; Origin = $origin; Seed = $seed; Checkout = $checkout }
     }
 
-    function Invoke-WikiPublish([System.Collections.IDictionary]$Docs, $Wiki, [string]$Language = '', [string]$Formats = '') {
+    function Invoke-WikiPublish([System.Collections.IDictionary]$Docs, $Wiki, [string]$Language = '', [string]$Formats = '', [string]$Guides = '') {
         return Invoke-DocsScript $ScriptPath $Docs @{
+            GUIDES_DIRECTORY      = $Guides
             DOCUMENT_FORMATS      = $Formats
             DOCUMENT_LANGUAGE     = $Language
             WIKI_DIRECTORY        = $Wiki.Checkout
@@ -101,6 +102,21 @@ BeforeAll {
 
     function Get-WikiCommitCount($Wiki) {
         return [int](git -C $Wiki.Origin rev-list --count wikiMaster)
+    }
+
+    # Le guide non dipendono dalle viste C4: il documento resta senza modello, e quindi senza Java.
+    function New-GuidedDocs {
+        $docs = New-ValidDocs
+        $docs.Remove('docs/architecture/c4/workspace.dsl')
+        foreach ($path in @($docs.Keys)) { $docs[$path] = $docs[$path] -replace '(?m)^<!-- vista: [\w*-]+ -->\r?\n', '' }
+        Add-Guides $docs
+        return $docs
+    }
+
+    function Add-Guides([System.Collections.IDictionary]$Docs) {
+        $Docs['docs/guides/home.md'] = "# Home`n`nChi arriva per la prima volta comincia dal [primo avvio](tutorials/primo-avvio.md).`n"
+        $Docs['docs/guides/tutorials/primo-avvio.md'] = "# Primo avvio`n`n1. Avvia il Motore.`n`n## Risultato`n`nIl Motore risponde.`n"
+        $Docs['docs/guides/procedures/aggiungere-un-tenant.md'] = "# Aggiungere un tenant`n`n## Compito`n`nAggiungi un tenant.`n`n## Prerequisiti`n`nNessuno.`n`n## Risultato atteso`n`nIl tenant esiste.`n`n## Passi`n`n1. Segui le [regole comuni](../../architecture/08_concepts.md) e torna alla [home](../home.md).`n"
     }
 
     function Add-DecisionIndex([System.Collections.IDictionary]$Docs) {
@@ -494,6 +510,44 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
         }
     }
 
+    Context "Scenario: guide della piattaforma nella wiki" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-GuidedDocs
+            $res = Invoke-WikiPublish $docs $wiki '' '' 'docs/guides'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora la home e' la prima pagina della wiki, seguita dal documento e dalle radici delle guide" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            Get-WikiPage $wiki '.order' | Should -Be "Home`nArchitettura`nTutorial`nProcedure`nRelease-notes"
+            Get-WikiPage $wiki 'Home.md' | Should -Match ([regex]::Escape('[primo avvio](/Tutorial/Primo-avvio)'))
+        }
+
+        It "E ogni tutorial e ogni procedura e' una pagina sotto la sua radice" {
+            Get-WikiPage $wiki 'Tutorial.md' | Should -Be '[[_TOSP_]]'
+            Get-WikiPage $wiki 'Tutorial/.order' | Should -Be 'Primo-avvio'
+            Get-WikiPage $wiki 'Procedure/.order' | Should -Be 'Aggiungere-un-tenant'
+        }
+
+        It "E i link di una procedura portano alle pagine del documento e della home" {
+            $page = Get-WikiPage $wiki 'Procedure/Aggiungere-un-tenant.md'
+            $page | Should -Match ([regex]::Escape('[regole comuni](/Architettura/8.-Concetti-trasversali)'))
+            $page | Should -Match ([regex]::Escape('[home](/Home)'))
+        }
+
+        It "E una seconda pubblicazione con la home gia' nell'ordine la lascia per prima" {
+            Invoke-Git $wiki.Seed pull -q origin wikiMaster | Out-Null
+            Set-WikiFile $wiki.Seed '.order' "Release-notes`nHome`nArchitettura`nTutorial`nProcedure`n"
+            Add-WikiCommit $wiki.Seed 'Ordine cambiato a mano'
+
+            $again = Invoke-WikiPublish $docs $wiki '' '' 'docs/guides'
+
+            $again.ExitCode | Should -Be 0 -Because $again.Output
+            Get-WikiPage $wiki '.order' | Should -Be "Home`nRelease-notes`nArchitettura`nTutorial`nProcedure"
+        }
+    }
+
     Context "Scenario: documento in inglese" {
         BeforeAll {
             $wiki = New-Wiki
@@ -702,5 +756,27 @@ Describe "Funzionalità: Documentazione architetturale nella wiki e come documen
         It "E la wiki non cambia" {
             Get-WikiCommitCount $unsupportedWiki | Should -Be $commits
         }
+    }
+}
+
+Describe "Funzionalità: Guide della piattaforma nel documento esportato" {
+    BeforeAll {
+        $wiki = New-Wiki
+        $docs = New-GuidedDocs
+        $res = Invoke-WikiPublish $docs $wiki '' 'docx' 'docs/guides'
+        $document = Read-WordDocument (Get-WikiFileBytes $wiki '.attachments/Architettura/Architettura.docx')
+    }
+    AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+    It "Allora dopo le dodici sezioni arc42 vengono i tutorial e le procedure, ognuno con le sue guide" {
+        $res.ExitCode | Should -Be 0 -Because $res.Output
+        @($document.Headings | Where-Object Level -EQ 1 | Select-Object -Skip 12 | ForEach-Object { $_.Title.Trim() }) | Should -Be @('Tutorial', 'Procedure')
+        @($document.Headings | Where-Object { $_.Level -eq 2 -and $_.Number -match '^1[34]\.' } | ForEach-Object { $_.Title.Trim() }) | Should -Be @('Primo avvio', 'Aggiungere un tenant')
+    }
+
+    It "E il documento non contiene la home, e il rimando alla home resta testo" {
+        $document.Text | Should -Not -Match 'Chi arriva per la prima volta'
+        @($document.Links | ForEach-Object Text) | Should -Not -Contain 'home'
+        @($document.Links | ForEach-Object Text) | Should -Contain 'regole comuni'
     }
 }

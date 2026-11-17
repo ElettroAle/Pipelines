@@ -108,6 +108,25 @@ Describe "Funzionalità: Controlli comuni sulla documentazione" {
     }
 }
 
+Describe "Test-Documentation — guide" {
+
+    It "Una guida con un rimando inesistente o un testo oltre le soglie fallisce come una sezione" {
+        $docs = New-ValidDocs
+        $docs['docs/guides/procedures/aggiungere-tenant.md'] = "# Aggiungere un tenant`n`n## Compito`n`nApri la [sezione](../../architecture/99_nessuna.md).`n"
+        $docs['docs/guides/home.md'] = "# Home`n`nQuesta frase decisamente lunghissima e incomprensibile contiene parole numerose, articolate, ridondanti, complicatissime, interminabili, sovrabbondanti, prolisse, verbose, eccessive, superflue, inutili e soprattutto lunghissime fino alla fine.`n"
+        $res = Invoke-DocsCheck $docs @{ GUIDES_DIRECTORY = 'docs/guides' }
+        $res.ExitCode | Should -Be 1
+        Get-Issues $res.Output | Where-Object { $_.StartsWith('Aggiungere un tenant: rimando inesistente (../../architecture/99_nessuna.md)') } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        Get-Issues $res.Output | Where-Object { $_.StartsWith('Home: leggibilità') } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+    }
+
+    It "Una guida che rimanda a una sezione esistente passa" {
+        $docs = New-ValidDocs
+        $docs['docs/guides/tutorials/primo-avvio.md'] = "# Primo avvio`n`nLeggi la [sezione 1](../../architecture/01_introduction_and_goals.md).`n"
+        $res = Invoke-DocsCheck $docs @{ GUIDES_DIRECTORY = 'docs/guides' }
+        Get-Issues $res.Output | Should -BeNullOrEmpty -Because ($res.Output)
+    }
+}
 Describe "Test-Documentation — modalità del controllo" {
 
     BeforeAll {

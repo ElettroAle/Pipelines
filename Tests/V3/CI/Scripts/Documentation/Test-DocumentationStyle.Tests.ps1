@@ -169,10 +169,18 @@ La sezione si apre con una citazione che nomina i lettori.
 ### Il titolo dice la decisione presa
 
 Il titolo di una decisione nomina la scelta, senza sigle.
+
+## Regole delle guide
+
+### Ogni passo comincia con un verbo
+
+Un passo di una guida dice che cosa fare.
 '@
 
     $SectionRule = 'Ogni sezione dice a chi serve'
     $DecisionRule = 'Il titolo dice la decisione presa'
+    $GuideRule = 'Ogni passo comincia con un verbo'
+    $NewProcedure = "# Aggiungere un tenant`n`n## Compito`n`nAggiungi un tenant.`n`n## Prerequisiti`n`nNessuno.`n`n## Risultato atteso`n`nIl tenant esiste.`n"
     $Filler = 'Niente riempitivi'
     $SelfReference = 'Il testo parla della piattaforma, non di se stesso'
     $FixEnvironment = @{ TARGET_BRANCH = 'refs/heads/main'; SOURCE_BRANCH = 'refs/heads/feature'; STYLE_FIX = 'true'; READABILITY_MAX_WORDS = '25' }
@@ -234,7 +242,7 @@ Il titolo di una decisione nomina la scelta, senza sigle.
             $Root = Join-Path ([IO.Path]::GetTempPath()) "pester-style-$(New-Guid)"
             Write-Docs $Docs $Root
         }
-        $variables = @{ GATE_MODE = $Mode; STYLE_JUDGE_PROVIDER = ''; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; ANTHROPIC_API_KEY = ''; TARGET_BRANCH = ''; SOURCE_BRANCH = ''; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_FIX = ''; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_JUDGE_SEED = ''; READABILITY_MAX_WORDS = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = ''; STYLE_REFERENCE = '' }
+        $variables = @{ GATE_MODE = $Mode; STYLE_JUDGE_PROVIDER = ''; STYLE_JUDGE_ENDPOINT = $StubEndpoint; STYLE_JUDGE_MODEL = 'giudice'; STYLE_JUDGE_TOKEN = 'token-di-prova'; ANTHROPIC_API_KEY = ''; TARGET_BRANCH = ''; SOURCE_BRANCH = ''; STYLE_GUIDE = ''; DOCS_GLOSSARY = '03-glossario.md'; STYLE_FIX = ''; STYLE_MAX_ROUNDS = ''; STYLE_MAX_FINDINGS = ''; STYLE_JUDGE_SEED = ''; READABILITY_MAX_WORDS = ''; READABILITY_GULPEASE = ''; SYSTEM_ACCESSTOKEN = ''; STYLE_REFERENCE = ''; GUIDES_DIRECTORY = '' }
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
 
         Push-Location $Root
@@ -1039,6 +1047,19 @@ Describe "Test-DocumentationStyle — cosa si manda al modello" {
             $decisionGuide | Should -Not -BeLike "*$SectionRule*"
             $decisionGuide | Should -Not -BeLike '*Un titolo dentro un esempio delle sezioni*'
             $sectionGuide | Should -Not -BeLike "*$DecisionRule*"
+        }
+
+        It "Manda a una guida le regole comuni e quelle delle guide, e nessuna regola di sezioni e decisioni" {
+            $root = New-PullRequestRepository -Base { param($d) $d['docs/STYLE.md'] = $PartedGuide } -Change { param($d) $d['docs/guides/procedures/aggiungere.md'] = $NewProcedure }
+            Invoke-StyleCheck -Root $root -Environment @{ TARGET_BRANCH = 'refs/heads/main'; GUIDES_DIRECTORY = 'docs/guides' } | Out-Null
+            Remove-Item -Recurse -Force $root
+            $guide = @(Get-StubRequests) | Where-Object { (Get-UserMessage $_) -like '*GUIDA DA GIUDICARE (aggiungere.md)*' }
+            $guide | Should -Not -BeNullOrEmpty
+            @($guide.response_format.json_schema.schema.properties.rules.items.properties.rule.enum) | Should -Be @($Filler, $GuideRule)
+            $system = ($guide.messages | Where-Object role -EQ 'system').content
+            $system | Should -Not -BeLike "*$SectionRule*"
+            $system | Should -Not -BeLike "*$DecisionRule*"
+            $system | Should -BeLike '*I titoli di secondo livello sono le parti della guida*'
         }
 
         It "Non rigiudica le sezioni se la guida cambia solo nelle regole delle decisioni o nell'ordine delle regole" {

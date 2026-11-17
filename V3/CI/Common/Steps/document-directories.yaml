@@ -2,8 +2,8 @@
 
 # ── CI Step: Document directories ─────────────────────────────────────────────
 #
-# Dichiara le cartelle del documento e delle sue decisioni per gli step che seguono nel job:
-# DOCS_DIRECTORY e DECISIONS_DIRECTORY. Gli step che il consumer inietta, come c4-verify.yaml e
+# Dichiara le cartelle del documento, delle sue decisioni e delle sue guide per gli step che seguono nel
+# job: DOCS_DIRECTORY, DECISIONS_DIRECTORY e GUIDES_DIRECTORY. Gli step che il consumer inietta, come c4-verify.yaml e
 # mermaid-verify.yaml, le leggono da qui e il consumer non le ripete.
 #
 # Riusato da:
@@ -14,6 +14,7 @@
 # ─────────
 #   docsDirectory      → cartella delle sezioni del documento (default: docs/architecture)
 #   decisionsDirectory → cartella degli ADR (default: docs/decisions)
+#   guidesDirectory    → cartella delle guide, con tutorials/, procedures/ e home.md (default: nessuna)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -26,10 +27,15 @@ parameters:
     type: string
     default: 'docs/decisions'
 
+  - name: guidesDirectory
+    type: string
+    default: ''
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
   - pwsh: |
       Write-Host "##vso[task.setvariable variable=DOCS_DIRECTORY]${{ parameters.docsDirectory }}"
       Write-Host "##vso[task.setvariable variable=DECISIONS_DIRECTORY]${{ parameters.decisionsDirectory }}"
+      Write-Host "##vso[task.setvariable variable=GUIDES_DIRECTORY]${{ parameters.guidesDirectory }}"
     displayName: 'Document directories ${{ parameters.docsDirectory }}, ${{ parameters.decisionsDirectory }}'

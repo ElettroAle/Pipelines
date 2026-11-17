@@ -23,6 +23,8 @@
 #   decisionsDirectory → cartella degli ADR (default: docs/decisions)
 #   docsMode           → off | warn | enforce (default: off, finché il repo non ha la documentazione)
 #   docsDirectory      → cartella del documento (default: docs/architecture)
+#   guidesDirectory    → cartella delle guide, con tutorials/, procedures/ e home.md: tipo di ogni guida
+#                        (guides-verify.yaml), rimandi, soglie e stile come il documento (default: nessuna)
 #   docsGulpease       → indice Gulpease minimo del testo di ogni sezione (default: 0, nessuna soglia)
 #   docsMaxWords       → parole massime per frase (default: 0, nessuna soglia)
 #   docsAbbreviations  → abbreviazioni che non chiudono una frase (default: nessuna)
@@ -80,6 +82,10 @@ parameters:
   - name: docsDirectory
     type: string
     default: 'docs/architecture'
+
+  - name: guidesDirectory
+    type: string
+    default: ''
 
   - name: docsGulpease
     type: number
@@ -168,6 +174,7 @@ stages:
           parameters:
             docsDirectory: ${{ parameters.docsDirectory }}
             decisionsDirectory: ${{ parameters.decisionsDirectory }}
+            guidesDirectory: ${{ parameters.guidesDirectory }}
         - template: ../Common/Steps/adr-verify.yaml
           parameters:
             mode: ${{ parameters.adrMode }}
@@ -185,6 +192,10 @@ stages:
             maxWords: ${{ parameters.docsMaxWords }}
             abbreviations: ${{ parameters.docsAbbreviations }}
             decisionsDirectory: ${{ parameters.decisionsDirectory }}
+        - ${{ if ne(parameters.guidesDirectory, '') }}:
+          - template: ../Common/Steps/guides-verify.yaml
+            parameters:
+              mode: ${{ parameters.docsMode }}
         - ${{ if ne(parameters.docsMode, 'off') }}:
           - ${{ parameters.diagramSteps }}
         - template: ../Common/Steps/documentation-style.yaml

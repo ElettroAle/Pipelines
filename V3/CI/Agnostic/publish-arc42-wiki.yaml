@@ -23,6 +23,8 @@
 #   documentFormats    → formati del documento unico allegato alla wiki, 'pdf' e 'docx' (default: nessuno)
 #   referenceRoot      → radice della reference nella wiki (reference-publish.yaml), i cui link si
 #                        aggiungono alle pagine e non al documento unico (default: nessuna)
+#   guidesDirectory    → cartella delle guide (tutorials/, procedures/, home.md), pubblicate con il
+#                        documento (default: nessuna)
 #   pool               → pool del job (default: hosted ubuntu-latest)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -62,6 +64,10 @@ parameters:
     default: []
 
   - name: referenceRoot
+    type: string
+    default: ''
+
+  - name: guidesDirectory
     type: string
     default: ''
 
@@ -108,3 +114,4 @@ stages:
               sourcesDirectory: '$(Pipeline.Workspace)/s'
               documentFormats: ${{ parameters.documentFormats }}
               referenceRoot: ${{ parameters.referenceRoot }}
+              guidesDirectory: ${{ parameters.guidesDirectory }}

@@ -30,6 +30,9 @@
 #   referenceRoot      → radice della reference nella wiki (reference-publish.yaml): la prima menzione di
 #                        ogni sua voce nelle pagine diventa un link, il documento unico resta senza
 #                        (default: nessuna)
+#   guidesDirectory    → cartella delle guide, con tutorials/, procedures/ e home.md: tutorial e
+#                        procedure diventano pagine sotto le loro radici e capitoli del documento unico,
+#                        la home la prima pagina della wiki (default: nessuna)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -76,6 +79,10 @@ parameters:
     type: string
     default: ''
 
+  - name: guidesDirectory
+    type: string
+    default: ''
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
@@ -106,4 +113,5 @@ steps:
       WIKI_BRANCH: ${{ parameters.wikiBranch }}
       DOCUMENT_FORMATS: ${{ join(',', parameters.documentFormats) }}
       REFERENCE_ROOT: ${{ parameters.referenceRoot }}
+      GUIDES_DIRECTORY: ${{ parameters.guidesDirectory }}
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)
