@@ -137,18 +137,26 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         }
     }
 
-    Context "Scenario: vista dei container delle applicazioni del repository" {
+    Context "Scenario: una vista dei container per ogni applicazione del repository" {
         BeforeAll {
             $res = Invoke-Generation (New-EngineRepository) 'Contoso.Shop.AI'
-            $view = Get-Block $res.Generated['views/contoso.shop.ai.dsl'] 'container sistema "container-ai" \{'
+            $views = $res.Generated['views/contoso.shop.ai.dsl']
+            $api = Get-Block $views 'container sistema "container-contoso_shop_ai_api" \{'
+            $worker = Get-Block $views 'container sistema "container-contoso_shop_ai_worker" \{'
         }
 
-        It "Allora la vista appartiene al sistema che nel workspace include i container generati, con la chiave del gruppo" {
-            $view | Should -Not -BeNullOrEmpty -Because ($res.Generated['views/contoso.shop.ai.dsl'])
+        It "Allora ogni vista appartiene al sistema che nel workspace include i container generati, con la chiave dell'applicazione" {
+            $api | Should -Not -BeNullOrEmpty -Because $views
+            $worker | Should -Not -BeNullOrEmpty -Because $views
         }
 
-        It "E mostra ogni applicazione del repository con gli elementi con cui ha relazioni" {
-            $view | Should -Match 'include ->contoso_shop_ai_api-> ->contoso_shop_ai_worker->' -Because $view
+        It "E ogni vista mostra la sua applicazione con gli elementi con cui ha relazioni" {
+            $api | Should -Match '(?m)^\s*include ->contoso_shop_ai_api->\s*$' -Because $api
+            $worker | Should -Match '(?m)^\s*include ->contoso_shop_ai_worker->\s*$' -Because $worker
+        }
+
+        It "E nessuna vista raccoglie tutte le applicazioni del repository" {
+            $views | Should -Not -Match '"container-ai"' -Because $views
         }
     }
 
@@ -442,7 +450,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         }
 
         It "E le viste generate dei container e dei componenti si esportano" {
-            @($export.Workspace.views.containerViews | ForEach-Object key) | Should -Contain 'container-ai'
+            @($export.Workspace.views.containerViews | ForEach-Object key) | Should -Contain 'container-contoso_shop_ai_api'
             @($export.Workspace.views.componentViews | ForEach-Object key) | Should -Contain 'contoso_shop_ai_api-accesso-dati'
         }
 

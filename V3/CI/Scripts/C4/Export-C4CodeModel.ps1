@@ -16,9 +16,10 @@
 # Gli ambienti di deployment della parte stanno in GENERATED_DIRECTORY/deployment/<repository>.dsl, da
 # includere nel modello dopo il sistema software, e le loro viste, una per ambiente con la chiave
 # deployment_<ambiente>, in GENERATED_DIRECTORY/deployment-views/<repository>.dsl.
-# Le viste della parte stanno in GENERATED_DIRECTORY/views/<repository>.dsl. Un repository con applicazioni
-# ha la vista dei container container-<gruppo>, con le applicazioni e gli elementi con cui hanno relazioni,
-# nel sistema che nel workspace accanto a GENERATED_DIRECTORY include i container generati. Un container
+# Le viste della parte stanno in GENERATED_DIRECTORY/views/<repository>.dsl. Ogni applicazione ha la vista
+# dei container container-<applicazione>, con gli elementi con cui ha relazioni, nel sistema che nel
+# workspace accanto a GENERATED_DIRECTORY include i container generati: una vista con tutte le applicazioni
+# di un repository somma i loro vicini e non si legge piu' alla scala minima. Un container
 # con componenti ha la vista della logica, con l'identificativo del container come chiave, e quella
 # dell'accesso ai dati, <container>-<suffisso della lingua>, ciascuna se ha componenti: un componente e' di
 # accesso ai dati se un segmento del suo nome e' fra C4_DATA_ACCESS_SEGMENTS (default DataAccess). Le
@@ -268,10 +269,8 @@ function Format-ComponentViews($Container) {
 
 function Format-Views($Fragments, [string]$System) {
     $lines = @("// Viste generate da $Repository con Export-C4CodeModel.ps1: non si modificano a mano.")
-    $applications = Get-Applications $Fragments
-    if ($applications.Count) {
-        $group = Remove-CommonPrefix $Repository @($SourceRepositories + $Repository | Select-Object -Unique)
-        $lines += Format-View 'container' $System "container-$(ConvertTo-Identifier $group)" @($applications | ForEach-Object { "->$($_.id)->" }) 'lr'
+    foreach ($application in Get-Applications $Fragments) {
+        $lines += Format-View 'container' $System "container-$($application.id)" @("->$($application.id)->") 'lr'
     }
     foreach ($container in @($Fragments.Content.containers | Where-Object { @($_.components | Where-Object { $_ }).Count })) {
         $lines += Format-ComponentViews $container
