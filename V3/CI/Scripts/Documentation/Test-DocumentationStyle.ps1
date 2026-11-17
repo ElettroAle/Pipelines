@@ -43,6 +43,8 @@ $RequestTimeoutSeconds = 600
 $JudgeAttempts = 2
 $MissingRulesLabel = 'REGOLE CHE LA RISPOSTA PRECEDENTE NON HA GIUDICATO: rispondi con una voce per ognuna'
 $WrapWidth = 110
+# I caratteri attorno al tratto corretto con cui il giro dopo lo ritrova nell'unita'.
+$CorrectionContextLength = 20
 $LockedKinds = @('code', 'marker', 'separator', 'frontmatter')
 # Una decisione sostituita, deprecata o respinta e' storia: non si giudica.
 $ClosedStatuses = @('superseded', 'deprecated', 'rejected')
@@ -70,10 +72,13 @@ un secondo giudizio: ciò che non riporti ora resta nel documento.
 Per ogni violazione indichi il numero dell'unità, il tratto che viola la regola copiato alla
 lettera, il motivo in una frase e la correzione:
 - replace: find è un tratto dell'unità copiato alla lettera, che vi compare una volta sola; text lo
-  sostituisce. Se l'unità viola la stessa regola in più punti, find li comprende tutti.
+  sostituisce. Se l'unità viola la stessa regola in più punti, ogni punto è una violazione a sé, con
+  la sua correzione.
 - insert: text è un paragrafo nuovo da aggiungere dopo l'unità indicata da fix.unit; find resta
   vuoto. Una voce nuova del glossario si aggiunge dopo la voce del glossario che la precede in ordine
   alfabetico, nella stessa forma delle altre voci.
+- remove: l'unità della violazione si toglie tutta, perché non dovrebbe esserci: una riga di tabella,
+  una voce di elenco o un paragrafo; find e text restano vuoti.
 - none: la violazione non si corregge cambiando il testo; find e text restano vuoti.
 Il MODELLO DI RIFERIMENTO, se c'è, descrive il sistema: è contesto per le regole che lo citano, non si
 giudica e non si corregge. Una correzione non tocca diagrammi, blocchi di codice e commenti, non va a capo, rispetta tutte le
@@ -481,7 +486,7 @@ function New-FindingsSchema([string[]]$Rules) {
         additionalProperties = $false
         required             = @('kind', 'unit', 'find', 'text')
         properties           = @{
-            kind = @{ type = 'string'; enum = @('replace', 'insert', 'none') }
+            kind = @{ type = 'string'; enum = @('replace', 'insert', 'remove', 'none') }
             unit = @{ type = 'integer'; description = 'L''unita'' a cui si applica la correzione: per insert quella dopo cui aggiungere il paragrafo' }
             find = @{ type = 'string'; description = 'Il tratto dell''unita'' da sostituire, copiato alla lettera; vuoto per insert e none' }
             text = @{ type = 'string'; description = 'Il testo corretto, o il paragrafo da aggiungere; vuoto per none' }
@@ -584,6 +589,28 @@ function Test-Correction([string]$Kind, [string]$Before, [string]$After) {
     $longest = Get-LongestSentence $Kind $After
     if ($maximumWords -and $longest -gt $maximumWords) { return "la correzione porta una frase a $longest parole, massimo $maximumWords" }
     return $null
+}
+
+# Il motivo per cui l'unita' non si toglie, o niente se si toglie: una tabella tiene l'intestazione
+# e almeno una riga.
+function Test-Removal($Document, $Segment) {
+    if ($Segment.Locked -or $Segment.Kind -notin 'row', 'list', 'paragraph') { return 'la correzione toglie un elemento che si corregge solo cambiandone il testo' }
+    if ($Segment.Kind -ne 'row') { return $null }
+    $index = $Document.Segments.IndexOf($Segment)
+    $previous = if ($index -gt 0) { $Document.Segments[$index - 1].Kind }
+    $next = if ($index + 1 -lt $Document.Segments.Count) { $Document.Segments[$index + 1].Kind }
+    if ($previous -notin 'row', 'separator') { return 'la correzione toglie l''intestazione della tabella' }
+    if ($previous -eq 'separator' -and $next -ne 'row') { return 'la correzione toglie l''unica riga della tabella' }
+    return $null
+}
+
+# Con l'unita' se ne va la riga vuota che la precedeva, se ne restano due di fila o una in fondo.
+function Remove-Unit($Document, $Segment) {
+    $index = $Document.Segments.IndexOf($Segment)
+    $Document.Segments.RemoveAt($index)
+    $next = if ($index -lt $Document.Segments.Count) { $Document.Segments[$index] }
+    if ($index -gt 0 -and $Document.Segments[$index - 1].Kind -eq 'blank' -and (-not $next -or $next.Kind -eq 'blank')) { $Document.Segments.RemoveAt($index - 1) }
+    $Document.Changed = $true
 }
 
 function Get-GlossaryTerm([string]$Text) {
@@ -717,10 +744,14 @@ function Invoke-Replacement($Target, $Finding, [hashtable]$Original, $Glossary, 
         if (Find-UniqueOccurrence $Original[$segment] $find) { $segment.Marked = $true; return $null }
         return 'il tratto da correggere non compare una volta sola nell''unità'
     }
-    $after = $before.Substring(0, $occurrence.Index) + "$($Finding.Fix.text)" + $before.Substring($occurrence.Index + $occurrence.Length)
+    $written = "$($Finding.Fix.text)"
+    $end = $occurrence.Index + $occurrence.Length
+    $after = $before.Substring(0, $occurrence.Index) + $written + $before.Substring($end)
     $reason = Test-Correction $segment.Kind $before $after
     if ($reason) { return $reason }
-    $correction = @{ Rule = $Finding.Rule; Unit = $segment; Document = $Target.Document; Lines = $segment.Lines; References = @() }
+    $left = $before.Substring([math]::Max(0, $occurrence.Index - $CorrectionContextLength), [math]::Min($CorrectionContextLength, $occurrence.Index))
+    $right = $before.Substring($end, [math]::Min($CorrectionContextLength, $before.Length - $end))
+    $correction = @{ Rule = $Finding.Rule; Unit = $segment; Document = $Target.Document; Lines = $segment.Lines; References = @(); Left = $left; Written = $written; Right = $right }
     Set-UnitText $segment $after
     if ($segment.Kind -eq 'heading') { $correction.References = Update-TitleReferences $Target.Document $Glossary $before $after }
     $Applied.Add($correction)
@@ -736,6 +767,7 @@ function Invoke-Corrections($Document, $Glossary, $Findings) {
     $glossaryTerms = [Collections.Generic.HashSet[string]]::new([string[]]@(if ($Glossary) { Get-Units $Glossary | ForEach-Object { Get-GlossaryTerm (Get-UnitText $_) } | Where-Object { $_ } }))
     $original = @{}
     $insertions = [Collections.Generic.List[object]]::new()
+    $removals = [Collections.Generic.List[object]]::new()
     $applied = [Collections.Generic.List[object]]::new()
     $rejected = [Collections.Generic.List[object]]::new()
 
@@ -751,6 +783,10 @@ function Invoke-Corrections($Document, $Glossary, $Findings) {
                 elseif (-not ($invalid = Test-Correction 'paragraph' '' $text)) { $insertions.Add(@{ Target = $target; Text = $text; Finding = $finding; Unit = $targets[$finding.Unit].Segment }); $null }
                 else { $invalid }
             }
+            'remove' {
+                if ($target.Glossary) { 'la correzione cambia una voce del glossario' }
+                else { $removals.Add(@{ Target = $target; Finding = $finding }); $null }
+            }
             'missing' { 'la correzione indica un''unità che il documento non ha' }
             default { 'il modello non propone una correzione' }
         }
@@ -761,6 +797,14 @@ function Invoke-Corrections($Document, $Glossary, $Findings) {
         if (-not $insertion.Unit) { continue }
         $insertion.Unit.Marked = $true
         $applied.Add(@{ Rule = $insertion.Finding.Rule; Unit = $insertion.Unit; Document = $insertion.Target.Document; Inserted = $inserted; References = @() })
+    }
+    # Un'unita' tolta non puo' violare piu' nulla: la sua correzione non si verifica e non si annulla.
+    foreach ($removal in $removals) {
+        $segment = $removal.Target.Segment
+        if ($removal.Target.Document.Segments.IndexOf($segment) -lt 0) { continue }
+        $reason = Test-Removal $removal.Target.Document $segment
+        if ($reason) { $rejected.Add([pscustomobject]@{ Finding = $removal.Finding; Reason = $reason }); continue }
+        Remove-Unit $removal.Target.Document $segment
     }
     return @{ Applied = $applied; Rejected = $rejected }
 }
@@ -850,9 +894,28 @@ function Invoke-SectionReview($File, $FileScope, $Context) {
     }
 }
 
-# Una correzione resta solo se il giro dopo non trova piu' la stessa regola violata nella stessa unita'.
+# Una correzione resta solo se il giro dopo non trova piu' la stessa regola violata nel tratto che ha
+# scritto: la stessa regola violata altrove nella stessa unita' e' un'altra violazione, che si corregge
+# a sua volta. Un paragrafo aggiunto, o un tratto che non si ritrova, non ha un tratto da confrontare.
+function Test-StillViolated($Correction, $Findings) {
+    $same = @($Findings | Where-Object { $_.Rule -eq $Correction.Rule -and $_.Unit -eq $Correction.Unit.Number })
+    if (-not $same) { return $false }
+    if ($null -eq $Correction.Written) { return $true }
+    $text = Get-UnitText $Correction.Unit
+    $at = $text.IndexOf($Correction.Left + $Correction.Written + $Correction.Right, [StringComparison]::Ordinal)
+    if ($at -lt 0) { return $true }
+    $start = $at + $Correction.Left.Length
+    $end = $start + $Correction.Written.Length
+    foreach ($finding in $same) {
+        $excerpts = @([regex]::Matches($text, [regex]::Escape("$($finding.Excerpt)")))
+        if (-not $excerpts) { return $true }
+        if (@($excerpts | Where-Object { $_.Index -le $end -and $start -le $_.Index + $_.Length })) { return $true }
+    }
+    return $false
+}
+
 function Undo-IneffectiveCorrections($Applied, $Findings, [hashtable]$Rejections) {
-    $ineffective = @($Applied | Where-Object { $correction = $_; @($Findings | Where-Object { $_.Rule -eq $correction.Rule -and $_.Unit -eq $correction.Unit.Number }).Count })
+    $ineffective = @($Applied | Where-Object { Test-StillViolated $_ $Findings })
     [array]::Reverse($ineffective)
     foreach ($correction in $ineffective) {
         Undo-Correction $correction

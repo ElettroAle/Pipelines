@@ -50,12 +50,14 @@ BeforeAll {
             foreach ($rule in $Rules) {
                 if (-not $verdict.Contains($rule.rule)) { continue }
                 if ($rule.until -and $user.Contains($rule.until)) { continue }
+                if ($rule.after -and -not $user.Contains($rule.after)) { continue }
                 foreach ($unit in ($section | Where-Object { ($_.Marked -or $rule.everywhere) -and $_.Text.Contains($rule.match) })) {
                     $find = if ($rule.find) { $rule.find } else { $rule.match }
                     $target = $unit.Number
                     $fix = @{ kind = 'none'; unit = $target; find = ''; text = '' }
                     $replacement = if ($null -ne $rule.retryReplacement -and $user.Contains('CORREZIONI SCARTATE')) { $rule.retryReplacement } else { $rule.replacement }
                     if ($null -ne $replacement) { $fix = @{ kind = 'replace'; unit = $target; find = $find; text = $replacement } }
+                    elseif ($rule.remove) { $fix = @{ kind = 'remove'; unit = $target; find = ''; text = '' } }
                     elseif ($rule.insert) { $fix = @{ kind = 'insert'; unit = $target; find = ''; text = $rule.insert } }
                     elseif ($rule.glossaryInsert) { $fix = @{ kind = 'insert'; unit = $glossary[0].Number; find = ''; text = $rule.glossaryInsert } }
                     $verdict[$rule.rule].Add(@{ unit = $unit.Number; excerpt = $rule.match; explanation = 'viola la regola'; fix = $fix })
@@ -1496,6 +1498,79 @@ Describe "Funzionalità: Verifica della documentazione architetturale — titoli
         It "E la correzione è scartata con il motivo «non toglie la violazione»" {
             $res.ExitCode | Should -Be 1
             Get-Issues $res.Output | Where-Object { $_.StartsWith("Vincoli: $Filler («Regione C4»") -and $_ -like '*la correzione non toglie la violazione*' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+    }
+}
+
+Describe "Funzionalità: Verifica della documentazione architetturale — unità da togliere e violazioni in più punti" {
+
+    Context "Schema dello scenario: un'unità che non deve esserci si toglie — <unità>" -ForEach @(
+        @{ unità = 'una riga che ripete la riga precedente'; vecchio = 'gira su Azure.'; nuovo = "gira su Azure.`n`n| Sistema | Ruolo |`n|---|---|`n| Graph | Dati |`n| Graph | Dati ripetuti |"; regola = @{ match = '| Graph | Dati ripetuti |' }; atteso = "La piattaforma gira su Azure.`n`n| Sistema | Ruolo |`n|---|---|`n| Graph | Dati |`n" }
+        @{ unità = 'un paragrafo'; vecchio = 'gira su Azure.'; nuovo = "gira su Azure.`n`nQuesto paragrafo non serve."; regola = @{ match = 'Questo paragrafo non serve' }; atteso = "La piattaforma gira su Azure.`n" }
+        @{ unità = 'una voce di elenco'; vecchio = 'gira su Azure.'; nuovo = "gira su Azure.`n`n- In Italia.`n- Questa voce non serve."; regola = @{ match = 'Questa voce non serve' }; atteso = "La piattaforma gira su Azure.`n`n- In Italia.`n" }
+    ) {
+        BeforeAll {
+            Reset-Stub
+            $regola.rule = $Filler
+            $regola.remove = $true
+            Set-StubRules @($regola)
+            $repository = New-OriginRepository { param($d) Edit-Docs $d 'docs/architecture/02-vincoli.md' $vecchio $nuovo }
+            $res = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+        }
+
+        AfterAll { Remove-Repository $repository }
+
+        It "Allora l'unità si toglie e il resto del documento resta com'era" {
+            Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeExactly "# Vincoli`n`n$($atteso.TrimEnd("`n"))" -Because ($res.Output)
+        }
+
+        It "E la verifica passa" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+    }
+
+    Context "Schema dello scenario: un'unità che regge il documento non si toglie — <unità>" -ForEach @(
+        @{ unità = 'l''intestazione di una tabella'; nuovo = "gira su Azure.`n`n| Sistema | Ruolo |`n|---|---|`n| Graph | Dati |`n| Entra | Accesso |"; match = '| Sistema | Ruolo |'; motivo = 'la correzione toglie l''intestazione della tabella' }
+        @{ unità = 'l''unica riga di una tabella'; nuovo = "gira su Azure.`n`n| Sistema | Ruolo |`n|---|---|`n| Graph | Dati |"; match = '| Graph | Dati |'; motivo = 'la correzione toglie l''unica riga della tabella' }
+        @{ unità = 'un titolo'; nuovo = "gira su Azure.`n`n## Regione C4`n`nI dati restano in Italia."; match = 'Regione C4'; motivo = 'la correzione toglie un elemento che si corregge solo cambiandone il testo' }
+    ) {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(@{ match = $match; rule = $Filler; remove = $true })
+            $repository = New-OriginRepository { param($d) Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' $nuovo }
+            $res = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+        }
+
+        AfterAll { Remove-Repository $repository }
+
+        It "Allora la correzione è scartata con il motivo" {
+            $res.ExitCode | Should -Be 1
+            Get-Issues $res.Output | Where-Object { $_ -like "*correzione scartata: ${Filler}: $motivo*" } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+
+        It "E il documento resta com'era" {
+            Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike "*$($nuovo.Substring(15))*"
+        }
+    }
+
+    Context "Scenario: il giro dopo trova la stessa regola in un altro punto dell'unità corretta" {
+        BeforeAll {
+            Reset-Stub
+            Set-StubRules @(
+                @{ match = 'Lo strato uno legge'; rule = $Filler; replacement = 'Il lettore legge' }
+                @{ match = 'Lo strato due scrive'; rule = $Filler; replacement = 'Lo scrittore scrive'; after = 'Il lettore legge' })
+            $repository = New-OriginRepository { param($d) Edit-Docs $d 'docs/architecture/02-vincoli.md' 'gira su Azure.' "gira su Azure.`n`nLo strato uno legge. Lo strato due scrive." }
+            $res = Invoke-StyleCheck -Root $repository.Root -Mode 'enforce' -Environment $FixEnvironment
+        }
+
+        AfterAll { Remove-Repository $repository }
+
+        It "Allora la prima correzione resta e la seconda si aggiunge" {
+            Get-FeatureFile $repository 'docs/architecture/02-vincoli.md' | Should -BeLike '*Il lettore legge. Lo scrittore scrive.*' -Because ($res.Output)
+        }
+
+        It "E la verifica passa" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
         }
     }
 }
