@@ -126,6 +126,7 @@ BeforeAll {
     function New-Workspace([System.Collections.IDictionary]$Files) {
         $root = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-text-ws-$(New-Guid)"
         Write-SourceFiles $root $Files
+        if (-not $Files.Contains($C4WorkspacePath)) { Write-SourceFiles $root @{ $C4WorkspacePath = $C4Workspace } }
         return $root
     }
 

@@ -6,9 +6,11 @@
 # un file Structurizr DSL per repository in generatedDirectory/containers, scritto dai frammenti che i passi di
 # lettura delle tecnologie (c4-read-*.yaml) hanno lasciato in fragmentDirectory. Non conosce le
 # tecnologie: un file di progetto del repository che nessun lettore ha letto ferma la generazione.
-# Compone il testo che c4-describe.yaml ha scritto per tutto il sistema, e scrive anche le viste dei
-# componenti del repository in generatedDirectory/views e context.dsl con le persone e i sistemi esterni
-# del testo.
+# Compone il testo che c4-describe.yaml ha scritto per tutto il sistema, e scrive anche le viste del
+# repository in generatedDirectory/views e context.dsl con le persone e i sistemi esterni del testo: la vista
+# dei container delle sue applicazioni, nel sistema che workspace.dsl accanto a generatedDirectory dichiara
+# attorno a !include della cartella containers, e per ogni container la vista della logica e quella
+# dell'accesso ai dati.
 # Con generationMode 'check' i file del documento si confrontano con quelli che la generazione produce.
 # Tag e proprieta' seguono DOCUMENT_LANGUAGE (document-language.yaml).
 #
@@ -26,6 +28,8 @@
 #                        gruppo senza il loro prefisso comune
 #   fragmentDirectory  → cartella dei frammenti dei lettori (default: $(Agent.TempDirectory)/c4-fragments)
 #   generatedDirectory → cartella delle parti generate (default: docs/architecture/c4/generated)
+#   dataAccessSegments → segmenti del nome, separati da virgola, di un componente di accesso ai dati
+#                        (default: DataAccess)
 #   workingDirectory   → checkout del repository del documento (default: $(Build.SourcesDirectory))
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #   condition          → condizione del passo, es. per saltarlo quando manca un file (default: succeeded())
@@ -63,6 +67,10 @@ parameters:
     type: string
     default: ''
 
+  - name: dataAccessSegments
+    type: string
+    default: ''
+
   - name: workingDirectory
     type: string
     default: '$(Build.SourcesDirectory)'
@@ -95,3 +103,5 @@ steps:
         SOURCE_REPOSITORIES: ${{ parameters.sourceRepositories }}
       ${{ if ne(parameters.generatedDirectory, '') }}:
         GENERATED_DIRECTORY: ${{ parameters.generatedDirectory }}
+      ${{ if ne(parameters.dataAccessSegments, '') }}:
+        C4_DATA_ACCESS_SEGMENTS: ${{ parameters.dataAccessSegments }}

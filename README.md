@@ -450,8 +450,16 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   altri della sua lista) che nessun frammento dichiara letto ferma la generazione nominando il file, e
   così un frammento che non si legge. Il file generato non si scrive a mano. Scrive anche
   `views/<repository in minuscolo>.dsl`, che le viste del documento includono come cartella
-  (`!include generated/views`): una vista dei componenti per ogni container che ne ha, con
-  l'identificativo del container come chiave. Scrive
+  (`!include generated/views`). Un repository con applicazioni ha una vista dei container con chiave
+  `container-<gruppo>`: le sue applicazioni e gli elementi con cui hanno relazioni, in entrambe le direzioni.
+  La vista appartiene al sistema che in `workspace.dsl`, accanto alla cartella delle parti generate,
+  include la cartella `containers`; se il workspace non lo dichiara la generazione si ferma. Un container
+  con componenti ha la vista della logica, con l'identificativo del container come chiave, e quella
+  dell'accesso ai dati, con chiave `<container>-accesso-dati` in italiano, ciascuna solo se ha componenti.
+  La vista della logica mostra i componenti che non sono di accesso ai dati e gli elementi fuori dal
+  container in relazione con loro. Quella dell'accesso ai dati mostra i suoi componenti, ciò che ognuno usa
+  e gli elementi fuori dal container che li chiamano. Un componente è di accesso ai dati se un segmento del
+  suo nome, separato da punti, è fra `dataAccessSegments` (default `DataAccess`). Scrive
   infine `context.dsl`, da includere nel modello prima del sistema: le persone e i sistemi esterni del
   catalogo, i sistemi con il tag `Esterno` e, se tecnici, `Tecnico`. Si committa con le parti generate.
 - **La PR della parte** (`azureRepos-pull-request.yaml`, `CI/Scripts/AzureRepos/Publish-PullRequest.ps1`).

@@ -85,6 +85,106 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         }
     }
 
+    Context "Schema dello scenario: viste dei componenti per livello" {
+        BeforeAll {
+            $res = Invoke-Generation (New-EngineRepository) 'Contoso.Shop.AI'
+            $views = $res.Generated['views/contoso.shop.ai.dsl']
+            $logic = Get-Block $views 'component contoso_shop_ai_api "contoso_shop_ai_api" \{'
+            $dataAccess = Get-Block $views 'component contoso_shop_ai_api "contoso_shop_ai_api-accesso-dati" \{'
+        }
+
+        It "Allora la vista della logica di ""Api"" mostra ""UseCase.WrittenConversations""" {
+            $logic | Should -Match 'contoso_shop_ai_api__contoso_shop_ai_usecase_writtenconversations\b' -Because $views
+        }
+
+        It "E la vista della logica di ""Api"" non mostra i componenti di accesso ai dati" {
+            $logic | Should -Not -Match 'dataaccess' -Because $views
+        }
+
+        It "E la vista dell'accesso ai dati di ""Api"" mostra ""DataAccess.AzureServiceBus"" e ""DataAccess.AzureStorageAccount""" {
+            $dataAccess | Should -Match 'contoso_shop_ai_api__contoso_shop_ai_dataaccess_azureservicebus\b' -Because $views
+            $dataAccess | Should -Match 'contoso_shop_ai_api__contoso_shop_ai_dataaccess_azurestorageaccount\b' -Because $views
+        }
+
+        It "E la vista dell'accesso ai dati di ""Api"" mostra ""UseCase.WrittenConversations"", che ""DataAccess.AzureServiceBus"" usa" {
+            $dataAccess | Should -Match 'contoso_shop_ai_api__contoso_shop_ai_usecase_writtenconversations\b' -Because $views
+        }
+
+        It "E la vista dell'accesso ai dati di ""Api"" non mostra ""Api"", che li chiama dallo stesso container" {
+            $dataAccess | Should -Not -Match 'contoso_shop_ai_api__contoso_shop_ai_api\b' -Because $views
+        }
+
+        It "E ""Worker"", senza componenti di accesso ai dati, ha solo la vista della logica" {
+            $views | Should -Match 'component contoso_shop_ai_worker "contoso_shop_ai_worker" \{'
+            $views | Should -Not -Match 'contoso_shop_ai_worker-accesso-dati'
+        }
+    }
+
+    Context "Scenario: i segmenti dei componenti di accesso ai dati scelti dal consumer" {
+        BeforeAll {
+            $res = Invoke-C4Generation (New-EngineRepository) 'Contoso.Shop.AI' @('dotnet10') -Environment @{ C4_DATA_ACCESS_SEGMENTS = 'Utils, UseCase' }
+            $views = $res.Generated['views/contoso.shop.ai.dsl']
+        }
+
+        It "Allora la vista dell'accesso ai dati di ""Api"" mostra ""Utils"" e ""UseCase.WrittenConversations""" {
+            $block = Get-Block $views 'component contoso_shop_ai_api "contoso_shop_ai_api-accesso-dati" \{'
+            $block | Should -Match 'contoso_shop_ai_api__contoso_shop_ai_utils\b' -Because $views
+            $block | Should -Match 'contoso_shop_ai_api__contoso_shop_ai_usecase_writtenconversations\b' -Because $views
+        }
+
+        It "E la vista della logica di ""Api"" mostra ""DataAccess.AzureServiceBus""" {
+            Get-Block $views 'component contoso_shop_ai_api "contoso_shop_ai_api" \{' | Should -Match 'contoso_shop_ai_api__contoso_shop_ai_dataaccess_azureservicebus\b' -Because $views
+        }
+    }
+
+    Context "Scenario: vista dei container delle applicazioni del repository" {
+        BeforeAll {
+            $res = Invoke-Generation (New-EngineRepository) 'Contoso.Shop.AI'
+            $view = Get-Block $res.Generated['views/contoso.shop.ai.dsl'] 'container sistema "container-ai" \{'
+        }
+
+        It "Allora la vista appartiene al sistema che nel workspace include i container generati, con la chiave del gruppo" {
+            $view | Should -Not -BeNullOrEmpty -Because ($res.Generated['views/contoso.shop.ai.dsl'])
+        }
+
+        It "E mostra ogni applicazione del repository con gli elementi con cui ha relazioni" {
+            $view | Should -Match 'include ->contoso_shop_ai_api-> ->contoso_shop_ai_worker->' -Because $view
+        }
+    }
+
+    Context "Scenario: workspace senza il sistema che include i container generati" {
+        BeforeAll {
+            $files = New-EngineRepository
+            $files['docs/architecture/c4/workspace.dsl'] = "workspace {`n    model {`n        sistema = softwareSystem `"Contoso.Shop`"`n    }`n}`n"
+            $res = Invoke-Generation $files 'Contoso.Shop.AI'
+        }
+
+        It "Allora la generazione fallisce" {
+            $res.ExitCode | Should -Be 1
+        }
+
+        It "E nomina il workspace" {
+            Get-Issues $res.Output | Where-Object { $_ -match 'sistema che include le parti generate non trovato' -and $_ -match 'workspace\.dsl' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+    }
+
+    Context "Scenario: un repository senza applicazioni non ha la vista dei container" {
+        BeforeAll {
+            $container = [ordered]@{ id = 'contoso_shop_infrastructure_db'; name = 'db'; codeName = 'db'; technology = 'SQL'; tags = @(); components = @() }
+            $fragment = [ordered]@{ manifests = @(); containers = @($container); relationships = @(); addresses = @(); calls = @() } | ConvertTo-Json -Depth 5
+            $files = [ordered]@{ 'source/README.md' = "x`n"; 'docs/architecture/c4/workspace.dsl' = $null }
+            $res = Invoke-C4Generation $files 'Contoso.Shop.Infrastructure' @() -Fragments @{ 'contoso.shop.infrastructure.azure.json' = $fragment }
+        }
+
+        It "Allora la generazione riesce anche senza workspace" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E le viste della parte non hanno viste dei container" {
+            $res.Generated['views/contoso.shop.infrastructure.dsl'] | Should -Not -Match '(?m)^container ' -Because ($res.Generated['views/contoso.shop.infrastructure.dsl'])
+        }
+    }
+
     Context "Scenario: test e strumenti non entrano nel modello" {
         BeforeAll {
             $res = Invoke-Generation (New-EngineRepository) 'Contoso.Shop.AI'
@@ -327,19 +427,23 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
 
     Context "Scenario: la parte generata e' un modello Structurizr valido" {
         BeforeAll {
-            $engine = (Invoke-Generation (New-EngineRepository) 'Contoso.Shop.AI').Generated['containers/contoso.shop.ai.dsl']
-            $client = (Invoke-Generation (New-ClientRepository) 'Contoso.Shop.Client.Web').Generated['containers/contoso.shop.client.web.dsl']
+            $engine = (Invoke-Generation (New-EngineRepository) 'Contoso.Shop.AI').Generated
+            $client = (Invoke-Generation (New-ClientRepository) 'Contoso.Shop.Client.Web').Generated
             $dir = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-code-dsl-$(New-Guid)"
-            New-Item -ItemType Directory -Force -Path (Join-Path $dir 'generated/containers') | Out-Null
-            [IO.File]::WriteAllText((Join-Path $dir 'generated/containers/contoso.shop.ai.dsl'), $engine)
-            [IO.File]::WriteAllText((Join-Path $dir 'generated/containers/contoso.shop.client.web.dsl'), $client)
-            [IO.File]::WriteAllText((Join-Path $dir 'workspace.dsl'), "workspace {`n    model {`n        sistema = softwareSystem `"Contoso.Shop`" {`n            !include generated/containers`n        }`n    }`n}`n")
+            foreach ($part in 'containers/contoso.shop.ai.dsl', 'views/contoso.shop.ai.dsl') { Write-SourceFiles $dir @{ "generated/$part" = $engine[$part] } }
+            foreach ($part in 'containers/contoso.shop.client.web.dsl', 'views/contoso.shop.client.web.dsl') { Write-SourceFiles $dir @{ "generated/$part" = $client[$part] } }
+            [IO.File]::WriteAllText((Join-Path $dir 'workspace.dsl'), $C4Workspace)
             $export = Export-StructurizrWorkspace (Join-Path $dir 'workspace.dsl')
             Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
         }
 
         It "Allora il workspace che la include si esporta senza errori" {
             $export.Error | Should -BeNullOrEmpty
+        }
+
+        It "E le viste generate dei container e dei componenti si esportano" {
+            @($export.Workspace.views.containerViews | ForEach-Object key) | Should -Contain 'container-ai'
+            @($export.Workspace.views.componentViews | ForEach-Object key) | Should -Contain 'contoso_shop_ai_api-accesso-dati'
         }
 
         It "E i componenti generati portano il tag dei generati" {
