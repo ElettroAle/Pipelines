@@ -46,7 +46,8 @@ function Get-StructurizrLibraries {
     $url = "https://github.com/structurizr/cli/releases/download/v$StructurizrVersion/$($StructurizrArchive.Name)"
     Write-Host "Download Structurizr CLI $StructurizrVersion da $url"
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-WebRequest -Uri $url -OutFile $archivePath -UseBasicParsing
+    # Le release di GitHub rispondono a volte 504: un solo tentativo lascia la verifica senza modello C4.
+    Invoke-WebRequest -Uri $url -OutFile $archivePath -UseBasicParsing -MaximumRetryCount 4 -RetryIntervalSec 10
 
     $actualHash = (Get-FileHash -Path $archivePath -Algorithm SHA256).Hash
     if ($actualHash -ne $StructurizrArchive.Sha256) {
