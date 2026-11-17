@@ -183,6 +183,20 @@ risponde con le stesure registrate e conserva le richieste.
 |---|---|
 | `DotNet10Code.ps1` | Tipi di primo livello con il namespace del file, tipi annidati esclusi, namespace a blocchi, graffe in stringhe e caratteri, tipo senza namespace; tipi dei soli progetti che non sono di test, con il file che li dichiara |
 
+#### `TerraformCode.Tests.ps1`, `TerraformValues.Tests.ps1` e `Read-C4TerraformModel.Tests.ps1`
+
+Il repository Terraform finto di `Tests/V3/CI/Scripts/C4/Fixtures/TerraformFixture.ps1` ha un modulo radice condiviso,
+un modulo radice in tre ambienti con un modulo figlio e un modulo radice istanziato per cliente. Il lettore gira come
+in pipeline, in un processo separato; parser e valutatore girano nel processo dei test.
+
+| Suite | Scenario testato |
+|---|---|
+| `TerraformCode.ps1` | Blocchi, attributi su piu' righe, heredoc e commenti; riferimenti fuori dal testo delle stringhe; riferimenti seguiti attraverso locals, moduli, argomenti e remote state; riferimenti che non si sanno seguire |
+| `TerraformValues.ps1` | Operatori e precedenza, template, heredoc, for, splat; funzioni e file; valori sconosciuti che si propagano; ambienti, override, variabili con i default dei tipi, locals, count e for_each, moduli, remote state; errori con file e riga |
+| Viste di deployment generate dall'infrastruttura | Ambienti del modello; applicazione nel piano dentro la subnet a cui si integra; risorsa di un solo ambiente; applicazione tolta da un ambiente; risorsa di hosting di un tipo sconosciuto che ferma la lettura |
+| `Read-C4TerraformModel.ps1` | Servizio per nome nel codice, private endpoint nella subnet del remote state, directory condivisa, istanze per directory, piano senza integrazione, app azapi, override, sottoscrizione del provider con alias; rilievi su hosts, servizi non ospitati, istanze sconosciute, ambienti mancanti, espressioni non valutate |
+| `Export-C4CodeModel.ps1` sugli ambienti di deployment | Ambienti e viste in file propri, nodi annidati con la descrizione del testo, istanze dei container; modello Structurizr valido (Java 17) |
+
 I test degli script di verifica della documentazione partono dal documento valido di
 `Tests/V3/CI/Scripts/Common/Fixtures/Documentation/DocumentationFixture.ps1` (le dodici sezioni del template arc42 italiano,
 modello C4, diagramma Mermaid, testo entro le soglie) e vi introducono un solo difetto per scenario.
@@ -206,7 +220,7 @@ Richiede Java 17 o successivo (`STRUCTURIZR_JAVA`, `JAVA_HOME_17_X64` o `JAVA_HO
 
 | Suite | Scenario testato |
 |---|---|
-| Verifica del modello C4 | Modello completo e mostrato; relazione verso un elemento non dichiarato, container senza vista dei componenti, livello mancante, vista non mostrata, marcatore di vista inesistente, modello mancante |
+| Verifica del modello C4 | Modello completo e mostrato; relazione verso un elemento non dichiarato, container senza vista dei componenti, livello mancante, vista non mostrata, marcatore di vista inesistente, modello mancante; nodo di deployment generato senza descrizione |
 | Strumenti e modalità | Senza Java 17 la verifica fallisce nominando il controllo non eseguito; `off` |
 
 #### `Test-MermaidDiagrams.Tests.ps1`
