@@ -36,7 +36,8 @@ $script:Usage = @{ Requests = 0; Input = 0; Output = 0 }
 $Instructions = @'
 Aggiorni una decisione architetturale (ADR in Markdown) perche' il suo diagramma delle classi torni a
 corrispondere al codice che la decisione governa. La decisione dichiara nel frontmatter governs i pattern
-sui nomi completi delle classi governate: un nome completo, o un prefisso che finisce con *. Ogni classe
+sui nomi completi delle classi governate: prefissi che finiscono con * e contengono per intero il
+namespace di ogni classe che coprono. Ogni classe
 del codice che un pattern copre deve comparire, con il suo nome senza namespace, nel diagramma delle
 classi Mermaid della parte della struttura nel codice; ogni voce di governs copre almeno una classe.
 
@@ -45,9 +46,10 @@ candidate e il codice delle classi.
 
 - Una classe candidata e' una classe del codice nei namespace delle classi governate che nessun pattern
   copre. Proponi di governarla solo se appartiene alla decisione: realizza un contratto governato, ne e'
-  una variante o partecipa al meccanismo che la decisione descrive. Per governarla aggiungi a governs il
-  suo nome completo, oppure un prefisso con * se copre solo classi che appartengono alla decisione. Non
-  togliere voci di governs.
+  una variante o partecipa al meccanismo che la decisione descrive. Per governarla aggiungi a governs un
+  pattern: il suo nome completo seguito da *, oppure un prefisso piu' corto con * se copre solo classi
+  che appartengono alla decisione. Il prefisso contiene sempre per intero il namespace della classe: una
+  voce non e' mai il nome di una sola classe ne' un namespace intero. Non togliere voci di governs.
 - La parte della struttura nel codice e' il testo che sta sotto il suo titolo, fino al titolo successivo,
   senza il titolo: il diagramma delle classi e la spiegazione di ogni classe e di ogni relazione. Riscrivila
   solo dove serve: aggiungi le classi governate che mancano con le loro relazioni e la loro spiegazione,
@@ -111,12 +113,6 @@ function Save-Candidates([hashtable]$Ledger) {
     $Ledger.Keys | Sort-Object | ForEach-Object { $ordered[$_] = @($Ledger[$_] | Sort-Object -Unique) }
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent ([IO.Path]::GetFullPath($CandidatesFile))) | Out-Null
     [IO.File]::WriteAllText($CandidatesFile, (ConvertTo-Json -InputObject $ordered -Depth 4) + "`n")
-}
-
-function Get-Namespace([string]$FullName) {
-    $dot = $FullName.LastIndexOf('.')
-    if ($dot -lt 0) { return '' }
-    return $FullName.Substring(0, $dot)
 }
 
 function Get-Candidates($Decision, $Types, [hashtable]$Ledger) {
@@ -211,10 +207,17 @@ function Get-DecisionVersion([string]$Text) {
     return 1
 }
 
+# Una voce senza * e' il nome di una classe: diventa il prefisso del suo nome.
+function ConvertTo-GovernsPattern([string]$Entry) {
+    $entry = $Entry.Trim()
+    if (-not $entry -or $entry.EndsWith('*')) { return $entry }
+    return "$entry*"
+}
+
 # La stesura applicata al testo della decisione: voci di governs in piu', struttura riscritta, versione
 # nuova con la sua voce. Torna $null se la stesura non cambia la decisione.
 function Get-DraftText([string]$Original, $Draft, [string[]]$Governs) {
-    $additions = @($Draft.governs | ForEach-Object { "$_".Trim() } | Where-Object { $_ -and $Governs -cnotcontains $_ } | Select-Object -Unique)
+    $additions = @($Draft.governs | ForEach-Object { ConvertTo-GovernsPattern $_ } | Where-Object { $_ -and $Governs -cnotcontains $_ } | Select-Object -Unique)
     $structure = "$($Draft.structure)"
     if (-not $additions -and -not $structure.Trim()) { return $null }
     $newline = if ($Original.Contains("`r`n")) { "`r`n" } else { "`n" }
@@ -422,8 +425,14 @@ function Publish-Progress($Progress, [string[]]$Paths, [string]$Label) {
     Write-Host "Ramo $ProgressBranch aggiornato con le classi di $Label"
 }
 
+# Il modello non toglie voci di governs: una decisione con voci che non sono pattern validi non gli va.
 function Get-PendingDecisions($Decisions, $Types, [hashtable]$Ledger) {
     foreach ($decision in $Decisions) {
+        $entryIssues = @(Get-GovernsEntryIssues $decision $Types)
+        if ($entryIssues) {
+            Write-Host "##vso[task.logissue type=warning]Decisione $($decision.Id) non proposta: voci di $GovernsField da riscrivere come pattern ($($entryIssues -join '; '))"
+            continue
+        }
         $findings = @(Get-DecisionClassIssues $decision $Types)
         $candidates = @(Get-Candidates $decision $Types $Ledger)
         if ($findings -or $candidates) { [pscustomobject]@{ Decision = $decision; Findings = $findings; Candidates = $candidates } }

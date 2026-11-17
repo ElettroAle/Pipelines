@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Classi governate dalle decisioni. Una decisione con la struttura nel codice dichiara in governs i
-# pattern sui nomi completi delle classi che governa: un nome completo, o un prefisso che finisce con *.
+# pattern sui nomi completi delle classi che governa: prefissi che finiscono con * e contengono per intero
+# il namespace di ogni classe che coprono, mai il nome di una sola classe ne' un namespace intero.
 # Le classi del codice .NET dei repository sorgente (SOURCE_DIRECTORY) che corrispondono a quei pattern
 # sono le classi del diagramma delle classi della decisione; una classe che nessun pattern copre non si
 # controlla. Usato da Test-DecisionClasses.ps1.
@@ -56,6 +57,23 @@ function Test-GovernedBy([string]$FullName, [string]$Pattern) {
     return $FullName -ceq $Pattern
 }
 
+function Get-Namespace([string]$FullName) {
+    $dot = $FullName.LastIndexOf('.')
+    if ($dot -lt 0) { return '' }
+    return $FullName.Substring(0, $dot)
+}
+
+# Un prefisso che si ferma prima della fine del namespace di una classe che copre prende quel namespace
+# intero, con i namespace annidati.
+function Get-GovernsEntryIssues($Decision, $Types) {
+    foreach ($entry in $Decision.Governs) {
+        if (-not $entry.EndsWith('*')) { New-Issue $Decision.Id "voce di $GovernsField con il nome di una sola classe" $entry; continue }
+        $prefix = $entry.TrimEnd('*')
+        $wide = @(Get-GovernedTypes $Types @($entry) | Where-Object { $namespace = Get-Namespace $_.FullName; $namespace -and -not $prefix.StartsWith("$namespace.", [StringComparison]::Ordinal) })
+        if ($wide) { New-Issue $Decision.Id "voce di $GovernsField che copre un namespace intero" $entry }
+    }
+}
+
 function Get-GovernedTypes($Types, [string[]]$Patterns) {
     return @($Types | Where-Object { $type = $_; @($Patterns | Where-Object { Test-GovernedBy $type.FullName $_ }).Count })
 }
@@ -92,6 +110,7 @@ function Get-DecisionClassIssues($Decision, $Types) {
     $structureIssue = Get-StructureIssues $Decision
     if ($structureIssue) { return $structureIssue }
 
+    Get-GovernsEntryIssues $Decision $Types
     $governed = Get-GovernedTypes $Types $Decision.Governs
     $governed | Where-Object { $Decision.Classes -cnotcontains $_.Name } | Sort-Object FullName -Unique |
         ForEach-Object { New-Issue $Decision.Id 'classe governata assente dal diagramma delle classi' $_.FullName }

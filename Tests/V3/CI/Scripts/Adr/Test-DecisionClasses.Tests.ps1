@@ -136,7 +136,9 @@ Describe "Funzionalità: Diagramma delle classi di una decisione coerente con il
     }
 
     Context "Schema dello scenario: decisione incoerente con il codice (<Difetto>)" -ForEach @(
-        @{ Difetto = 'una voce di governs che non copre nessuna classe'; Patterns = @($Governs + 'Contoso.Shop.Core.Queue.QueueTicketRefund'); Structure = $null; Issue = '^0036-intenzioni-applicate-dopo-il-turno: voce di governs che non copre classi del codice \(Contoso\.Shop\.Core\.Queue\.QueueTicketRefund\)$' }
+        @{ Difetto = 'una voce di governs che non copre nessuna classe'; Patterns = @($Governs + 'Contoso.Shop.Core.Queue.QueueTicketRefund*'); Structure = $null; Issue = '^0036-intenzioni-applicate-dopo-il-turno: voce di governs che non copre classi del codice \(Contoso\.Shop\.Core\.Queue\.QueueTicketRefund\*\)$' }
+        @{ Difetto = 'una voce di governs con il nome di una sola classe'; Patterns = @('Contoso.Shop.Core.Queue.QueueTicketIssuer', 'Contoso.Shop.Core.Queue.IQueueTicketIssuer*', 'Contoso.Shop.Core.Handlers.V2.QueueTicket*'); Structure = $null; Issue = '^0036-intenzioni-applicate-dopo-il-turno: voce di governs con il nome di una sola classe \(Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer\)$' }
+        @{ Difetto = 'una voce di governs che copre un namespace intero'; Patterns = @('Contoso.Shop.Core.Q*', 'Contoso.Shop.Core.Handlers.V2.QueueTicket*'); Structure = $null; Issue = '^0036-intenzioni-applicate-dopo-il-turno: voce di governs che copre un namespace intero \(Contoso\.Shop\.Core\.Q\*\)$' }
         @{ Difetto = 'la struttura nel codice senza governs'; Patterns = @(); Structure = $null; Issue = "^0036-intenzioni-applicate-dopo-il-turno: parte 'Struttura nel codice' senza la lista governs \(Struttura nel codice\)$" }
         @{ Difetto = 'governs senza la struttura nel codice'; Patterns = $Governs; Structure = 'none'; Issue = "^0036-intenzioni-applicate-dopo-il-turno: lista governs senza la parte 'Struttura nel codice' \(governs\)$" }
         @{ Difetto = 'la struttura nel codice senza diagramma delle classi'; Patterns = $Governs; Structure = 'Le classi sono descritte a parole.'; Issue = '^0036-intenzioni-applicate-dopo-il-turno: struttura nel codice senza diagramma delle classi \(Struttura nel codice\)$' }
@@ -248,6 +250,31 @@ Describe "DecisionClasses.ps1" {
             Test-GovernedBy 'A.B.Queue.Issuer' 'A.B.Queue.*' | Should -BeTrue
             Test-GovernedBy 'A.B.QueueTicketHandler' 'A.B.QueueTicket*' | Should -BeTrue
             Test-GovernedBy 'A.B.queueticketHandler' 'A.B.QueueTicket*' | Should -BeFalse
+        }
+    }
+
+    Context "Get-GovernsEntryIssues" {
+        BeforeAll {
+            $types = @(
+                [pscustomobject]@{ FullName = 'A.Chat.ChatClientFactory'; Name = 'ChatClientFactory' }
+                [pscustomobject]@{ FullName = 'A.Chat.Profiles.IModelFamily'; Name = 'IModelFamily' }
+                [pscustomobject]@{ FullName = 'A.Queue.QueueTicketIssuer'; Name = 'QueueTicketIssuer' }
+                [pscustomobject]@{ FullName = 'Global'; Name = 'Global' }
+            )
+        }
+
+        It "accetta i prefissi che contengono il namespace di ogni classe che coprono" {
+            @(Get-GovernsEntryIssues ([pscustomobject]@{ Id = 'd'; Governs = @('A.Queue.*', 'A.Chat.Chat*', 'A.Chat.Profiles.*', 'Glo*') }) $types).Count | Should -Be 0
+        }
+
+        It "respinge il nome di una sola classe e i prefissi che scendono nei namespace annidati" {
+            $issues = @(Get-GovernsEntryIssues ([pscustomobject]@{ Id = 'd'; Governs = @('A.Queue.QueueTicketIssuer', 'A.Chat.*', 'A.Chat.Pro*', 'A.*') }) $types)
+            $issues | Should -Be @(
+                'd: voce di governs con il nome di una sola classe (A.Queue.QueueTicketIssuer)'
+                'd: voce di governs che copre un namespace intero (A.Chat.*)'
+                'd: voce di governs che copre un namespace intero (A.Chat.Pro*)'
+                'd: voce di governs che copre un namespace intero (A.*)'
+            )
         }
     }
 

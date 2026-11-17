@@ -4,9 +4,10 @@
 #
 # Diagramma delle classi di ogni decisione aperta coerente con il codice che governa
 # (V3/CI/Scripts/Adr/Test-DecisionClasses.ps1): una decisione con la parte della struttura nel codice
-# dichiara nel frontmatter governs i pattern sui nomi completi delle classi che governa (un nome
-# completo, o un prefisso che finisce con *). Le classi di primo livello dei progetti .NET che non sono
-# di test, nel codice dei repository sorgente, che corrispondono a quei pattern stanno nel diagramma
+# dichiara nel frontmatter governs i pattern sui nomi completi delle classi che governa: prefissi che
+# finiscono con * e contengono per intero il namespace di ogni classe che coprono, mai il nome di una
+# sola classe ne' un namespace intero. Le classi di primo livello dei progetti .NET che non sono di
+# test, nel codice dei repository sorgente, che corrispondono a quei pattern stanno nel diagramma
 # delle classi della decisione; ogni voce di governs copre almeno una classe. Una classe che nessun
 # pattern copre non si controlla. Ogni rilievo nomina la decisione e la classe o la voce. Le decisioni
 # superseded, deprecated e rejected non si controllano. I nomi delle parti seguono DOCUMENT_LANGUAGE
@@ -15,7 +16,8 @@
 # classi candidate, le classi dei namespace governati che nessun pattern copre e che il registro
 # candidatesFile non ha gia' visto (V3/CI/Scripts/Adr/Repair-DecisionClasses.ps1): risponde con le voci da
 # aggiungere a governs e la struttura nel codice riscritta, lo script alza la versione della decisione e la
-# verifica accetta o rimanda ogni stesura. Le decisioni accettate e il registro vanno sul ramo
+# verifica accetta o rimanda ogni stesura; una decisione con voci che non sono pattern validi non va al
+# modello, che non toglie voci. Le decisioni accettate e il registro vanno sul ramo
 # progressBranch, da cui una run rilanciata riprende senza richiamare il modello, e restano nel checkout
 # per la PR che il consumer apre; la verifica che segue segnala senza bloccare, perche' il cancello e' la
 # quality di quella PR. Con provider foundry l'accesso al modello passa dalla service connection con un

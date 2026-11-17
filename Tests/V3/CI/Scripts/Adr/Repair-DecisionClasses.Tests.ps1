@@ -26,7 +26,7 @@ BeforeAll {
     $DecisionPath = 'docs/decisions/0036-biglietti-dopo-il-turno.md'
     $CandidatesPath = 'docs/architecture/c4/generated/decisions.classes.json'
     $ProgressBranch = 'c4/model'
-    $Governs = @('Contoso.Shop.Core.Queue.QueueTicketIssuer', 'Contoso.Shop.Core.Queue.IQueueTicketIssuer')
+    $Governs = @('Contoso.Shop.Core.Queue.QueueTicketIssuer*', 'Contoso.Shop.Core.Queue.IQueueTicketIssuer*')
 
     function New-Structure([string[]]$Classes) {
         $lines = @('```mermaid', 'classDiagram') + @($Classes | ForEach-Object { "    class $_" }) + @('```', '', 'Le classi emettono il biglietto.')
@@ -35,7 +35,7 @@ BeforeAll {
 
     $Structure = New-Structure @('IQueueTicketIssuer', 'QueueTicketIssuer')
     $Decision = @(
-        '---', 'status: accepted', 'governs:', '  - Contoso.Shop.Core.Queue.QueueTicketIssuer', '  - Contoso.Shop.Core.Queue.IQueueTicketIssuer', '---', '',
+        '---', 'status: accepted', 'governs:', '  - Contoso.Shop.Core.Queue.QueueTicketIssuer*', '  - Contoso.Shop.Core.Queue.IQueueTicketIssuer*', '---', '',
         '# Biglietti emessi dopo il turno', '', '## Contesto e problema', '', 'Il biglietto si emette a turno finito.', '',
         '## Opzioni considerate', '', "- Un emettitore dopo il turno.", '', '## Esito della decisione', '', "Si sceglie l'emettitore.", '',
         '## Struttura nel codice', '', $Structure, '',
@@ -149,7 +149,7 @@ Describe "Funzionalità: Il modello propone pattern e diagramma delle classi del
     Context "Scenario: decisione che la verifica respinge per una classe governata assente dal diagramma" {
         BeforeAll {
             $files = New-ShopFiles @{ QueueTicketCanceller = 'public class QueueTicketCanceller { }' }
-            $text = $Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer$', '  - Contoso.Shop.Core.Queue.QueueTicket*'
+            $text = $Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer\*$', '  - Contoso.Shop.Core.Queue.QueueTicket*'
             $workspace = New-Workspace $files $text
             $res = Invoke-Repair $workspace @(New-Draft -Structure (New-Structure @('IQueueTicketIssuer', 'QueueTicketIssuer', 'QueueTicketCanceller')))
         }
@@ -201,7 +201,7 @@ Describe "Funzionalità: Il modello propone pattern e diagramma delle classi del
         }
 
         It "E la lista governs si allarga alla classe" {
-            $res.Decision | Should -Match "(?m)^  - Contoso\.Shop\.Core\.Queue\.IQueueTicketIssuer`n  - Contoso\.Shop\.Core\.Queue\.QueueTicketRefunder$"
+            $res.Decision | Should -Match "(?m)^  - Contoso\.Shop\.Core\.Queue\.IQueueTicketIssuer\*`n  - Contoso\.Shop\.Core\.Queue\.QueueTicketRefunder\*$"
         }
 
         It "E il registro delle candidate ricorda la classe" {
@@ -235,7 +235,7 @@ Describe "Funzionalità: Il modello propone pattern e diagramma delle classi del
     Context "Scenario: stesura respinta dalla verifica" {
         BeforeAll {
             $files = New-ShopFiles @{ QueueTicketCanceller = 'public class QueueTicketCanceller { }' }
-            $workspace = New-Workspace $files ($Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer$', '  - Contoso.Shop.Core.Queue.QueueTicket*')
+            $workspace = New-Workspace $files ($Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer\*$', '  - Contoso.Shop.Core.Queue.QueueTicket*')
             $res = Invoke-Repair $workspace @(
                 (New-Draft -Structure (New-Structure @('IQueueTicketIssuer', 'QueueTicketIssuer'))),
                 (New-Draft -Structure (New-Structure @('IQueueTicketIssuer', 'QueueTicketIssuer', 'QueueTicketCanceller')))
@@ -254,10 +254,53 @@ Describe "Funzionalità: Il modello propone pattern e diagramma delle classi del
         }
     }
 
+    Context "Scenario: stesura con una voce che copre un namespace intero" {
+        BeforeAll {
+            $workspace = New-Workspace (New-ShopFiles @{ QueueTicketRefunder = 'public sealed class QueueTicketRefunder : IQueueTicketIssuer { }' })
+            $structure = New-Structure @('IQueueTicketIssuer', 'QueueTicketIssuer', 'QueueTicketRefunder')
+            $res = Invoke-Repair $workspace @(
+                (New-Draft @('Contoso.Shop.Core.*') $structure 'emettitore del rimborso governato'),
+                (New-Draft @('Contoso.Shop.Core.Queue.QueueTicketRefunder') $structure 'emettitore del rimborso governato')
+            )
+        }
+
+        AfterAll { Remove-Workspace $workspace }
+
+        It "Allora la stesura torna al modello con il rilievo sulla voce" {
+            $res.Requests.Count | Should -Be 2 -Because ($res.Output)
+            Get-UserMessage $res.Requests[1] | Should -Match 'STESURA SCARTATA[\s\S]*voce di governs che copre un namespace intero \(Contoso\.Shop\.Core\.\*\)'
+        }
+
+        It "E la voce proposta con il nome della classe entra come pattern" {
+            $res.Decision | Should -Match '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketRefunder\*$'
+            $res.Decision | Should -Not -Match 'Contoso\.Shop\.Core\.\*'
+        }
+    }
+
+    Context "Scenario: decisione con voci di governs che non sono pattern" {
+        BeforeAll {
+            $text = $Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer\*$', '  - Contoso.Shop.Core.Queue.QueueTicketIssuer'
+            $workspace = New-Workspace (New-ShopFiles @{ QueueTicketRefunder = 'public sealed class QueueTicketRefunder : IQueueTicketIssuer { }' }) $text
+            $res = Invoke-Repair $workspace @(New-Draft)
+        }
+
+        AfterAll { Remove-Workspace $workspace }
+
+        It "Allora la decisione non va al modello" {
+            $res.Requests.Count | Should -Be 0 -Because ($res.Output)
+            $res.Decision | Should -Be $text
+        }
+
+        It "E il passo la segnala senza fallire" {
+            $res.ExitCode | Should -Be 0
+            Get-Issues $res.Output 'warning' | Should -Match '0036-biglietti-dopo-il-turno non proposta: voci di governs da riscrivere come pattern'
+        }
+    }
+
     Context "Scenario: stesure tutte respinte" {
         BeforeAll {
             $files = New-ShopFiles @{ QueueTicketCanceller = 'public class QueueTicketCanceller { }' }
-            $text = $Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer$', '  - Contoso.Shop.Core.Queue.QueueTicket*'
+            $text = $Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer\*$', '  - Contoso.Shop.Core.Queue.QueueTicket*'
             $workspace = New-Workspace $files $text
             $res = Invoke-Repair $workspace @(New-Draft -Structure (New-Structure @('QueueTicketIssuer')))
         }
@@ -281,7 +324,7 @@ Describe "Funzionalità: Il modello propone pattern e diagramma delle classi del
     Context "Scenario: modello linguistico non disponibile" {
         BeforeAll {
             $files = New-ShopFiles @{ QueueTicketCanceller = 'public class QueueTicketCanceller { }' }
-            $text = $Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer$', '  - Contoso.Shop.Core.Queue.QueueTicket*'
+            $text = $Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer\*$', '  - Contoso.Shop.Core.Queue.QueueTicket*'
             $workspace = New-Workspace $files $text
             $res = Invoke-Repair $workspace @(New-ModelResponse 401 @{ error = @{ message = 'non autorizzato' } })
         }
@@ -301,7 +344,7 @@ Describe "Funzionalità: Il modello propone pattern e diagramma delle classi del
     Context "Scenario: run rilanciata dopo una decisione accettata" {
         BeforeAll {
             $files = New-ShopFiles @{ QueueTicketCanceller = 'public class QueueTicketCanceller { }' }
-            $text = $Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer$', '  - Contoso.Shop.Core.Queue.QueueTicket*'
+            $text = $Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer\*$', '  - Contoso.Shop.Core.Queue.QueueTicket*'
             $accepted = ($text -replace '(?m)^    class QueueTicketIssuer$', "    class QueueTicketIssuer`n    class QueueTicketCanceller") -replace 'status: accepted', "status: accepted`nversion: 2"
             $accepted += "`n## Versioni`n`n- 2: classi del biglietto allineate al codice`n"
             $workspace = New-Workspace $files $text -Progress ([ordered]@{ $DecisionPath = $accepted })
@@ -323,7 +366,7 @@ Describe "Funzionalità: Il modello propone pattern e diagramma delle classi del
     Context "Scenario: main ha cambiato la decisione dopo il salvataggio" {
         BeforeAll {
             $files = New-ShopFiles @{ QueueTicketCanceller = 'public class QueueTicketCanceller { }' }
-            $text = $Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer$', '  - Contoso.Shop.Core.Queue.QueueTicket*'
+            $text = $Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer\*$', '  - Contoso.Shop.Core.Queue.QueueTicket*'
             $accepted = ($text -replace '(?m)^    class QueueTicketIssuer$', "    class QueueTicketIssuer`n    class QueueTicketCanceller") -replace 'status: accepted', "status: accepted`nversion: 2"
             $accepted += "`n## Versioni`n`n- 2: classi del biglietto allineate al codice`n"
             $changed = ($text -replace 'Il biglietto si emette a turno finito\.', 'Il biglietto si emette quando il turno finisce.') -replace 'status: accepted', "status: accepted`nversion: 2"
@@ -355,7 +398,7 @@ Describe "Funzionalità: Il modello propone pattern e diagramma delle classi del
         BeforeAll {
             $files = New-ShopFiles @{ QueueTicketRefunder = 'public sealed class QueueTicketRefunder : IQueueTicketIssuer { }' }
             $accepted = ($Decision -replace '(?m)^    class QueueTicketIssuer$', "    class QueueTicketIssuer`n    class QueueTicketRefunder") -replace 'status: accepted', "status: accepted`nversion: 2"
-            $accepted = $accepted -replace '(?m)^(  - Contoso\.Shop\.Core\.Queue\.IQueueTicketIssuer)$', "`$1`n  - Contoso.Shop.Core.Queue.QueueTicketRefunder"
+            $accepted = $accepted -replace '(?m)^(  - Contoso\.Shop\.Core\.Queue\.IQueueTicketIssuer\*)$', "`$1`n  - Contoso.Shop.Core.Queue.QueueTicketRefunder"
             $accepted += "`n## Versioni`n`n- 2: emettitore del rimborso governato`n"
             $changed = ($Decision -replace 'Le classi emettono il biglietto\.', 'Le classi emettono e numerano il biglietto.') -replace 'status: accepted', "status: accepted`nversion: 2"
             $changed += "`n## Versioni`n`n- 2: spiegazione della struttura riscritta`n"
@@ -403,7 +446,7 @@ Describe "Repair-DecisionClasses.ps1" {
         It "aggiunge le voci di governs, riscrive la struttura e versiona la decisione" {
             $draft = [pscustomobject]@{ governs = @('Contoso.Shop.Core.Queue.QueueTicketRefunder', 'Contoso.Shop.Core.Queue.QueueTicketIssuer'); structure = 'Testo nuovo.'; version = 'rimborso' }
             $text = Get-DraftText $Decision $draft $Governs
-            $text | Should -Match "(?m)^  - Contoso\.Shop\.Core\.Queue\.IQueueTicketIssuer`n  - Contoso\.Shop\.Core\.Queue\.QueueTicketRefunder`nversion: 2`n---$"
+            $text | Should -Match "(?m)^  - Contoso\.Shop\.Core\.Queue\.IQueueTicketIssuer\*`n  - Contoso\.Shop\.Core\.Queue\.QueueTicketRefunder\*`nversion: 2`n---$"
             $text | Should -Match "## Struttura nel codice`n`nTesto nuovo\.`n`n## Flusso nel codice"
             $text | Should -Match "## Versioni`n`n- 2: rimborso`n?$"
         }
@@ -437,7 +480,7 @@ Describe "Repair-DecisionClasses.ps1" {
                 [pscustomobject]@{ FullName = 'Contoso.Shop.Core.Queue.QueueTicketRefunder'; Name = 'QueueTicketRefunder' }
             )
             $versioned = ($Decision -replace 'status: accepted', "status: accepted`nversion: 2") + "`n## Versioni`n`n- 2: contesto riscritto`n"
-            $saved = ($Decision -replace 'status: accepted', "status: accepted`nversion: 2") -replace '(?m)^(  - Contoso\.Shop\.Core\.Queue\.IQueueTicketIssuer)$', "`$1`n  - Contoso.Shop.Core.Queue.QueueTicketRefunder"
+            $saved = ($Decision -replace 'status: accepted', "status: accepted`nversion: 2") -replace '(?m)^(  - Contoso\.Shop\.Core\.Queue\.IQueueTicketIssuer\*)$', "`$1`n  - Contoso.Shop.Core.Queue.QueueTicketRefunder"
             $saved = ($saved -replace '(?m)^    class QueueTicketIssuer$', "    class QueueTicketIssuer`n    class QueueTicketRefunder") + "`n## Versioni`n`n- 2: 2: rimborso governato`n"
         }
 
@@ -457,14 +500,14 @@ Describe "Repair-DecisionClasses.ps1" {
 
         It "applica sopra main le voci e la struttura del ramo, con una versione nuova" {
             $text = Get-ResumedText $Decision $saved $versioned @('rimborso governato') $types
-            $text | Should -Match '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketRefunder$'
+            $text | Should -Match '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketRefunder\*$'
             $text | Should -Match '(?m)^    class QueueTicketRefunder$'
             $text | Should -Match "(?m)^- 2: contesto riscritto`n- 3: rimborso governato$"
         }
 
         It "non applica la struttura che anche main ha cambiato, ne' le voci per classi che main governa gia'" {
             $restructured = $versioned -replace 'Le classi emettono il biglietto\.', 'Le classi numerano il biglietto.'
-            $governed = $restructured -replace '(?m)^(  - Contoso\.Shop\.Core\.Queue\.IQueueTicketIssuer)$', "`$1`n  - Contoso.Shop.Core.Queue.QueueTicketR*"
+            $governed = $restructured -replace '(?m)^(  - Contoso\.Shop\.Core\.Queue\.IQueueTicketIssuer\*)$', "`$1`n  - Contoso.Shop.Core.Queue.QueueTicketR*"
             Get-ResumedText $Decision $saved $governed @('rimborso governato') $types | Should -BeNullOrEmpty
             $text = Get-ResumedText $Decision $saved $restructured @('rimborso governato') $types
             $text | Should -Match 'Le classi numerano il biglietto\.'
@@ -481,6 +524,14 @@ Describe "Repair-DecisionClasses.ps1" {
             $text = Get-ResumedDecision 'assente.md' $saved $Decision $types
             $text | Should -Match "(?m)^- 2: rimborso governato$"
             $text | Should -Match '(?m)^    class QueueTicketRefunder$'
+        }
+    }
+
+    Context "ConvertTo-GovernsPattern" {
+        It "fa del nome di una classe il prefisso del suo nome e lascia i pattern" {
+            ConvertTo-GovernsPattern ' A.Queue.Issuer ' | Should -Be 'A.Queue.Issuer*'
+            ConvertTo-GovernsPattern 'A.Queue.*' | Should -Be 'A.Queue.*'
+            ConvertTo-GovernsPattern ' ' | Should -Be ''
         }
     }
 
@@ -531,7 +582,7 @@ Describe "Repair-DecisionClasses.ps1" {
                 }
             }
 
-            $text = $Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer$', '  - Contoso.Shop.Core.Queue.QueueTicket*'
+            $text = $Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer\*$', '  - Contoso.Shop.Core.Queue.QueueTicket*'
             $files = New-ShopFiles @{ QueueTicketCanceller = 'public class QueueTicketCanceller { }' }
             $repaired = New-Draft -Structure (New-Structure @('IQueueTicketIssuer', 'QueueTicketIssuer', 'QueueTicketCanceller'))
         }
