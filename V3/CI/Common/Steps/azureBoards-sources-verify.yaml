@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# ── CI Step: Fonti della PR ──────────────────────────────────────────────────
+#
+# Verifica che la PR porti le fonti del proprio perche' (V3/CI/Scripts/AzureBoards/Test-PullRequestSources.ps1):
+# e' collegata ad almeno un Task, ogni Task porta l'ADR con le sezioni obbligatorie della lingua del
+# documento (in Markdown o in HTML, intestazioni di secondo livello) e il padre di ogni Task e' un
+# requisito (Requirement, User Story, Product Backlog Item) con i criteri di accettazione o un Bug con i
+# passi di riproduzione. Ogni rilievo nomina il work item e la parte mancante. La board si legge a ogni
+# run: dopo aver completato i work item basta rilanciare la build. L'identita' della build deve leggere i
+# work item e le PR del repository.
+#
+# Riusato da:
+#   CI/Agnostic/quality-sources.yaml
+#
+# Parametri
+# ─────────
+#   mode               → 'off' | 'warn' (segnala senza bloccare) | 'enforce' (default)
+#   language           → lingua delle sezioni degli ADR, es. 'IT' o 'EN' (default: IT)
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: mode
+    type: string
+    default: 'enforce'
+    values: ['off', 'warn', 'enforce']
+
+  - name: language
+    type: string
+    default: 'IT'
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: PowerShell@2
+    displayName: 'Pull request sources (${{ parameters.mode }})'
+    inputs:
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/AzureBoards/Test-PullRequestSources.ps1'
+      pwsh: true
+    env:
+      GATE_MODE: ${{ parameters.mode }}
+      DOCUMENT_LANGUAGE: ${{ parameters.language }}
+      PULL_REQUEST_ID: $(System.PullRequest.PullRequestId)
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
