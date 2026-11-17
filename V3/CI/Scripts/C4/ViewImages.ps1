@@ -111,6 +111,25 @@ function Select-ReadableImage($Images) {
     return $Images | Sort-Object @{ Expression = 'Scale'; Descending = $true }, @{ Expression = { $_.Width * $_.Height } }, Order | Select-Object -First 1
 }
 
+function Invoke-PlantUml([hashtable]$Sources, [string]$Java) {
+    try { return ConvertTo-PlantUmlPng $Sources $Java }
+    catch { return $null }
+}
+
+# Il layout smetana a volte non instrada un arco di una variante, e PlantUML si ferma senza nominarla: allora
+# si ridisegna ogni vista da sola e, se anche cosi' si ferma, ogni sua variante da sola, lasciando fuori
+# quelle che non si disegnano.
+function Get-DrawnVariants([hashtable]$Sources, [string]$Java) {
+    $drawn = Invoke-PlantUml $Sources $Java
+    if ($drawn) { return $drawn }
+    $drawn = @{}
+    foreach ($name in $Sources.Keys) {
+        $one = Invoke-PlantUml @{ $name = $Sources[$name] } $Java
+        if ($one) { $drawn[$name] = $one[$name] }
+    }
+    return $drawn
+}
+
 # Tutte le varianti si disegnano con una sola JVM: chiave della vista -> disegno scelto.
 function ConvertTo-ViewImages([hashtable]$Diagrams, [string]$Java) {
     $variants = @{}
@@ -119,10 +138,18 @@ function ConvertTo-ViewImages([hashtable]$Diagrams, [string]$Java) {
         $variants[$key] = Get-DiagramVariants $Diagrams[$key]
         foreach ($variant in $variants[$key]) { $sources["$key.$($variant.Name)"] = $variant.Diagram }
     }
-    $drawn = ConvertTo-PlantUmlPng $sources $Java
+    $drawn = Invoke-PlantUml $sources $Java
     $images = @{}
     foreach ($key in $Diagrams.Keys) {
-        $images[$key] = Select-ReadableImage @($variants[$key] | ForEach-Object { New-ViewImage $drawn["$key.$($_.Name)"] $_ })
+        $viewDrawn = $drawn
+        if (-not $viewDrawn) {
+            $viewSources = @{}
+            foreach ($variant in $variants[$key]) { $viewSources["$key.$($variant.Name)"] = $sources["$key.$($variant.Name)"] }
+            $viewDrawn = Get-DrawnVariants $viewSources $Java
+        }
+        $drawable = @($variants[$key] | Where-Object { $viewDrawn.ContainsKey("$key.$($_.Name)") })
+        if (-not $drawable.Count) { throw "PlantUML non disegna nessuna variante della vista $key" }
+        $images[$key] = Select-ReadableImage @($drawable | ForEach-Object { New-ViewImage $viewDrawn["$key.$($_.Name)"] $_ })
     }
     return $images
 }

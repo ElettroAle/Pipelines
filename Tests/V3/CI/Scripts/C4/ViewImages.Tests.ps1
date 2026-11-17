@@ -44,6 +44,7 @@ BeforeAll {
         foreach ($key in $Diagrams.Keys) {
             $text = $Diagrams[$key]
             $direction = if ($text -match '(?m)^left to right direction') { 'lr' } else { 'tb' }
+            if ($text -match "(?m)^' non si disegna in .*\b$direction\b") { throw 'java.lang.UnsupportedOperationException: triangulation failed in routesplines' }
             if ($text -match '(?m)^skinparam nodesep') { $direction += 's' }
             $hidden = ([regex]::Matches($text, '(?m)^\S+ -\[hidden\]-> \S+$')).Count
             if ($hidden -and $text -match " $direction$hidden=(\d+)x(\d+)") { }
@@ -144,6 +145,37 @@ Describe "Funzionalità: Viste C4 disegnate nella direzione che si legge" {
 
         It "E ogni vista ha il suo disegno" {
             $images.Keys | Sort-Object | Should -Be @('container', 'contesto')
+        }
+    }
+}
+
+Describe "Funzionalità: varianti che PlantUML non disegna" {
+
+    BeforeEach {
+        $script:Rendered = @()
+        $script:Sources = @{}
+        Mock ConvertTo-PlantUmlPng { param($Diagrams, $Java) Invoke-FakePlantUml $Diagrams }
+    }
+
+    Context "Scenario: il layout non instrada un arco da sinistra a destra" {
+        BeforeEach {
+            $broken = (New-Diagram '800x3000' '1900x900') -replace "(?m)^(' misure .*)$", "`$1`n' non si disegna in lr"
+            $images = ConvertTo-ViewImages @{ container = $broken; contesto = (New-Diagram '900x700' '1100x500') } 'java'
+        }
+
+        It "Allora la vista resta con il disegno migliore fra quelli che PlantUML disegna" {
+            $images['container'].Layout | Should -Be 'tb'
+        }
+
+        It "E le altre viste hanno il loro disegno" {
+            $images['contesto'].Layout | Should -Be 'lr'
+        }
+    }
+
+    Context "Scenario: il layout non disegna nessuna variante di una vista" {
+        It "Allora il disegno si ferma nominando la vista" {
+            $broken = (New-Diagram '800x3000' '1900x900') -replace "(?m)^(' misure .*)$", "`$1`n' non si disegna in tb lr"
+            { ConvertTo-ViewImages @{ container = $broken } 'java' } | Should -Throw '*container*'
         }
     }
 }
