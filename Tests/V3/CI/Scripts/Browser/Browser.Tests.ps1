@@ -68,3 +68,24 @@ Describe "Stampa in PDF dell'HTML" {
         { ConvertTo-PdfFromHtml (Join-Path $root 'manca.html') ([DateTimeOffset]::FromUnixTimeSeconds(0)) } | Should -Throw 'Chrome headless non completa pdf*'
     }
 }
+
+Describe 'Cache di Chrome headless' {
+
+    It 'riscarica Chrome quando un download interrotto ha lasciato la cartella senza eseguibile' {
+        $previous = $env:AGENT_TOOLSDIRECTORY
+        $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-browser-tools-$(New-Guid)"
+        try {
+            $installDir = Get-BrowserRendererDirectory
+            Get-ChildItem -Path (Join-Path $installDir 'browsers') -Recurse -File -Filter 'chrome-headless-shell*' | Remove-Item -Force
+            Remove-Item -Force (Join-Path $installDir 'installed')
+
+            { Get-BrowserRendererDirectory } | Should -Not -Throw
+
+            Get-ChildItem -Path (Join-Path $installDir 'browsers') -Recurse -File -Filter 'chrome-headless-shell*' | Should -Not -BeNullOrEmpty
+        }
+        finally {
+            Remove-Item -Recurse -Force $env:AGENT_TOOLSDIRECTORY -ErrorAction SilentlyContinue
+            $env:AGENT_TOOLSDIRECTORY = $previous
+        }
+    }
+}

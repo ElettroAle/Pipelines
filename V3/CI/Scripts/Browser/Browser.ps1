@@ -16,9 +16,11 @@ function Get-BrowserRendererDirectory {
     $installed = Join-Path $installDir 'installed'
 
     # Chrome si scarica con il comando di puppeteer e non con il suo script di installazione, che npm
-    # recenti non eseguono senza un'approvazione; il segno di fine dice che anche Chrome e' completo.
+    # recenti non eseguono senza un'approvazione; il segno di fine dice che anche Chrome e' completo, e senza
+    # segno la cartella dei browser e' il resto di un download interrotto, che puppeteer non ripara.
     if (-not (Test-Path $installed)) {
         New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+        Remove-Item -Recurse -Force $env:PUPPETEER_CACHE_DIR -ErrorAction SilentlyContinue
         Copy-Item -Path (Join-Path $BrowserRendererSource 'package.json'), $lockFile -Destination $installDir -Force
         Push-Location $installDir
         try {
