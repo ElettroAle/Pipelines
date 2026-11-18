@@ -4,6 +4,7 @@
   "type": "module",
   "dependencies": {
     "@mermaid-js/mermaid-cli": "12.2.0",
-    "puppeteer": "25.17.0"
+    "puppeteer": "25.17.0",
+    "yauzl": "3.4.0"
   }
 }

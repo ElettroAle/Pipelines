@@ -71,6 +71,15 @@ Describe "Stampa in PDF dell'HTML" {
 
 Describe 'Cache di Chrome headless' {
 
+    It "porta con se' l'estrattore dello zip di Chrome, senza dipendere da unzip sull'agente" {
+        Push-Location (Get-BrowserRendererDirectory)
+        try {
+            $output = & node --input-type=module -e "await import('yauzl')" 2>&1
+            $LASTEXITCODE | Should -Be 0 -Because ($output -join "`n")
+        }
+        finally { Pop-Location }
+    }
+
     It 'riscarica Chrome quando un download interrotto ha lasciato la cartella senza eseguibile' {
         $previous = $env:AGENT_TOOLSDIRECTORY
         $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-browser-tools-$(New-Guid)"
