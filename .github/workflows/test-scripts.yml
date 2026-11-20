@@ -2,7 +2,7 @@ name: Script Unit Tests (Pester)
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
     paths:
       - "V3/CI/Scripts/**"
       - "Tests/V3/CI/**"
@@ -12,6 +12,7 @@ on:
     paths:
       - "V3/CI/Scripts/**"
       - "Tests/V3/CI/**"
+      - ".github/workflows/test-scripts.yml"
 
 jobs:
   pester:

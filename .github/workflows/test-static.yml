@@ -2,7 +2,7 @@ name: Static Analysis
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
     paths:
       - "V3/**"
       - "V4/**"
@@ -14,6 +14,7 @@ on:
       - "V3/**"
       - "V4/**"
       - "Tests/Static/**"
+      - ".github/workflows/test-static.yml"
 
 jobs:
   static-analysis:
