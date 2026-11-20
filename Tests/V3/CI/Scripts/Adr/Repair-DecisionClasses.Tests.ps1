@@ -19,8 +19,6 @@ BeforeAll {
     . "$PSScriptRoot/../LanguageModel/Fixtures/ModelEndpointStub.ps1"
     $ScriptPath = Resolve-Path "$PSScriptRoot/../../../../../V3/CI/Scripts/Adr/Repair-DecisionClasses.ps1"
     $ModulePath = $ScriptPath
-    $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
-    $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-decision-classes-repair-$(New-Guid)"
     $Stub = Start-ModelEndpoint
 
     $DecisionPath = 'docs/decisions/0036-biglietti-dopo-il-turno.md'
@@ -140,8 +138,6 @@ BeforeAll {
 
 AfterAll {
     Stop-ModelEndpoint $Stub
-    Remove-Item -Recurse -Force $env:AGENT_TOOLSDIRECTORY -ErrorAction SilentlyContinue
-    $env:AGENT_TOOLSDIRECTORY = $previousToolsDirectory
 }
 
 Describe "Funzionalità: Il modello propone pattern e diagramma delle classi delle decisioni" {

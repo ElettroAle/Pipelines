@@ -13,19 +13,12 @@
 BeforeAll {
     . "$PSScriptRoot/../Common/Fixtures/Documentation/DocumentationFixture.ps1"
     $ScriptPath = Resolve-Path "$PSScriptRoot/../../../../../V3/CI/Scripts/Mermaid/Test-MermaidDiagrams.ps1"
-    $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
-    $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-mermaid-$(New-Guid)"
 
     function Invoke-DiagramCheck([System.Collections.IDictionary]$Docs, [hashtable]$Environment = @{}) {
         $variables = @{ GATE_MODE = '' }
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
         return Invoke-DocsScript $ScriptPath $Docs $variables
     }
-}
-
-AfterAll {
-    Remove-Item -Recurse -Force $env:AGENT_TOOLSDIRECTORY -ErrorAction SilentlyContinue
-    $env:AGENT_TOOLSDIRECTORY = $previousToolsDirectory
 }
 
 

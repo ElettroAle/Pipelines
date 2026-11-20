@@ -14,8 +14,6 @@
 BeforeAll {
     . "$PSScriptRoot/../Common/Fixtures/Documentation/DocumentationFixture.ps1"
     $ScriptPath = Resolve-Path "$PSScriptRoot/../../../../../V3/CI/Scripts/Mermaid/Sync-DiagramLabels.ps1"
-    $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
-    $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-diagram-labels-$(New-Guid)"
 
     $RuntimeView = 'docs/architecture/06_runtime_view.md'
     $WorkspaceDsl = 'docs/architecture/c4/workspace.dsl'
@@ -90,11 +88,6 @@ BeforeAll {
     function Remove-Repository($Repository) {
         Remove-Item -Recurse -Force $Repository.Root, $Repository.Bare -ErrorAction SilentlyContinue
     }
-}
-
-AfterAll {
-    Remove-Item -Recurse -Force $env:AGENT_TOOLSDIRECTORY -ErrorAction SilentlyContinue
-    $env:AGENT_TOOLSDIRECTORY = $previousToolsDirectory
 }
 
 Describe "Funzionalità: Diagrammi allineati al modello C4" {

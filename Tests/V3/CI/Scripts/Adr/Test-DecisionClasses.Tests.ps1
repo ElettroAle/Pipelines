@@ -8,7 +8,7 @@
     Ogni scenario scrive un corpus con una decisione che governa le classi di un repository .NET finto,
     con il suo diagramma delle classi, e vi introduce un solo difetto. Lo script gira come in pipeline,
     in un processo separato; gli unit test caricano DecisionClasses.ps1 nel processo dei test. Richiede
-    Node.js per il parser Mermaid, installato in una cache del file.
+    Node.js per il parser Mermaid, installato nella cache degli strumenti del processo.
 #>
 
 BeforeDiscovery {
@@ -19,8 +19,6 @@ BeforeAll {
     . "$PSScriptRoot/../C4/Fixtures/C4CodeFixture.ps1"
     $ScriptPath = Resolve-Path "$PSScriptRoot/../../../../../V3/CI/Scripts/Adr/Test-DecisionClasses.ps1"
     $ModulePath = Resolve-Path "$PSScriptRoot/../../../../../V3/CI/Scripts/Adr/DecisionClasses.ps1"
-    $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
-    $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-decision-classes-$(New-Guid)"
 
     $Decision = 'docs/decisions/0036-intenzioni-applicate-dopo-il-turno.md'
     $Governs = @('Contoso.Shop.Core.Queue.*', 'Contoso.Shop.Core.Handlers.V2.QueueTicket*')
@@ -72,11 +70,6 @@ classDiagram
     function Get-ClassIssue($Result, [string]$Pattern) {
         return Get-Issues $Result.Output | Where-Object { $_ -match $Pattern }
     }
-}
-
-AfterAll {
-    Remove-Item -Recurse -Force $env:AGENT_TOOLSDIRECTORY -ErrorAction SilentlyContinue
-    $env:AGENT_TOOLSDIRECTORY = $previousToolsDirectory
 }
 
 Describe "Funzionalità: Diagramma delle classi di una decisione coerente con il codice che governa" {

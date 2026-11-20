@@ -17,8 +17,6 @@ BeforeAll {
     . "$PSScriptRoot/../Common/Fixtures/Documentation/DocumentationFixture.ps1"
     . "$PSScriptRoot/Fixtures/DocumentReaders.ps1"
     $ScriptPath = Resolve-Path "$PSScriptRoot/../../../../../V3/CI/Scripts/Arc42/Publish-Arc42Wiki.ps1"
-    $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
-    $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-arc42-wiki-$(New-Guid)"
     $ReleaseNotes = "# AI`n`n## 1.2.0`n`n- Nuova funzione`n"
     $ReleaseNotesImage = 'immagine delle release note'
     $PngSignature = [byte[]](0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
@@ -106,11 +104,6 @@ BeforeAll {
     function Add-DecisionIndex([System.Collections.IDictionary]$Docs) {
         Edit-Docs $Docs 'docs/architecture/09_architecture_decisions.md' 'La decisione [0001-esempio]' "| Decisione | Scelta |`n|---|---|`n| [0001](../decisions/0001-esempio.md) | Il BFF come unico ingresso |`n`nLa decisione [0001-esempio]"
     }
-}
-
-AfterAll {
-    Remove-Item -Recurse -Force $env:AGENT_TOOLSDIRECTORY -ErrorAction SilentlyContinue
-    $env:AGENT_TOOLSDIRECTORY = $previousToolsDirectory
 }
 
 

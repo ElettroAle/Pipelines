@@ -82,6 +82,7 @@ Describe 'Cache di Chrome headless' {
 
     It 'riscarica Chrome quando un download interrotto ha lasciato la cartella senza eseguibile' {
         $previous = $env:AGENT_TOOLSDIRECTORY
+        # Una cartella propria: la prova rompe l'installazione, che nella cache condivisa servirebbe ai test dopo.
         $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-browser-tools-$(New-Guid)"
         try {
             $installDir = Get-BrowserRendererDirectory

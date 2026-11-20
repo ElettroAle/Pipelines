@@ -19,8 +19,6 @@ BeforeAll {
     . "$PSScriptRoot/../Common/Fixtures/Documentation/DocumentationFixture.ps1"
     . "$PSScriptRoot/../LanguageModel/Fixtures/AzureCliProbe.ps1"
     $ScriptPath = Resolve-Path "$PSScriptRoot/../../../../../V3/CI/Scripts/Mermaid/Repair-DiagramFlows.ps1"
-    $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
-    $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-flows-repair-$(New-Guid)"
 
     $script:StubState = Join-Path ([IO.Path]::GetTempPath()) "pester-flows-repair-stub-$(New-Guid)"
     New-Item -ItemType Directory -Path $StubState | Out-Null
@@ -187,8 +185,6 @@ AfterAll {
     $Stub | Wait-Job -Timeout 10 | Out-Null
     $Stub | Remove-Job -Force
     Remove-Item -Recurse -Force $StubState -ErrorAction SilentlyContinue
-    Remove-Item -Recurse -Force $env:AGENT_TOOLSDIRECTORY -ErrorAction SilentlyContinue
-    $env:AGENT_TOOLSDIRECTORY = $previousToolsDirectory
 }
 
 Describe "Funzionalità: Diagrammi riallineati dall'AI quando il modello C4 cambia" {

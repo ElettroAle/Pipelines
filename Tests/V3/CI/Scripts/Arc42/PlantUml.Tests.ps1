@@ -13,9 +13,7 @@
 BeforeAll {
     . "$PSScriptRoot/../../../../../V3/CI/Scripts/C4/Structurizr.ps1"
     . "$PSScriptRoot/../../../../../V3/CI/Scripts/Arc42/PlantUml.ps1"
-    $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
     $previousPath = $env:PATH
-    $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-plantuml-$(New-Guid)"
     $env:PATH = ($env:PATH -split [IO.Path]::PathSeparator | Where-Object { -not (Test-Path (Join-Path $_ 'dot*')) }) -join [IO.Path]::PathSeparator
     $Java = Get-StructurizrJava
     $PngSignature = [byte[]](0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
@@ -34,8 +32,6 @@ SHOW_LEGEND()
 }
 
 AfterAll {
-    Remove-Item -Recurse -Force $env:AGENT_TOOLSDIRECTORY -ErrorAction SilentlyContinue
-    $env:AGENT_TOOLSDIRECTORY = $previousToolsDirectory
     $env:PATH = $previousPath
 }
 
@@ -81,10 +77,17 @@ Describe "PlantUml — disegno dei diagrammi C4" {
         BeforeAll {
             Mock Invoke-WebRequest { param($Uri, $OutFile) [IO.File]::WriteAllText($OutFile, 'non e'' PlantUML') }
             $previousJar = $env:PLANTUML_JAR
+            $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
             $env:PLANTUML_JAR = ''
+            # Una cartella vuota e propria: nella cache condivisa il jar gia' installato eviterebbe lo
+            # scaricamento da provare, e il jar finto non deve arrivarci.
             $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-plantuml-$(New-Guid)"
         }
-        AfterAll { $env:PLANTUML_JAR = $previousJar }
+        AfterAll {
+            Remove-Item -Recurse -Force $env:AGENT_TOOLSDIRECTORY -ErrorAction SilentlyContinue
+            $env:AGENT_TOOLSDIRECTORY = $previousToolsDirectory
+            $env:PLANTUML_JAR = $previousJar
+        }
 
         It "Lo scaricamento fallisce nominando il checksum" {
             { Get-PlantUmlJar } | Should -Throw '*Checksum*'
