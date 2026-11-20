@@ -16,7 +16,8 @@
 # Gli ambienti di deployment della parte stanno in GENERATED_DIRECTORY/deployment/<repository>.dsl, da
 # includere nel modello dopo il sistema software, e le loro viste in
 # GENERATED_DIRECTORY/deployment-views/<repository>.dsl: per ambiente quella d'insieme, deployment_<ambiente>,
-# e una per ogni gruppo del secondo livello che contiene qualcosa, deployment_<ambiente>_<gruppo>.
+# e una per ogni gruppo del secondo livello che contiene qualcosa, deployment_<ambiente>_<gruppo>, divisa
+# nei nodi che contiene se ospita istanze in piu' rami.
 # Le viste della parte stanno in GENERATED_DIRECTORY/views/<repository>.dsl. Ogni applicazione ha la vista
 # dei container container-<applicazione>, con gli elementi con cui ha relazioni, nel sistema che nel
 # workspace accanto a GENERATED_DIRECTORY include i container generati: una vista con tutte le applicazioni
@@ -326,8 +327,48 @@ function Get-DeploymentGroups($Environment) {
     }
 }
 
+function Get-DeploymentChildren($Node) {
+    return @($Node.children | Where-Object { $_ -and $_.kind -ne 'infrastructureNode' })
+}
+
+function Get-DeploymentSubtree($Node) {
+    $Node
+    Get-DeploymentChildren $Node | ForEach-Object { Get-DeploymentSubtree $_ }
+}
+
+function Test-DeploymentInstances($Node) {
+    return @($Node.instances | Where-Object { $_ }).Count -or @(Get-DeploymentChildren $Node | Where-Object { Test-DeploymentInstances $_ }).Count
+}
+
+# Le relazioni partono dalle istanze: istanze in rami diversi di un nodo condividono i vicini e le loro frecce
+# attraversano i riquadri annidati dei rami, e la vista non si legge alla scala minima. Con un ramo solo la
+# vista racconta un'applicazione, come la vista dei container di ogni applicazione.
+function Test-DeploymentBranches($Node) {
+    return [bool]@(Get-DeploymentSubtree $Node | Where-Object { @(Get-DeploymentChildren $_ | Where-Object { Test-DeploymentInstances $_ }).Count -gt 1 }).Count
+}
+
+# Sotto il gruppo la vista di un nodo porta anche gli elementi in relazione con le sue istanze: la vista del
+# gruppo li mostrava, e senza di loro le istanze resterebbero senza relazioni.
+function Format-DeploymentNodeViews([string]$Environment, $Node, [string]$Key, [bool]$WithNeighbours) {
+    $lines = @("deployment * $(Format-Text $Environment) $(Format-Text $Key) {", "    include $($Node.id)")
+    if (Test-DeploymentBranches $Node) {
+        $children = @(Get-DeploymentChildren $Node)
+        $lines += @($children | ForEach-Object { "    exclude $(Format-Text "element.parent==$($_.id)")" })
+        $lines += '    autoLayout lr', '}'
+        foreach ($child in @($children | Where-Object { Test-DeploymentContent $_ })) {
+            $lines += Format-DeploymentNodeViews $Environment $child "${Key}_$(ConvertTo-Identifier $child.name)" $true
+        }
+        return $lines
+    }
+    if ($WithNeighbours) {
+        $lines += @(Get-DeploymentSubtree $Node | Where-Object { @($_.instances | Where-Object { $_ }).Count } | ForEach-Object { "    include $(Format-Text "->element.parent==$($_.id)->")" })
+    }
+    return $lines + @('    autoLayout lr', '}')
+}
+
 # Un ambiente intero non si legge alla scala minima: la vista d'insieme mostra i gruppi senza il loro
-# contenuto e ogni gruppo ha la sua vista con tutto cio' che contiene.
+# contenuto e ogni gruppo ha la sua vista con tutto cio' che contiene; un nodo con istanze in piu' rami si
+# divide allo stesso modo, nella vista d'insieme del nodo e in una vista per figlio, <chiave del padre>_<figlio>.
 function Format-DeploymentViews($Environments) {
     $lines = @("// Viste di deployment generate da $Repository con Export-C4CodeModel.ps1: non si modificano a mano.")
     foreach ($environment in $Environments) {
@@ -337,7 +378,7 @@ function Format-DeploymentViews($Environments) {
         $lines += @($groups | ForEach-Object { "    exclude $(Format-Text "element.parent==$($_.Node.id)")" })
         $lines += '    autoLayout lr', '}'
         foreach ($group in @($groups | Where-Object { Test-DeploymentContent $_.Node })) {
-            $lines += "deployment * $(Format-Text $environment.name) $(Format-Text "${key}_$($group.Slug)") {", "    include $($group.Node.id)", '    autoLayout lr', '}'
+            $lines += Format-DeploymentNodeViews $environment.name $group.Node "${key}_$($group.Slug)" $false
         }
     }
     return ($lines -join "`n") + "`n"

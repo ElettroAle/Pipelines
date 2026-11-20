@@ -440,9 +440,110 @@ workspace {
             $overview | Should -Not -Contain 'snet-engine'
             $overview | Should -Not -Contain 'pe-contoso-prod-api'
             $group = & $shown 'deployment_prod_rg_contoso_prod'
-            $group | Should -Contain 'snet-engine'
+            $group | Should -Contain 'vnet-contoso-prod'
+            $group | Should -Not -Contain 'snet-engine'
             $group | Should -Not -Contain 'rg-shared-shared'
+            & $shown 'deployment_prod_rg_contoso_prod_vnet_contoso_prod_snet_engine' | Should -Contain 'snet-engine'
         }
         finally { Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue }
+    }
+
+    Context "un gruppo che ospita istanze in piu' rami" {
+        BeforeAll {
+            $node = { param($Name, $Children = @(), $Instances = @(), $Kind = 'deploymentNode') [ordered]@{ id = "x_$($Name -replace '-', '_')"; name = $Name; technology = 'T'; kind = $Kind; text = 'x'; children = @($Children); instances = @($Instances) } }
+            $app = & $node 'rg-app' @(
+                & $node 'vnet' @(
+                    & $node 'snet-a' @(& $node 'plan-a' @() @('api'))
+                    & $node 'snet-b' @(& $node 'plan-b' @() @('worker'))
+                    & $node 'snet-pe' @(& $node 'pe-x' @() @() 'infrastructureNode')
+                    & $node 'snet-empty'
+                )
+            ) @('db')
+            $web = & $node 'rg-web' @(& $node 'vnet-web' @(& $node 'snet-web' @(& $node 'plan-web' @() @('web')))) @('cache')
+            $branchFragments = New-ContainerFragments
+            $branchFragments['contoso.infrastructure.deployment.json'] = [ordered]@{ containers = @(); relationships = @(); deployment = @([ordered]@{ name = 'prod'; nodes = @(& $node 'sub' @($app, $web)) }) } | ConvertTo-Json -Depth 20
+            $branches = Invoke-C4Steps ([ordered]@{ 'source/README.md' = "# x`n" }) 'Contoso.Infrastructure' @('C4/Export-C4CodeModel.ps1') 'write' $branchFragments
+            $branchViews = $branches.Generated['deployment-views/contoso.infrastructure.dsl'] -replace "`r`n", "`n"
+        }
+
+        It "la vista del gruppo lo mostra con i nodi figli vuoti" {
+            $branches.ExitCode | Should -Be 0 -Because $branches.Output
+            Get-Block $branchViews 'deployment \* "prod" "deployment_prod_rg_app" \{' | Should -Be (@('deployment * "prod" "deployment_prod_rg_app" {', '    include x_rg_app', '    exclude "element.parent==x_vnet"', '    autoLayout lr', '}') -join "`n")
+        }
+
+        It "un figlio che ospita ancora istanze in piu' rami ha la sua vista con la chiave del padre, divisa allo stesso modo" {
+            $vnet = Get-Block $branchViews 'deployment \* "prod" "deployment_prod_rg_app_vnet" \{'
+            $vnet | Should -Match 'include x_vnet\n'
+            foreach ($subnet in 'snet_a', 'snet_b', 'snet_pe', 'snet_empty') { $vnet | Should -Match "exclude `"element\.parent==x_$subnet`"" }
+        }
+
+        It "la vista di un ramo mostra il nodo con tutto il contenuto e gli elementi in relazione con le sue istanze" {
+            Get-Block $branchViews 'deployment \* "prod" "deployment_prod_rg_app_vnet_snet_a" \{' | Should -Be (@('deployment * "prod" "deployment_prod_rg_app_vnet_snet_a" {', '    include x_snet_a', '    include "->element.parent==x_plan_a->"', '    autoLayout lr', '}') -join "`n")
+            Get-Block $branchViews 'deployment \* "prod" "deployment_prod_rg_app_vnet_snet_pe" \{' | Should -Match 'include x_snet_pe\n    autoLayout lr'
+        }
+
+        It "un figlio senza istanze ne' nodi dell'infrastruttura non ha vista" {
+            $branchViews | Should -Not -Match 'deployment_prod_rg_app_vnet_snet_empty'
+        }
+
+        It "un gruppo che ospita istanze in un ramo solo resta una vista con tutto il contenuto" {
+            Get-Block $branchViews 'deployment \* "prod" "deployment_prod_rg_web" \{' | Should -Be (@('deployment * "prod" "deployment_prod_rg_web" {', '    include x_rg_web', '    autoLayout lr', '}') -join "`n")
+            $branchViews | Should -Not -Match 'deployment_prod_rg_web_'
+        }
+
+        It "produce viste Structurizr valide che il marcatore per prefisso mostra dopo quella del padre" {
+            $dir = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-branches-dsl-$(New-Guid)"
+            try {
+                Write-SourceFiles $dir ([ordered]@{
+                        'generated/deployment/contoso.infrastructure.dsl'       = $branches.Generated['deployment/contoso.infrastructure.dsl']
+                        'generated/deployment-views/contoso.infrastructure.dsl' = $branchViews
+                        'workspace.dsl'                                         = @'
+workspace {
+    model {
+        sistema = softwareSystem "Contoso.Shop" {
+            api = container "Api"
+            worker = container "Worker"
+            web = container "Web"
+            db = container "Db"
+            cache = container "Cache"
+            api -> db "Legge"
+            worker -> cache "Scrive"
+            web -> api "Chiama"
+        }
+        !include generated/deployment
+    }
+    views {
+        !include generated/deployment-views
+    }
+}
+'@
+                    })
+                $export = Export-StructurizrWorkspace (Join-Path $dir 'workspace.dsl')
+                $export.Error | Should -BeNullOrEmpty
+                $containers = @{}
+                $export.Workspace.model.softwareSystems.containers | ForEach-Object { $containers["$($_.id)"] = $_.name }
+                $names = @{}
+                $nodes = @($export.Workspace.model.deploymentNodes)
+                while ($nodes) {
+                    foreach ($each in $nodes) {
+                        $names["$($each.id)"] = $each.name
+                        @($each.containerInstances) | Where-Object { $_ } | ForEach-Object { $names["$($_.id)"] = $containers["$($_.containerId)"] }
+                    }
+                    $nodes = @($nodes | ForEach-Object { @($_.children) } | Where-Object { $_ })
+                }
+                $shown = { param($Key) @(($export.Workspace.views.deploymentViews | Where-Object key -EQ $Key).elements | ForEach-Object { $names["$($_.id)"] } | Where-Object { $_ }) }
+                $branch = & $shown 'deployment_prod_rg_app_vnet_snet_a'
+                $branch | Should -Contain 'Api'
+                $branch | Should -Contain 'Db'
+                $branch | Should -Contain 'Web'
+                $branch | Should -Not -Contain 'Worker'
+                $overview = & $shown 'deployment_prod_rg_app_vnet'
+                $overview | Should -Contain 'snet-a'
+                $overview | Should -Not -Contain 'Api'
+                @(Resolve-ViewMarker 'deployment_prod*' $export.Workspace) | Should -Be @('deployment_prod', 'deployment_prod_rg_app', 'deployment_prod_rg_app_vnet',
+                    'deployment_prod_rg_app_vnet_snet_a', 'deployment_prod_rg_app_vnet_snet_b', 'deployment_prod_rg_app_vnet_snet_pe', 'deployment_prod_rg_web')
+            }
+            finally { Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue }
+        }
     }
 }
