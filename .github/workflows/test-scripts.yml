@@ -60,8 +60,21 @@ jobs:
             catch { if ($attempt -eq 3) { throw }; Start-Sleep -Seconds (15 * $attempt) }
           }
 
+      # Gli script installano gli strumenti (jar, binari, pacchetti npm, Chrome headless) sotto
+      # AGENT_TOOLSDIRECTORY in cartelle per versione: la cache vale finche' non cambiano gli script o i
+      # lockfile che fissano le versioni, e le chiavi precedenti dello stesso sistema ne riusano il resto.
+      - name: Restore tools cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/tools
+          key: pester-tools-${{ runner.os }}-${{ hashFiles('V3/CI/Scripts/**/package-lock.json', 'V3/CI/Scripts/Arc42/PlantUml.ps1', 'V3/CI/Scripts/Browser/Browser.ps1', 'V3/CI/Scripts/C4/Structurizr.ps1', 'V3/CI/Scripts/Mermaid/Mermaid.ps1', 'V3/CI/Scripts/Pandoc/Pandoc.ps1', 'V3/CI/Scripts/Reference/ReferenceSources.ps1', 'V3/CI/Scripts/Release/GitCliff.ps1') }}
+          restore-keys: |
+            pester-tools-${{ runner.os }}-
+
       - name: Run Pester tests
         shell: pwsh
+        env:
+          AGENT_TOOLSDIRECTORY: ${{ runner.temp }}/tools
         run: |
           $config = New-PesterConfiguration
           $config.Run.Path = "Tests/V3/CI/Scripts/"

@@ -12,8 +12,6 @@
 BeforeAll {
     . "$PSScriptRoot/../../../../../V3/CI/Scripts/Mermaid/Mermaid.ps1"
     . "$PSScriptRoot/../../../../../V3/CI/Scripts/Mermaid/DiagramModel.ps1"
-    $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
-    $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-diagram-model-$(New-Guid)"
 
     function New-Element([int]$Number, [string]$Id, [string]$Name, [object[]]$Relations = @()) {
         return [pscustomobject]@{ id = "$Number"; name = $Name; properties = [pscustomobject]@{ 'structurizr.dsl.identifier' = $Id }; relationships = $Relations }
@@ -42,11 +40,6 @@ BeforeAll {
 
     $Head = New-ModelIndex (New-Workspace)
     $Base = New-ModelIndex (New-Workspace @{ contoso_bff_web = 'Web'; contoso_ai_api = 'Api'; contoso_infra_sb_prod = 'sb-contoso-prod' })
-}
-
-AfterAll {
-    Remove-Item -Recurse -Force $env:AGENT_TOOLSDIRECTORY -ErrorAction SilentlyContinue
-    $env:AGENT_TOOLSDIRECTORY = $previousToolsDirectory
 }
 
 Describe "Funzionalità: Diagrammi che riconoscono gli elementi del modello C4 per identificativo" {

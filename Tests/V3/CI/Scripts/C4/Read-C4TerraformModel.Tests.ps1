@@ -325,8 +325,6 @@ Describe 'Export-C4CodeModel.ps1 sugli ambienti di deployment' {
         $previous = @{}
         $variables = @{ C4_DEPLOYMENT_ENVIRONMENTS = 'dev=dev-x;sta=sta-x;prod=prod-x'; C4_TERRAFORM_INSTANCES = 'Customers:customer_id=environments/{environment}/data/*'; GATE_MODE = 'enforce' }
         foreach ($name in $variables.Keys) { $previous[$name] = [Environment]::GetEnvironmentVariable($name); [Environment]::SetEnvironmentVariable($name, $variables[$name]) }
-        $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
-        $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-terraform-$(New-Guid)"
 
         $text = [ordered]@{ units = [ordered]@{ contoso_infrastructure_app = [ordered]@{ elements = [ordered]@{ contoso_infrastructure_app_azurerm_subnet_engine = 'La subnet delle API' }; relationships = @{} } } }
         $files = New-TerraformRepository
@@ -339,8 +337,6 @@ Describe 'Export-C4CodeModel.ps1 sugli ambienti di deployment' {
 
     AfterAll {
         foreach ($name in $previous.Keys) { [Environment]::SetEnvironmentVariable($name, $previous[$name]) }
-        Remove-Item -Recurse -Force $env:AGENT_TOOLSDIRECTORY -ErrorAction SilentlyContinue
-        $env:AGENT_TOOLSDIRECTORY = $previousToolsDirectory
     }
 
     It 'scrive un ambiente di deployment per ambiente del modello, fuori dalla parte dei container' {

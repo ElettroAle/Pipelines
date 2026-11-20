@@ -19,8 +19,6 @@ BeforeAll {
     . "$PSScriptRoot/Fixtures/C4CodeFixture.ps1"
     . "$PSScriptRoot/../../../../../V3/CI/Scripts/C4/Structurizr.ps1"
     . "$PSScriptRoot/../LanguageModel/Fixtures/AzureCliProbe.ps1"
-    $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
-    $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-text-tools-$(New-Guid)"
 
     $script:StubState = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-text-$(New-Guid)"
     New-Item -ItemType Directory -Path $StubState | Out-Null
@@ -218,8 +216,6 @@ AfterAll {
     $Stub | Wait-Job -Timeout 10 | Out-Null
     $Stub | Remove-Job -Force
     Remove-Item -Recurse -Force $StubState -ErrorAction SilentlyContinue
-    Remove-Item -Recurse -Force $env:AGENT_TOOLSDIRECTORY -ErrorAction SilentlyContinue
-    $env:AGENT_TOOLSDIRECTORY = $previousToolsDirectory
 }
 
 

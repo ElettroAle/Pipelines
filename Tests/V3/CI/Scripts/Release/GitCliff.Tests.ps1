@@ -16,16 +16,9 @@ BeforeDiscovery {
 
 BeforeAll {
     . "$PSScriptRoot/../../../../../V3/CI/Scripts/Release/GitCliff.ps1"
-    $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
-    $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-gitcliff-$(New-Guid)"
     $GitCliffExe = Get-GitCliffPath
     $GitCliffBytes = [IO.File]::ReadAllBytes($GitCliffExe)
     $GitCliffAscii = [Text.Encoding]::ASCII.GetString($GitCliffBytes)
-}
-
-AfterAll {
-    Remove-Item -Recurse -Force $env:AGENT_TOOLSDIRECTORY -ErrorAction SilentlyContinue
-    $env:AGENT_TOOLSDIRECTORY = $previousToolsDirectory
 }
 
 Describe "GitCliff — binario scaricato" {

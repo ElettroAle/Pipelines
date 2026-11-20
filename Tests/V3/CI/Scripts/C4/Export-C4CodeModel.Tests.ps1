@@ -14,8 +14,6 @@
 BeforeAll {
     . "$PSScriptRoot/Fixtures/C4CodeFixture.ps1"
     . "$PSScriptRoot/../../../../../V3/CI/Scripts/C4/Structurizr.ps1"
-    $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
-    $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-code-$(New-Guid)"
 
     function Invoke-Generation([System.Collections.IDictionary]$Files, [string]$Repository, [string]$Mode = 'write') {
         $readers = @{ 'Contoso.Shop.AI' = 'dotnet10'; 'Contoso.Shop.Bff.Web' = 'dotnet10'; 'Contoso.Shop.Client.Web' = 'angular18' }
@@ -31,11 +29,6 @@ BeforeAll {
     function New-ProxiedClient {
         return Add-DevProxy (New-ClientRepository) @{ '/api' = 'https://localhost:5001/'; '/hubs' = 'https://LOCALHOST:5001' }
     }
-}
-
-AfterAll {
-    Remove-Item -Recurse -Force $env:AGENT_TOOLSDIRECTORY -ErrorAction SilentlyContinue
-    $env:AGENT_TOOLSDIRECTORY = $previousToolsDirectory
 }
 
 

@@ -14,8 +14,6 @@
 BeforeAll {
     . "$PSScriptRoot/../Common/Fixtures/Documentation/DocumentationFixture.ps1"
     $ScriptPath = Resolve-Path "$PSScriptRoot/../../../../../V3/CI/Scripts/C4/Test-C4Model.ps1"
-    $previousToolsDirectory = $env:AGENT_TOOLSDIRECTORY
-    $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-model-$(New-Guid)"
 
     function Invoke-ModelCheck([System.Collections.IDictionary]$Docs, [hashtable]$Environment = @{}) {
         $variables = @{ GATE_MODE = ''; DOCUMENT_LANGUAGE = ''; C4_PAGE_WIDTH = ''; C4_PAGE_HEIGHT = ''; C4_MIN_SCALE = '' }
@@ -52,11 +50,6 @@ contoso_shop_ai_api = container "Api" "Riceve le richieste" "ASP.NET Core" "Appl
         Edit-Docs $Docs 'docs/architecture/05_building_block_view.md' '<!-- vista: componenti-worker -->' "<!-- vista: componenti-worker -->`n`n<!-- vista: componenti-api -->"
         return $Docs
     }
-}
-
-AfterAll {
-    Remove-Item -Recurse -Force $env:AGENT_TOOLSDIRECTORY -ErrorAction SilentlyContinue
-    $env:AGENT_TOOLSDIRECTORY = $previousToolsDirectory
 }
 
 

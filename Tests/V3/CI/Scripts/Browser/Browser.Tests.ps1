@@ -82,11 +82,18 @@ Describe 'Cache di Chrome headless' {
 
     It 'riscarica Chrome quando un download interrotto ha lasciato la cartella senza eseguibile' {
         $previous = $env:AGENT_TOOLSDIRECTORY
+        $sharedRoot = if ($previous) { $previous } else { [IO.Path]::GetTempPath() }
+        $sharedDir = Get-BrowserRendererDirectory
+        # Una cartella propria: la prova rompe l'installazione, che nella cache condivisa servirebbe ai test dopo.
+        # Il download interrotto si ricava dai browser gia' installati, senza una seconda installazione completa.
         $env:AGENT_TOOLSDIRECTORY = Join-Path ([IO.Path]::GetTempPath()) "pester-browser-tools-$(New-Guid)"
         try {
-            $installDir = Get-BrowserRendererDirectory
+            $installDir = Join-Path $env:AGENT_TOOLSDIRECTORY ([IO.Path]::GetRelativePath($sharedRoot, $sharedDir))
+            New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+            Copy-Item -Recurse -Path (Join-Path $sharedDir 'browsers') -Destination $installDir
             Get-ChildItem -Path (Join-Path $installDir 'browsers') -Recurse -File -Filter 'chrome-headless-shell*' | Remove-Item -Force
-            Remove-Item -Force (Join-Path $installDir 'installed')
+            Join-Path $installDir 'installed' | Should -Not -Exist
+            Get-ChildItem -Path (Join-Path $installDir 'browsers') -Recurse -File | Should -Not -BeNullOrEmpty
 
             { Get-BrowserRendererDirectory } | Should -Not -Throw
 
