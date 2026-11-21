@@ -104,6 +104,11 @@ BeforeAll {
     function Add-DecisionIndex([System.Collections.IDictionary]$Docs) {
         Edit-Docs $Docs 'docs/architecture/09_architecture_decisions.md' 'La decisione [0001-esempio]' "| Decisione | Scelta |`n|---|---|`n| [0001](../decisions/0001-esempio.md) | Il BFF come unico ingresso |`n`nLa decisione [0001-esempio]"
     }
+
+    # Il titolo e la riga dei vicini che Export-C4CodeModel.ps1 scrive in una vista generata.
+    function Add-ViewCaption([System.Collections.IDictionary]$Docs) {
+        Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' 'deployment sistema produzione "deployment-produzione" {' "deployment sistema produzione `"deployment-produzione`" `"Comunica con:\nAzure (inoltra)`" {`n            title `"Produzione, nodo Azure`""
+    }
 }
 
 
@@ -205,6 +210,28 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
 
         It "E la pagina non mostra il marcatore" {
             $page | Should -Not -Match '<!-- vista:'
+        }
+    }
+
+    Context "Scenario: ogni vista ha un titolo suo, fatto dai nomi delle parti che mostra, e una riga che nomina le parti con cui comunica; nel documento titolo e riga accompagnano l'immagine" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-ValidDocs
+            Add-ViewCaption $docs
+            $res = Invoke-WikiPublish $docs $wiki
+            $page = Get-WikiPage $wiki 'Architettura/7.-Deployment-View.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora nella pagina il titolo della vista, in grassetto, e la riga dei vicini precedono l'immagine (ADR-2113)" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $page | Should -Match ([regex]::Escape("**Produzione, nodo Azure**`n`nComunica con: Azure (inoltra)`n`n![Produzione, nodo Azure](/.attachments/Architettura/deployment-produzione.png)"))
+        }
+
+        It "E una vista senza titolo resta l'immagine con la chiave come testo alternativo (ADR-2113)" {
+            $building = Get-WikiPage $wiki 'Architettura/5.-Building-Block-View.md'
+            $building | Should -Match ([regex]::Escape('![contenitori](/.attachments/Architettura/contenitori.png)'))
+            $building | Should -Not -Match '\*\*\n\n!\[contenitori\]'
         }
     }
 
@@ -568,6 +595,7 @@ Describe "Funzionalità: Documentazione architetturale nella wiki e come documen
         $wiki = New-Wiki
         $docs = New-ValidDocs
         Add-DecisionIndex $docs
+        Add-ViewCaption $docs
         $docs['docs/decisions/0012-canale-eventi-di-sessione.md'] = (@(
                 '---', 'status: accepted', '---', '',
                 "# Canale eventi di sessione posseduto dall'hub", '',
@@ -611,6 +639,11 @@ Describe "Funzionalità: Documentazione architetturale nella wiki e come documen
                 $document.Images | Should -Be 8 -Because 'sette viste C4 e un diagramma Mermaid'
                 $decisions = @($document.Headings | Where-Object { $_.Level -eq 2 -and $_.Number -like '9.*' -and $_.Title.Trim() -match '^\d{4} ' } | ForEach-Object { $_.Title.Trim() })
                 $decisions | Should -Be @('0001 Esempio', '0012 Canale eventi di sessione')
+            }
+
+            It "E nel documento il titolo e la riga dei vicini accompagnano l'immagine della vista (ADR-2113)" {
+                $text = $document.Text -replace '\s+', ''
+                $text | Should -Match ([regex]::Escape('Produzione,nodoAzureComunicacon:Azure(inoltra)'))
             }
         }
     }

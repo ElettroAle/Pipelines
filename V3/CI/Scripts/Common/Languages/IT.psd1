@@ -8,6 +8,10 @@
     CodeNameProperty = 'codice'
     ExternalTag    = 'Esterno'
     DataAccessViewSuffix = 'accesso-dati'
+    ViewTitles     = @{ DeploymentOverview = 'Parti dell''ambiente {0}'; Containers = 'Container di {0}'; Logic = 'logica'; DataAccess = 'accesso ai dati' }
+    CommunicatesWith = 'Comunica con:'
+    SummaryTag     = 'Riassunto'
+    SummaryMore    = 'e altre {0}'
     TextLanguage   = 'italiano'
     AdrSections    = @('Contesto e problema', 'Opzioni considerate', 'Esito della decisione')
     StyleRuleParts = @{ Common = 'Regole'; Sections = 'Regole delle sezioni'; Decisions = 'Regole delle decisioni' }

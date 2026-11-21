@@ -11,6 +11,7 @@
 
 BeforeAll {
     . "$PSScriptRoot/Fixtures/TerraformFixture.ps1"
+    . "$PSScriptRoot/../../../../../V3/CI/Scripts/C4/Structurizr.ps1"
 
     function Set-FileText([System.Collections.IDictionary]$Files, [string]$Path, [string]$Old, [string]$New) {
         # Su Windows il checkout porta le here-string della fixture a CRLF.
@@ -21,6 +22,105 @@ BeforeAll {
 
     function Test-HasInstance($Fragment, [string]$Environment, [string]$Container) {
         return [bool]@(Get-AllNodes (Get-DeploymentEnvironment $Fragment $Environment).nodes | Where-Object { @($_.instances) -contains $Container }).Count
+    }
+
+    function Get-ViewOpening([string]$Key) {
+        return "^deployment \* `"prod`" `"$Key`"( `"[^`"]*`")? \{"
+    }
+
+    # Un gruppo con istanze in piu' rami e uno con un ramo solo; le relazioni fra i container le dichiara un
+    # altro repository, quello delle applicazioni.
+    function Invoke-BranchGeneration {
+        $node = { param($Name, $Children = @(), $Instances = @(), $Kind = 'deploymentNode') [ordered]@{ id = "x_$($Name -replace '-', '_')"; name = $Name; technology = 'T'; kind = $Kind; text = 'x'; children = @($Children); instances = @($Instances) } }
+        $app = & $node 'rg-app' @(
+            & $node 'vnet' @(
+                & $node 'snet-a' @(& $node 'plan-a' @() @('api'))
+                & $node 'snet-b' @(& $node 'plan-b' @() @('worker'))
+                & $node 'snet-pe' @(& $node 'pe-x' @() @() 'infrastructureNode')
+                & $node 'snet-empty'
+            )
+        ) @('db', 'queue')
+        $web = & $node 'rg-web' @(& $node 'vnet-web' @(& $node 'snet-web' @(& $node 'plan-web' @() @('web')))) @('cache')
+        $ops = & $node 'rg-ops' @() @('logs')
+        $relationships = [ordered]@{ 'api -> db' = 'Legge'; 'worker -> cache' = 'Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale.'; 'web -> api' = 'Chiama'; 'web -> worker' = 'Accoda'; 'web -> db' = 'Interroga'; 'web -> queue' = 'Pubblica'; 'worker -> logs' = 'Registra'; 'api -> logs' = 'Traccia'; 'queue -> logs' = 'Inoltra' }
+        $fragments = New-ContainerFragments
+        $fragments['contoso.shop.web.dotnet10.json'] = [ordered]@{ containers = @(); relationships = @($relationships.Keys | ForEach-Object { $ends = $_ -split ' -> '; [ordered]@{ source = $ends[0]; target = $ends[1] } }) } | ConvertTo-Json -Depth 10
+        $fragments['contoso.infrastructure.deployment.json'] = [ordered]@{ containers = @(); relationships = @(); deployment = @([ordered]@{ name = 'prod'; nodes = @(& $node 'sub' @($app, $web, $ops)) }) } | ConvertTo-Json -Depth 20
+        $described = [ordered]@{}
+        $relationships.Keys | ForEach-Object { $described[$_] = [ordered]@{ description = $relationships[$_]; technology = '' } }
+        $text = [ordered]@{ units = [ordered]@{ web = [ordered]@{ elements = @{}; relationships = $described } } } | ConvertTo-Json -Depth 10
+        return Invoke-C4Steps ([ordered]@{ 'source/README.md' = "# x`n"; 'docs/architecture/c4/generated/model.text.json' = $text }) 'Contoso.Infrastructure' @('C4/Export-C4CodeModel.ps1') 'write' $fragments
+    }
+
+    function Export-BranchWorkspace($Generation) {
+        $dir = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-branches-dsl-$(New-Guid)"
+        try {
+            Write-SourceFiles $dir ([ordered]@{
+                    'generated/deployment/contoso.infrastructure.dsl'       = $Generation.Generated['deployment/contoso.infrastructure.dsl']
+                    'generated/deployment-views/contoso.infrastructure.dsl' = $Generation.Generated['deployment-views/contoso.infrastructure.dsl']
+                    'workspace.dsl'                                         = @'
+workspace {
+    model {
+        sistema = softwareSystem "Contoso.Shop" {
+            api = container "Api"
+            worker = container "Worker"
+            web = container "Web"
+            db = container "Db"
+            cache = container "Cache"
+            queue = container "Queue"
+            logs = container "Logs"
+            api -> db "Legge"
+            worker -> cache "Scrive"
+            web -> api "Chiama"
+            web -> worker "Accoda"
+            web -> db "Interroga"
+            web -> queue "Pubblica"
+            worker -> logs "Registra"
+            api -> logs "Traccia"
+            queue -> logs "Inoltra"
+        }
+        !include generated/deployment
+    }
+    views {
+        !include generated/deployment-views
+    }
+}
+'@
+                })
+            $export = Export-StructurizrWorkspace (Join-Path $dir 'workspace.dsl')
+            if (-not $export.Workspace) { return [pscustomobject]@{ Error = $export.Error; Workspace = $null; Names = @{}; Relationships = @{} } }
+            $containers = @{}
+            $export.Workspace.model.softwareSystems.containers | ForEach-Object { $containers["$($_.id)"] = $_.name }
+            $names = @{}
+            $relationships = @{}
+            $nodes = @($export.Workspace.model.deploymentNodes)
+            while ($nodes) {
+                foreach ($each in $nodes) {
+                    $names["$($each.id)"] = $each.name
+                    @($each.relationships) | Where-Object { $_ } | ForEach-Object { $relationships["$($_.id)"] = $_ }
+                    foreach ($instance in @($each.containerInstances | Where-Object { $_ })) {
+                        $names["$($instance.id)"] = $containers["$($instance.containerId)"]
+                        @($instance.relationships) | Where-Object { $_ } | ForEach-Object { $relationships["$($_.id)"] = $_ }
+                    }
+                }
+                $nodes = @($nodes | ForEach-Object { @($_.children) } | Where-Object { $_ })
+            }
+            return [pscustomobject]@{ Error = $export.Error; Workspace = $export.Workspace; Names = $names; Relationships = $relationships }
+        }
+        finally { Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue }
+    }
+
+    function Get-ExportedView($Export, [string]$Key) {
+        return $Export.Workspace.views.deploymentViews | Where-Object key -EQ $Key
+    }
+
+    function Get-ShownNames($Export, [string]$Key) {
+        return @((Get-ExportedView $Export $Key).elements | ForEach-Object { $Export.Names["$($_.id)"] } | Where-Object { $_ })
+    }
+
+    function Get-ShownRelationships($Export, [string]$Key) {
+        return @((Get-ExportedView $Export $Key).relationships | ForEach-Object { $Export.Relationships["$($_.id)"] } | Where-Object { $_ } |
+                ForEach-Object { "$($Export.Names["$($_.sourceId)"]) -> $($Export.Names["$($_.destinationId)"]): $($_.description)" } | Sort-Object)
     }
 }
 
@@ -321,7 +421,6 @@ resource "azurerm_static_web_app" "site" {
 
 Describe 'Export-C4CodeModel.ps1 sugli ambienti di deployment' {
     BeforeAll {
-        . "$PSScriptRoot/../../../../../V3/CI/Scripts/C4/Structurizr.ps1"
         $previous = @{}
         $variables = @{ C4_DEPLOYMENT_ENVIRONMENTS = 'dev=dev-x;sta=sta-x;prod=prod-x'; C4_TERRAFORM_INSTANCES = 'Customers:customer_id=environments/{environment}/data/*'; GATE_MODE = 'enforce' }
         foreach ($name in $variables.Keys) { $previous[$name] = [Environment]::GetEnvironmentVariable($name); [Environment]::SetEnvironmentVariable($name, $variables[$name]) }
@@ -446,100 +545,228 @@ workspace {
 
     Context "un gruppo che ospita istanze in piu' rami" {
         BeforeAll {
-            $node = { param($Name, $Children = @(), $Instances = @(), $Kind = 'deploymentNode') [ordered]@{ id = "x_$($Name -replace '-', '_')"; name = $Name; technology = 'T'; kind = $Kind; text = 'x'; children = @($Children); instances = @($Instances) } }
-            $app = & $node 'rg-app' @(
-                & $node 'vnet' @(
-                    & $node 'snet-a' @(& $node 'plan-a' @() @('api'))
-                    & $node 'snet-b' @(& $node 'plan-b' @() @('worker'))
-                    & $node 'snet-pe' @(& $node 'pe-x' @() @() 'infrastructureNode')
-                    & $node 'snet-empty'
-                )
-            ) @('db')
-            $web = & $node 'rg-web' @(& $node 'vnet-web' @(& $node 'snet-web' @(& $node 'plan-web' @() @('web')))) @('cache')
-            $branchFragments = New-ContainerFragments
-            $branchFragments['contoso.infrastructure.deployment.json'] = [ordered]@{ containers = @(); relationships = @(); deployment = @([ordered]@{ name = 'prod'; nodes = @(& $node 'sub' @($app, $web)) }) } | ConvertTo-Json -Depth 20
-            $branches = Invoke-C4Steps ([ordered]@{ 'source/README.md' = "# x`n" }) 'Contoso.Infrastructure' @('C4/Export-C4CodeModel.ps1') 'write' $branchFragments
+            $branches = Invoke-BranchGeneration
             $branchViews = $branches.Generated['deployment-views/contoso.infrastructure.dsl'] -replace "`r`n", "`n"
+            $branchDeployment = $branches.Generated['deployment/contoso.infrastructure.dsl'] -replace "`r`n", "`n"
+            $branchExport = Export-BranchWorkspace $branches
         }
 
-        It "la vista del gruppo lo mostra con i nodi figli vuoti" {
+        It "la vista del gruppo lo mostra con i nodi figli vuoti, senza le sue istanze in relazione con loro, e chiude i vicini, con le relazioni riassunte fra sottosezioni e vicini (ADR-2112)" {
             $branches.ExitCode | Should -Be 0 -Because $branches.Output
-            Get-Block $branchViews 'deployment \* "prod" "deployment_prod_rg_app" \{' | Should -Be (@('deployment * "prod" "deployment_prod_rg_app" {', '    include x_rg_app', '    exclude "element.parent==x_vnet"', '    autoLayout lr', '}') -join "`n")
+            Get-Block $branchViews (Get-ViewOpening 'deployment_prod_rg_app') | Should -Be (@(
+                    'deployment * "prod" "deployment_prod_rg_app" "Comunica con: rg-web, rg-ops" {'
+                    '    title "prod · rg-app"'
+                    '    include x_rg_app'
+                    '    include x_rg_web'
+                    '    include x_rg_ops'
+                    '    exclude x_rg_app__db'
+                    '    exclude "element.parent==x_vnet"'
+                    '    exclude "element.parent==x_rg_web"'
+                    '    exclude "element.parent==x_rg_ops"'
+                    '    exclude "relationship.tag==Riassunto"'
+                    '    include "relationship.source==x_vnet && relationship.destination==x_rg_web"'
+                    '    include "relationship.source==x_rg_web && relationship.destination==x_vnet"'
+                    '    include "relationship.source==x_vnet && relationship.destination==x_rg_ops"'
+                    '    autoLayout lr'
+                    '}') -join "`n")
         }
 
-        It "un figlio che ospita ancora istanze in piu' rami ha la sua vista con la chiave del padre, divisa allo stesso modo" {
-            $vnet = Get-Block $branchViews 'deployment \* "prod" "deployment_prod_rg_app_vnet" \{'
+        It "la vista di un nodo diviso non mostra le sue istanze in relazione con le sottosezioni e tiene le altre (ADR-2112)" {
+            $shown = Get-ShownNames $branchExport 'deployment_prod_rg_app'
+            $shown | Should -Not -Contain 'Db'
+            $shown | Should -Contain 'Queue'
+        }
+
+        It "un figlio che ospita ancora istanze in piu' rami ha la sua vista con la chiave del padre, divisa allo stesso modo (ADR-2112)" {
+            $vnet = Get-Block $branchViews (Get-ViewOpening 'deployment_prod_rg_app_vnet')
             $vnet | Should -Match 'include x_vnet\n'
             foreach ($subnet in 'snet_a', 'snet_b', 'snet_pe', 'snet_empty') { $vnet | Should -Match "exclude `"element\.parent==x_$subnet`"" }
+            $vnet | Should -Match 'include x_rg_web\n'
+            $vnet | Should -Match 'exclude "element\.parent==x_rg_web"'
         }
 
-        It "la vista di un ramo mostra il nodo con tutto il contenuto e gli elementi in relazione con le sue istanze" {
-            Get-Block $branchViews 'deployment \* "prod" "deployment_prod_rg_app_vnet_snet_a" \{' | Should -Be (@('deployment * "prod" "deployment_prod_rg_app_vnet_snet_a" {', '    include x_snet_a', '    include "->element.parent==x_plan_a->"', '    autoLayout lr', '}') -join "`n")
-            Get-Block $branchViews 'deployment \* "prod" "deployment_prod_rg_app_vnet_snet_pe" \{' | Should -Match 'include x_snet_pe\n    autoLayout lr'
+        It "la vista d'insieme di un nodo include solo le relazioni riassunte fra le sue sottosezioni e con i vicini (ADR-2112)" {
+            $summaries = @([regex]::Matches((Get-Block $branchViews (Get-ViewOpening 'deployment_prod_rg_app_vnet')), 'include "relationship\.source==(\w+) && relationship\.destination==(\w+)"') | ForEach-Object { "$($_.Groups[1].Value) -> $($_.Groups[2].Value)" })
+            $summaries | Should -Be @('x_rg_web -> x_snet_a', 'x_snet_a -> x_rg_ops', 'x_snet_b -> x_rg_web', 'x_rg_web -> x_snet_b', 'x_snet_b -> x_rg_ops')
         }
 
+        It "la vista di un ramo mostra il nodo con tutto il contenuto, le istanze degli antenati in relazione con le sue e i vicini chiusi (ADR-2112)" {
+            Get-Block $branchViews (Get-ViewOpening 'deployment_prod_rg_app_vnet_snet_a') | Should -Be (@(
+                    'deployment * "prod" "deployment_prod_rg_app_vnet_snet_a" "Comunica con: rg-web, rg-ops" {'
+                    '    title "prod · rg-app · vnet · snet-a"'
+                    '    include x_snet_a'
+                    '    include x_rg_app__db'
+                    '    include x_rg_web'
+                    '    include x_rg_ops'
+                    '    exclude "element.parent==x_rg_web"'
+                    '    exclude "element.parent==x_rg_ops"'
+                    '    exclude "relationship.tag==Riassunto"'
+                    '    include "relationship.source==x_rg_web && relationship.destination==x_snet_a"'
+                    '    include "relationship.source==x_snet_a && relationship.destination==x_rg_ops"'
+                    '    autoLayout lr'
+                    '}') -join "`n")
+        }
+
+        It "la vista di un ramo senza istanze non ha vicini ne' riga dei vicini (ADR-2112, ADR-2113)" {
+            Get-Block $branchViews (Get-ViewOpening 'deployment_prod_rg_app_vnet_snet_pe') | Should -Be (@(
+                    'deployment * "prod" "deployment_prod_rg_app_vnet_snet_pe" {'
+                    '    title "prod · rg-app · vnet · snet-pe"'
+                    '    include x_snet_pe'
+                    '    exclude "relationship.tag==Riassunto"'
+                    '    autoLayout lr'
+                    '}') -join "`n")
+        }
+
+        It "la riga dei vicini nomina solo i vicini, separati da virgole, su una riga, senza i testi delle relazioni (ADR-2113)" {
+            Get-Block $branchViews (Get-ViewOpening 'deployment_prod_rg_app_vnet_snet_b') | Should -Match ([regex]::Escape('"deployment_prod_rg_app_vnet_snet_b" "Comunica con: rg-web, rg-ops" {'))
+        }
         It "un figlio senza istanze ne' nodi dell'infrastruttura non ha vista" {
             $branchViews | Should -Not -Match 'deployment_prod_rg_app_vnet_snet_empty'
         }
 
-        It "un gruppo che ospita istanze in un ramo solo resta una vista con tutto il contenuto" {
-            Get-Block $branchViews 'deployment \* "prod" "deployment_prod_rg_web" \{' | Should -Be (@('deployment * "prod" "deployment_prod_rg_web" {', '    include x_rg_web', '    autoLayout lr', '}') -join "`n")
+        It "un gruppo che ospita istanze in un ramo solo resta una vista con tutto il contenuto, con i vicini chiusi (ADR-2112)" {
+            Get-Block $branchViews (Get-ViewOpening 'deployment_prod_rg_web') | Should -Be (@(
+                    'deployment * "prod" "deployment_prod_rg_web" "Comunica con: rg-app" {'
+                    '    title "prod · rg-web"'
+                    '    include x_rg_web'
+                    '    include x_rg_app'
+                    '    exclude "element.parent==x_rg_app"'
+                    '    exclude "relationship.tag==Riassunto"'
+                    '    include "relationship.source==x_rg_web && relationship.destination==x_rg_app"'
+                    '    include "relationship.source==x_rg_app && relationship.destination==x_rg_web"'
+                    '    autoLayout lr'
+                    '}') -join "`n")
             $branchViews | Should -Not -Match 'deployment_prod_rg_web_'
         }
 
-        It "produce viste Structurizr valide che il marcatore per prefisso mostra dopo quella del padre" {
-            $dir = Join-Path ([IO.Path]::GetTempPath()) "pester-c4-branches-dsl-$(New-Guid)"
-            try {
-                Write-SourceFiles $dir ([ordered]@{
-                        'generated/deployment/contoso.infrastructure.dsl'       = $branches.Generated['deployment/contoso.infrastructure.dsl']
-                        'generated/deployment-views/contoso.infrastructure.dsl' = $branchViews
-                        'workspace.dsl'                                         = @'
-workspace {
-    model {
-        sistema = softwareSystem "Contoso.Shop" {
-            api = container "Api"
-            worker = container "Worker"
-            web = container "Web"
-            db = container "Db"
-            cache = container "Cache"
-            api -> db "Legge"
-            worker -> cache "Scrive"
-            web -> api "Chiama"
+        It "la vista d'insieme dell'ambiente ha il titolo della lingua e le relazioni riassunte fra i gruppi (ADR-2112, ADR-2113)" {
+            Get-Block $branchViews (Get-ViewOpening 'deployment_prod') | Should -Be (@(
+                    'deployment * "prod" "deployment_prod" {'
+                    '    title "Parti dell''ambiente prod"'
+                    '    include *'
+                    '    exclude "element.parent==x_rg_app"'
+                    '    exclude "element.parent==x_rg_web"'
+                    '    exclude "element.parent==x_rg_ops"'
+                    '    exclude "relationship.tag==Riassunto"'
+                    '    include "relationship.source==x_rg_app && relationship.destination==x_rg_web"'
+                    '    include "relationship.source==x_rg_app && relationship.destination==x_rg_ops"'
+                    '    include "relationship.source==x_rg_web && relationship.destination==x_rg_app"'
+                    '    autoLayout lr'
+                    '}') -join "`n")
         }
-        !include generated/deployment
-    }
-    views {
-        !include generated/deployment-views
+
+        It "scrive una volta sola nell'ambiente le relazioni riassunte che le viste usano, con il tag dei riassunti e i testi in ordine, senza il punto finale, fino a due con il numero degli altri solo se ne restano almeno due (ADR-2112)" {
+            $summaries = @($branchDeployment -split "`n" | Where-Object { $_ -match '"Riassunto"$' } | ForEach-Object Trim)
+            $summaries | Should -Be @(
+                'x_rg_app -> x_rg_web "Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale" "" "Riassunto"'
+                'x_rg_app -> x_rg_ops "Inoltra, Registra, Traccia" "" "Riassunto"'
+                'x_rg_web -> x_rg_app "Accoda, Chiama e altre 2" "" "Riassunto"'
+                'x_vnet -> x_rg_web "Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale" "" "Riassunto"'
+                'x_rg_web -> x_vnet "Accoda, Chiama" "" "Riassunto"'
+                'x_vnet -> x_rg_ops "Registra, Traccia" "" "Riassunto"'
+                'x_rg_web -> x_snet_a "Chiama" "" "Riassunto"'
+                'x_snet_a -> x_rg_ops "Traccia" "" "Riassunto"'
+                'x_snet_b -> x_rg_web "Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale" "" "Riassunto"'
+                'x_rg_web -> x_snet_b "Accoda" "" "Riassunto"'
+                'x_snet_b -> x_rg_ops "Registra" "" "Riassunto"')
+            Get-Block $branchDeployment 'deploymentEnvironment "prod" \{' | Should -Match 'x_snet_b -> x_rg_ops "Registra" "" "Riassunto"\n\}$'
+        }
+
+        It "da' a ogni istanza l'identificativo del suo nodo e del suo container" {
+            $branchDeployment | Should -Match 'x_plan_a__api = containerInstance api'
+            $branchDeployment | Should -Match 'x_rg_app__db = containerInstance db'
+        }
+
+        It "produce viste Structurizr valide che il marcatore per prefisso mostra dopo quella del padre" {
+            $branchExport.Error | Should -BeNullOrEmpty
+            $branch = Get-ShownNames $branchExport 'deployment_prod_rg_app_vnet_snet_a'
+            $branch | Should -Contain 'Api'
+            $branch | Should -Contain 'Db'
+            $branch | Should -Contain 'rg-web'
+            $branch | Should -Not -Contain 'Web'
+            $branch | Should -Not -Contain 'Worker'
+            $overview = Get-ShownNames $branchExport 'deployment_prod_rg_app_vnet'
+            $overview | Should -Contain 'snet-a'
+            $overview | Should -Not -Contain 'Api'
+            @(Resolve-ViewMarker 'deployment_prod*' $branchExport.Workspace) | Should -Be @('deployment_prod', 'deployment_prod_rg_app', 'deployment_prod_rg_app_vnet',
+                'deployment_prod_rg_app_vnet_snet_a', 'deployment_prod_rg_app_vnet_snet_b', 'deployment_prod_rg_app_vnet_snet_pe', 'deployment_prod_rg_ops', 'deployment_prod_rg_web')
+        }
+
+        It "una vista mostra solo le relazioni riassunte che include, insieme a quelle fra le istanze che mostra (ADR-2112)" {
+            Get-ShownRelationships $branchExport 'deployment_prod_rg_app_vnet_snet_a' | Should -Be @('Api -> Db: Legge', 'rg-web -> snet-a: Chiama', 'snet-a -> rg-ops: Traccia')
+            Get-ShownRelationships $branchExport 'deployment_prod_rg_app' | Should -Be @('rg-web -> vnet: Accoda, Chiama', 'vnet -> rg-ops: Registra, Traccia', 'vnet -> rg-web: Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale')
+        }
     }
 }
-'@
-                    })
-                $export = Export-StructurizrWorkspace (Join-Path $dir 'workspace.dsl')
-                $export.Error | Should -BeNullOrEmpty
-                $containers = @{}
-                $export.Workspace.model.softwareSystems.containers | ForEach-Object { $containers["$($_.id)"] = $_.name }
-                $names = @{}
-                $nodes = @($export.Workspace.model.deploymentNodes)
-                while ($nodes) {
-                    foreach ($each in $nodes) {
-                        $names["$($each.id)"] = $each.name
-                        @($each.containerInstances) | Where-Object { $_ } | ForEach-Object { $names["$($_.id)"] = $containers["$($_.containerId)"] }
-                    }
-                    $nodes = @($nodes | ForEach-Object { @($_.children) } | Where-Object { $_ })
-                }
-                $shown = { param($Key) @(($export.Workspace.views.deploymentViews | Where-Object key -EQ $Key).elements | ForEach-Object { $names["$($_.id)"] } | Where-Object { $_ }) }
-                $branch = & $shown 'deployment_prod_rg_app_vnet_snet_a'
-                $branch | Should -Contain 'Api'
-                $branch | Should -Contain 'Db'
-                $branch | Should -Contain 'Web'
-                $branch | Should -Not -Contain 'Worker'
-                $overview = & $shown 'deployment_prod_rg_app_vnet'
-                $overview | Should -Contain 'snet-a'
-                $overview | Should -Not -Contain 'Api'
-                @(Resolve-ViewMarker 'deployment_prod*' $export.Workspace) | Should -Be @('deployment_prod', 'deployment_prod_rg_app', 'deployment_prod_rg_app_vnet',
-                    'deployment_prod_rg_app_vnet_snet_a', 'deployment_prod_rg_app_vnet_snet_b', 'deployment_prod_rg_app_vnet_snet_pe', 'deployment_prod_rg_web')
-            }
-            finally { Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue }
+
+Describe "Funzionalità: Viste C4 divise che si leggono insieme" {
+    BeforeAll {
+        $generation = Invoke-BranchGeneration
+        $export = Export-BranchWorkspace $generation
+    }
+
+    Context "Scenario: la vista d'insieme di un livello mostra solo le sue sottosezioni, con il loro nome, e le relazioni fra loro riassunte, con ciò che passa" {
+        It "Allora la vista d'insieme dell'ambiente mostra i gruppi con il loro nome, senza il loro contenuto" {
+            $generation.ExitCode | Should -Be 0 -Because $generation.Output
+            $export.Error | Should -BeNullOrEmpty
+            $shown = Get-ShownNames $export 'deployment_prod'
+            $shown | Should -Contain 'rg-app'
+            $shown | Should -Contain 'rg-web'
+            $shown | Should -Contain 'rg-ops'
+            $shown | Should -Not -Contain 'vnet'
+            $shown | Should -Not -Contain 'Db'
+        }
+
+        It "E mostra le relazioni fra i gruppi riassunte, con ciò che passa" {
+            Get-ShownRelationships $export 'deployment_prod' | Should -Be @('rg-app -> rg-ops: Inoltra, Registra, Traccia', 'rg-app -> rg-web: Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale', 'rg-web -> rg-app: Accoda, Chiama e altre 2')
+        }
+
+        It "E la vista d'insieme di un nodo diviso mostra le sue sottosezioni chiuse, con le relazioni riassunte" {
+            $shown = Get-ShownNames $export 'deployment_prod_rg_app_vnet'
+            foreach ($subnet in 'snet-a', 'snet-b', 'snet-pe') { $shown | Should -Contain $subnet }
+            $shown | Should -Not -Contain 'Api'
+            Get-ShownRelationships $export 'deployment_prod_rg_app_vnet' | Should -Be @('rg-web -> snet-a: Chiama', 'rg-web -> snet-b: Accoda', 'snet-a -> rg-ops: Traccia', 'snet-b -> rg-ops: Registra', 'snet-b -> rg-web: Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale')
+        }
+
+        It "E la vista d'insieme di un nodo diviso non mostra le istanze del nodo che hanno relazioni con le sue sottosezioni" {
+            $shown = Get-ShownNames $export 'deployment_prod_rg_app'
+            $shown | Should -Not -Contain 'Db'
+            $shown | Should -Contain 'Queue'
+        }
+    }
+
+    Context "Scenario: la vista di una sottosezione mostra il suo contenuto e, come riquadri chiusi con il loro nome, le altre sottosezioni con cui comunica" {
+        It "Allora la vista della subnet mostra il suo contenuto" {
+            Get-ShownNames $export 'deployment_prod_rg_app_vnet_snet_a' | Should -Contain 'Api'
+        }
+
+        It "E mostra chiuso, con il suo nome, il gruppo con cui comunica" {
+            $shown = Get-ShownNames $export 'deployment_prod_rg_app_vnet_snet_a'
+            $shown | Should -Contain 'rg-web'
+            $shown | Should -Not -Contain 'Web'
+            $shown | Should -Not -Contain 'vnet-web'
+        }
+
+        It "E non mostra le sottosezioni con cui non comunica" {
+            $shown = Get-ShownNames $export 'deployment_prod_rg_app_vnet_snet_a'
+            $shown | Should -Not -Contain 'snet-b'
+            $shown | Should -Not -Contain 'Worker'
+        }
+    }
+
+    Context "Scenario: ogni vista ha un titolo suo, fatto dai nomi delle parti che mostra, e una riga che nomina le parti con cui comunica" {
+        It "Allora ogni vista di deployment ha un titolo suo" {
+            $titles = @($export.Workspace.views.deploymentViews | ForEach-Object title)
+            @($titles | Where-Object { $_ }).Count | Should -Be @($export.Workspace.views.deploymentViews).Count
+            @($titles | Select-Object -Unique).Count | Should -Be $titles.Count
+        }
+
+        It "E il titolo e' fatto dai nomi delle parti che mostra" {
+            Get-ExportedView $export 'deployment_prod_rg_app_vnet_snet_a' | ForEach-Object title | Should -Be 'prod · rg-app · vnet · snet-a'
+        }
+
+        It "E la riga nomina le parti con cui comunica, separate da virgole" {
+            Get-ExportedView $export 'deployment_prod_rg_app_vnet_snet_a' | ForEach-Object description | Should -Be 'Comunica con: rg-web, rg-ops'
         }
     }
 }
