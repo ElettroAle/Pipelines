@@ -39,12 +39,13 @@ BeforeAll {
                 & $node 'snet-pe' @(& $node 'pe-x' @() @() 'infrastructureNode')
                 & $node 'snet-empty'
             )
-        ) @('db')
+        ) @('db', 'queue')
         $web = & $node 'rg-web' @(& $node 'vnet-web' @(& $node 'snet-web' @(& $node 'plan-web' @() @('web')))) @('cache')
-        $relationships = [ordered]@{ 'api -> db' = 'Legge'; 'worker -> cache' = 'Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale.'; 'web -> api' = 'Chiama'; 'web -> worker' = 'Accoda'; 'web -> db' = 'Interroga' }
+        $ops = & $node 'rg-ops' @() @('logs')
+        $relationships = [ordered]@{ 'api -> db' = 'Legge'; 'worker -> cache' = 'Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale.'; 'web -> api' = 'Chiama'; 'web -> worker' = 'Accoda'; 'web -> db' = 'Interroga'; 'web -> queue' = 'Pubblica'; 'worker -> logs' = 'Registra'; 'api -> logs' = 'Traccia'; 'queue -> logs' = 'Inoltra' }
         $fragments = New-ContainerFragments
         $fragments['contoso.shop.web.dotnet10.json'] = [ordered]@{ containers = @(); relationships = @($relationships.Keys | ForEach-Object { $ends = $_ -split ' -> '; [ordered]@{ source = $ends[0]; target = $ends[1] } }) } | ConvertTo-Json -Depth 10
-        $fragments['contoso.infrastructure.deployment.json'] = [ordered]@{ containers = @(); relationships = @(); deployment = @([ordered]@{ name = 'prod'; nodes = @(& $node 'sub' @($app, $web)) }) } | ConvertTo-Json -Depth 20
+        $fragments['contoso.infrastructure.deployment.json'] = [ordered]@{ containers = @(); relationships = @(); deployment = @([ordered]@{ name = 'prod'; nodes = @(& $node 'sub' @($app, $web, $ops)) }) } | ConvertTo-Json -Depth 20
         $described = [ordered]@{}
         $relationships.Keys | ForEach-Object { $described[$_] = [ordered]@{ description = $relationships[$_]; technology = '' } }
         $text = [ordered]@{ units = [ordered]@{ web = [ordered]@{ elements = @{}; relationships = $described } } } | ConvertTo-Json -Depth 10
@@ -66,11 +67,17 @@ workspace {
             web = container "Web"
             db = container "Db"
             cache = container "Cache"
+            queue = container "Queue"
+            logs = container "Logs"
             api -> db "Legge"
             worker -> cache "Scrive"
             web -> api "Chiama"
             web -> worker "Accoda"
             web -> db "Interroga"
+            web -> queue "Pubblica"
+            worker -> logs "Registra"
+            api -> logs "Traccia"
+            queue -> logs "Inoltra"
         }
         !include generated/deployment
     }
@@ -544,20 +551,30 @@ workspace {
             $branchExport = Export-BranchWorkspace $branches
         }
 
-        It "la vista del gruppo lo mostra con i nodi figli vuoti e chiude i vicini, con le relazioni riassunte fra sottosezioni e vicini (ADR-2112)" {
+        It "la vista del gruppo lo mostra con i nodi figli vuoti, senza le sue istanze in relazione con loro, e chiude i vicini, con le relazioni riassunte fra sottosezioni e vicini (ADR-2112)" {
             $branches.ExitCode | Should -Be 0 -Because $branches.Output
             Get-Block $branchViews (Get-ViewOpening 'deployment_prod_rg_app') | Should -Be (@(
-                    'deployment * "prod" "deployment_prod_rg_app" "Comunica con:\nrg-web (Accoda, Chiama e altre 2)" {'
+                    'deployment * "prod" "deployment_prod_rg_app" "Comunica con: rg-web, rg-ops" {'
                     '    title "prod · rg-app"'
                     '    include x_rg_app'
                     '    include x_rg_web'
+                    '    include x_rg_ops'
+                    '    exclude x_rg_app__db'
                     '    exclude "element.parent==x_vnet"'
                     '    exclude "element.parent==x_rg_web"'
+                    '    exclude "element.parent==x_rg_ops"'
                     '    exclude "relationship.tag==Riassunto"'
                     '    include "relationship.source==x_vnet && relationship.destination==x_rg_web"'
                     '    include "relationship.source==x_rg_web && relationship.destination==x_vnet"'
+                    '    include "relationship.source==x_vnet && relationship.destination==x_rg_ops"'
                     '    autoLayout lr'
                     '}') -join "`n")
+        }
+
+        It "la vista di un nodo diviso non mostra le sue istanze in relazione con le sottosezioni e tiene le altre (ADR-2112)" {
+            $shown = Get-ShownNames $branchExport 'deployment_prod_rg_app'
+            $shown | Should -Not -Contain 'Db'
+            $shown | Should -Contain 'Queue'
         }
 
         It "un figlio che ospita ancora istanze in piu' rami ha la sua vista con la chiave del padre, divisa allo stesso modo (ADR-2112)" {
@@ -570,19 +587,22 @@ workspace {
 
         It "la vista d'insieme di un nodo include solo le relazioni riassunte fra le sue sottosezioni e con i vicini (ADR-2112)" {
             $summaries = @([regex]::Matches((Get-Block $branchViews (Get-ViewOpening 'deployment_prod_rg_app_vnet')), 'include "relationship\.source==(\w+) && relationship\.destination==(\w+)"') | ForEach-Object { "$($_.Groups[1].Value) -> $($_.Groups[2].Value)" })
-            $summaries | Should -Be @('x_rg_web -> x_snet_a', 'x_snet_b -> x_rg_web', 'x_rg_web -> x_snet_b')
+            $summaries | Should -Be @('x_rg_web -> x_snet_a', 'x_snet_a -> x_rg_ops', 'x_snet_b -> x_rg_web', 'x_rg_web -> x_snet_b', 'x_snet_b -> x_rg_ops')
         }
 
         It "la vista di un ramo mostra il nodo con tutto il contenuto, le istanze degli antenati in relazione con le sue e i vicini chiusi (ADR-2112)" {
             Get-Block $branchViews (Get-ViewOpening 'deployment_prod_rg_app_vnet_snet_a') | Should -Be (@(
-                    'deployment * "prod" "deployment_prod_rg_app_vnet_snet_a" "Comunica con:\nrg-web (Chiama)" {'
+                    'deployment * "prod" "deployment_prod_rg_app_vnet_snet_a" "Comunica con: rg-web, rg-ops" {'
                     '    title "prod · rg-app · vnet · snet-a"'
                     '    include x_snet_a'
                     '    include x_rg_app__db'
                     '    include x_rg_web'
+                    '    include x_rg_ops'
                     '    exclude "element.parent==x_rg_web"'
+                    '    exclude "element.parent==x_rg_ops"'
                     '    exclude "relationship.tag==Riassunto"'
                     '    include "relationship.source==x_rg_web && relationship.destination==x_snet_a"'
+                    '    include "relationship.source==x_snet_a && relationship.destination==x_rg_ops"'
                     '    autoLayout lr'
                     '}') -join "`n")
         }
@@ -597,8 +617,8 @@ workspace {
                     '}') -join "`n")
         }
 
-        It "la riga dei vicini mette ogni vicino su una riga sua e va a capo fra due parole oltre i cento caratteri (ADR-2113)" {
-            Get-Block $branchViews (Get-ViewOpening 'deployment_prod_rg_app_vnet_snet_b') | Should -Match ([regex]::Escape('"deployment_prod_rg_app_vnet_snet_b" "Comunica con:\nrg-web (Accoda, Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del\nportale)" {'))
+        It "la riga dei vicini nomina solo i vicini, separati da virgole, su una riga, senza i testi delle relazioni (ADR-2113)" {
+            Get-Block $branchViews (Get-ViewOpening 'deployment_prod_rg_app_vnet_snet_b') | Should -Match ([regex]::Escape('"deployment_prod_rg_app_vnet_snet_b" "Comunica con: rg-web, rg-ops" {'))
         }
         It "un figlio senza istanze ne' nodi dell'infrastruttura non ha vista" {
             $branchViews | Should -Not -Match 'deployment_prod_rg_app_vnet_snet_empty'
@@ -606,7 +626,7 @@ workspace {
 
         It "un gruppo che ospita istanze in un ramo solo resta una vista con tutto il contenuto, con i vicini chiusi (ADR-2112)" {
             Get-Block $branchViews (Get-ViewOpening 'deployment_prod_rg_web') | Should -Be (@(
-                    'deployment * "prod" "deployment_prod_rg_web" "Comunica con:\nrg-app (Accoda, Chiama e altre 2)" {'
+                    'deployment * "prod" "deployment_prod_rg_web" "Comunica con: rg-app" {'
                     '    title "prod · rg-web"'
                     '    include x_rg_web'
                     '    include x_rg_app'
@@ -626,24 +646,30 @@ workspace {
                     '    include *'
                     '    exclude "element.parent==x_rg_app"'
                     '    exclude "element.parent==x_rg_web"'
+                    '    exclude "element.parent==x_rg_ops"'
                     '    exclude "relationship.tag==Riassunto"'
                     '    include "relationship.source==x_rg_app && relationship.destination==x_rg_web"'
+                    '    include "relationship.source==x_rg_app && relationship.destination==x_rg_ops"'
                     '    include "relationship.source==x_rg_web && relationship.destination==x_rg_app"'
                     '    autoLayout lr'
                     '}') -join "`n")
         }
 
-        It "scrive una volta sola nell'ambiente le relazioni riassunte che le viste usano, con il tag dei riassunti e i testi in ordine fino a due, senza il punto finale (ADR-2112)" {
+        It "scrive una volta sola nell'ambiente le relazioni riassunte che le viste usano, con il tag dei riassunti e i testi in ordine, senza il punto finale, fino a due con il numero degli altri solo se ne restano almeno due (ADR-2112)" {
             $summaries = @($branchDeployment -split "`n" | Where-Object { $_ -match '"Riassunto"$' } | ForEach-Object Trim)
             $summaries | Should -Be @(
                 'x_rg_app -> x_rg_web "Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale" "" "Riassunto"'
-                'x_rg_web -> x_rg_app "Accoda, Chiama e altre 1" "" "Riassunto"'
+                'x_rg_app -> x_rg_ops "Inoltra, Registra, Traccia" "" "Riassunto"'
+                'x_rg_web -> x_rg_app "Accoda, Chiama e altre 2" "" "Riassunto"'
                 'x_vnet -> x_rg_web "Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale" "" "Riassunto"'
                 'x_rg_web -> x_vnet "Accoda, Chiama" "" "Riassunto"'
+                'x_vnet -> x_rg_ops "Registra, Traccia" "" "Riassunto"'
                 'x_rg_web -> x_snet_a "Chiama" "" "Riassunto"'
+                'x_snet_a -> x_rg_ops "Traccia" "" "Riassunto"'
                 'x_snet_b -> x_rg_web "Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale" "" "Riassunto"'
-                'x_rg_web -> x_snet_b "Accoda" "" "Riassunto"')
-            Get-Block $branchDeployment 'deploymentEnvironment "prod" \{' | Should -Match 'x_rg_web -> x_snet_b "Accoda" "" "Riassunto"\n\}$'
+                'x_rg_web -> x_snet_b "Accoda" "" "Riassunto"'
+                'x_snet_b -> x_rg_ops "Registra" "" "Riassunto"')
+            Get-Block $branchDeployment 'deploymentEnvironment "prod" \{' | Should -Match 'x_snet_b -> x_rg_ops "Registra" "" "Riassunto"\n\}$'
         }
 
         It "da' a ogni istanza l'identificativo del suo nodo e del suo container" {
@@ -663,12 +689,12 @@ workspace {
             $overview | Should -Contain 'snet-a'
             $overview | Should -Not -Contain 'Api'
             @(Resolve-ViewMarker 'deployment_prod*' $branchExport.Workspace) | Should -Be @('deployment_prod', 'deployment_prod_rg_app', 'deployment_prod_rg_app_vnet',
-                'deployment_prod_rg_app_vnet_snet_a', 'deployment_prod_rg_app_vnet_snet_b', 'deployment_prod_rg_app_vnet_snet_pe', 'deployment_prod_rg_web')
+                'deployment_prod_rg_app_vnet_snet_a', 'deployment_prod_rg_app_vnet_snet_b', 'deployment_prod_rg_app_vnet_snet_pe', 'deployment_prod_rg_ops', 'deployment_prod_rg_web')
         }
 
         It "una vista mostra solo le relazioni riassunte che include, insieme a quelle fra le istanze che mostra (ADR-2112)" {
-            Get-ShownRelationships $branchExport 'deployment_prod_rg_app_vnet_snet_a' | Should -Be @('Api -> Db: Legge', 'rg-web -> snet-a: Chiama')
-            Get-ShownRelationships $branchExport 'deployment_prod_rg_app' | Should -Be @('rg-web -> vnet: Accoda, Chiama', 'vnet -> rg-web: Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale')
+            Get-ShownRelationships $branchExport 'deployment_prod_rg_app_vnet_snet_a' | Should -Be @('Api -> Db: Legge', 'rg-web -> snet-a: Chiama', 'snet-a -> rg-ops: Traccia')
+            Get-ShownRelationships $branchExport 'deployment_prod_rg_app' | Should -Be @('rg-web -> vnet: Accoda, Chiama', 'vnet -> rg-ops: Registra, Traccia', 'vnet -> rg-web: Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale')
         }
     }
 }
@@ -686,19 +712,26 @@ Describe "Funzionalità: Viste C4 divise che si leggono insieme" {
             $shown = Get-ShownNames $export 'deployment_prod'
             $shown | Should -Contain 'rg-app'
             $shown | Should -Contain 'rg-web'
+            $shown | Should -Contain 'rg-ops'
             $shown | Should -Not -Contain 'vnet'
             $shown | Should -Not -Contain 'Db'
         }
 
         It "E mostra le relazioni fra i gruppi riassunte, con ciò che passa" {
-            Get-ShownRelationships $export 'deployment_prod' | Should -Be @('rg-app -> rg-web: Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale', 'rg-web -> rg-app: Accoda, Chiama e altre 1')
+            Get-ShownRelationships $export 'deployment_prod' | Should -Be @('rg-app -> rg-ops: Inoltra, Registra, Traccia', 'rg-app -> rg-web: Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale', 'rg-web -> rg-app: Accoda, Chiama e altre 2')
         }
 
         It "E la vista d'insieme di un nodo diviso mostra le sue sottosezioni chiuse, con le relazioni riassunte" {
             $shown = Get-ShownNames $export 'deployment_prod_rg_app_vnet'
             foreach ($subnet in 'snet-a', 'snet-b', 'snet-pe') { $shown | Should -Contain $subnet }
             $shown | Should -Not -Contain 'Api'
-            Get-ShownRelationships $export 'deployment_prod_rg_app_vnet' | Should -Be @('rg-web -> snet-a: Chiama', 'rg-web -> snet-b: Accoda', 'snet-b -> rg-web: Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale')
+            Get-ShownRelationships $export 'deployment_prod_rg_app_vnet' | Should -Be @('rg-web -> snet-a: Chiama', 'rg-web -> snet-b: Accoda', 'snet-a -> rg-ops: Traccia', 'snet-b -> rg-ops: Registra', 'snet-b -> rg-web: Scrive nella cache le sessioni che il worker elabora fuori dalla richiesta del portale')
+        }
+
+        It "E la vista d'insieme di un nodo diviso non mostra le istanze del nodo che hanno relazioni con le sue sottosezioni" {
+            $shown = Get-ShownNames $export 'deployment_prod_rg_app'
+            $shown | Should -Not -Contain 'Db'
+            $shown | Should -Contain 'Queue'
         }
     }
 
@@ -732,8 +765,8 @@ Describe "Funzionalità: Viste C4 divise che si leggono insieme" {
             Get-ExportedView $export 'deployment_prod_rg_app_vnet_snet_a' | ForEach-Object title | Should -Be 'prod · rg-app · vnet · snet-a'
         }
 
-        It "E la riga nomina le parti con cui comunica" {
-            Get-ExportedView $export 'deployment_prod_rg_app_vnet_snet_a' | ForEach-Object description | Should -Be "Comunica con:`nrg-web (Chiama)"
+        It "E la riga nomina le parti con cui comunica, separate da virgole" {
+            Get-ExportedView $export 'deployment_prod_rg_app_vnet_snet_a' | ForEach-Object description | Should -Be 'Comunica con: rg-web, rg-ops'
         }
     }
 }

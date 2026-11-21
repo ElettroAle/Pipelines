@@ -487,13 +487,14 @@ function Get-RelatedAncestorInstances($Node) {
 }
 
 # Structurizr non ammette una relazione fra un'istanza e un nodo: quella fra due nodi riassume le relazioni fra
-# le loro istanze, con i testi distinti in ordine fino al limite e il numero di quelli che restano. Un testo
-# perde il punto finale perche' i testi si leggono in fila, separati da virgole.
+# le loro istanze, con i testi distinti in ordine fino al limite e il numero di quelli che restano, se sono
+# almeno due: uno solo si scrive. Un testo perde il punto finale perche' i testi si leggono in fila, separati
+# da virgole.
 function Format-SummaryText($Relationships) {
     $texts = [string[]]@($Relationships | ForEach-Object { "$($_.Text)".TrimEnd('.').Trim() } | Where-Object { $_ } | Select-Object -Unique)
     [Array]::Sort($texts, [StringComparer]::Ordinal)
+    if ($texts.Count -le $SummaryTextLimit + 1) { return @($texts) -join ', ' }
     $shown = @($texts | Select-Object -First $SummaryTextLimit) -join ', '
-    if ($texts.Count -le $SummaryTextLimit) { return $shown }
     return "$shown $($DocumentLanguage.SummaryMore -f ($texts.Count - $SummaryTextLimit))"
 }
 
@@ -528,21 +529,27 @@ function Get-DeploymentViewTitle([string]$Environment, $Node) {
     return (@($Environment) + @($path | ForEach-Object name) + $Node.name) -join $TitleSeparator
 }
 
-function Format-NeighbourLine($Node, $Neighbours) {
+# Cio' che passa fra la vista e un vicino sta sulla sua freccia riassunta: la riga nomina solo i vicini, e
+# resta una riga che non allarga l'immagine.
+function Format-NeighbourLine($Neighbours) {
     if (-not $Neighbours.Count) { return '' }
-    $own = Get-SubtreeContainers $Node
-    $parts = @(foreach ($neighbour in $Neighbours) {
-            $text = Format-SummaryText (Get-CrossingRelationships $own (Get-SubtreeContainers $neighbour))
-            if ($text) { "$($neighbour.name) ($text)" } else { $neighbour.name }
-        })
-    return Format-Description (@($CommunicatesWith) + @($parts | Select-Object -SkipLast 1 | ForEach-Object { "$_;" }) + $parts[-1])
+    return "$CommunicatesWith $(@($Neighbours | ForEach-Object name) -join ', ')"
+}
+
+# Un'istanza che sta direttamente nel nodo e ha relazioni con le sue sottosezioni chiuse non avrebbe frecce,
+# perche' una relazione fra un'istanza e un nodo non si disegna: compare con le sue nelle viste delle
+# sottosezioni.
+function Get-SectionRelatedInstances($Node, $Sections) {
+    $inSections = @($Sections | ForEach-Object { Get-SubtreeContainers $_ } | ForEach-Object { $_ })
+    return @(Get-NodeInstances $Node | Where-Object { (Get-CrossingRelationships @($_) $inSections).Count } | ForEach-Object { Get-InstanceId $Node $_ })
 }
 
 # Un nodo chiuso mostra il suo riquadro senza contenuto. Le relazioni riassunte si escludono tutte e poi si
 # includono quelle della vista, perche' un nodo incluso porterebbe con se' anche quelle verso gli altri.
-function Format-DeploymentView([string]$Environment, [string]$Key, [string]$Title, [string]$Description, [string[]]$Shown, [string[]]$Closed, $Summaries) {
+function Format-DeploymentView([string]$Environment, [string]$Key, [string]$Title, [string]$Description, [string[]]$Shown, [string[]]$Closed, $Summaries, [string[]]$Hidden = @()) {
     $lines = @((Format-ViewOpening "deployment * $(Format-Text $Environment)" $Key $Description), "    title $(Format-Text $Title)")
     $lines += @($Shown | ForEach-Object { "    include $_" })
+    $lines += @($Hidden | Where-Object { $_ } | ForEach-Object { "    exclude $_" })
     $lines += @($Closed | ForEach-Object { "    exclude $(Format-Text "element.parent==$_")" })
     $lines += "    exclude $(Format-Text "relationship.tag==$SummaryTag")"
     $lines += @($Summaries | Where-Object { $_ } | ForEach-Object { "    include $(Format-Text "relationship.source==$($_.Source) && relationship.destination==$($_.Target)")" })
@@ -556,7 +563,7 @@ function Format-DeploymentNodeViews([string]$Environment, $Node, [string]$Key) {
     $neighbours = @(Get-DeploymentNeighbours $Node)
     $neighbourIds = @($neighbours | ForEach-Object id)
     $title = Get-DeploymentViewTitle $Environment $Node
-    $description = Format-NeighbourLine $Node $neighbours
+    $description = Format-NeighbourLine $neighbours
     if (-not (Test-DeploymentBranches $Node)) {
         $shown = @($Node.id) + @(Get-RelatedAncestorInstances $Node) + $neighbourIds
         return Format-DeploymentView $Environment $Key $title $description $shown $neighbourIds @(Use-NeighbourSummaries @($Node) $neighbours)
@@ -564,7 +571,8 @@ function Format-DeploymentNodeViews([string]$Environment, $Node, [string]$Key) {
     $children = @(Get-DeploymentChildren $Node)
     $sections = @($children | Where-Object { Test-DeploymentContent $_ })
     $summaries = @(Use-SectionSummaries $sections) + @(Use-NeighbourSummaries $sections $neighbours)
-    $lines = Format-DeploymentView $Environment $Key $title $description (@($Node.id) + $neighbourIds) (@($children | ForEach-Object id) + $neighbourIds) $summaries
+    $hidden = Get-SectionRelatedInstances $Node $sections
+    $lines = Format-DeploymentView $Environment $Key $title $description (@($Node.id) + $neighbourIds) (@($children | ForEach-Object id) + $neighbourIds) $summaries $hidden
     foreach ($section in $sections) {
         $lines += Format-DeploymentNodeViews $Environment $section "${Key}_$(ConvertTo-Identifier $section.name)"
     }

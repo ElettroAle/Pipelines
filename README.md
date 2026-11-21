@@ -578,18 +578,20 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   per ogni nodo del secondo livello con istanze o nodi dell'infrastruttura (`deployment_<ambiente>_<gruppo>`).
   Se due gruppi dello stesso ambiente hanno lo stesso nome, la chiave aggiunge quello del nodo che li
   contiene. La vista di un nodo con istanze in un ramo solo mostra tutto il suo contenuto e le istanze degli
-  antenati in relazione con le sue; quella di un nodo con istanze in più rami mostra i figli chiusi, e ogni
-  figlio con contenuto ha la sua vista, `<chiave del padre>_<figlio>`. Ogni vista mostra chiusi anche i
+  antenati in relazione con le sue; quella di un nodo con istanze in più rami mostra i figli chiusi, senza
+  le istanze dirette del nodo in relazione con le istanze dei figli (una freccia fra un'istanza e un nodo
+  chiuso non si disegna: compaiono nelle viste dei figli), e ogni figlio con contenuto ha la sua vista,
+  `<chiave del padre>_<figlio>`. Ogni vista mostra chiusi anche i
   vicini del suo nodo: i fratelli suoi e dei suoi antenati con cui le sue istanze hanno relazioni. Fra due
   nodi chiusi le relazioni fra le loro istanze sono riassunte in una relazione sola, con i testi distinti in
-  ordine fino a due e il numero degli altri (`e altre <n>` in italiano) e il tag `Riassunto`: la vista
+  ordine fino a due e il numero degli altri (`e altre <n>` in italiano) se ne restano almeno due, altrimenti
+  tutti, e il tag `Riassunto`: la vista
   d'insieme mostra quelle fra i gruppi, la vista di un nodo quelle fra i figli chiusi e fra il nodo, o i
   suoi figli chiusi, e i vicini. Il titolo di una vista è il nome dell'ambiente con i nomi dei nodi dal
   gruppo al nodo della vista, separati da ` · ` (`Parti dell'ambiente <ambiente>` per la vista d'insieme);
-  la descrizione nomina i vicini, ognuno con i testi delle relazioni riassunte (`Comunica con: <vicino>
-  (<testi>); …`), un vicino per riga e a capo fra le parole oltre 100 caratteri, perché la descrizione
-  non allarghi l'immagine. Il disegno riapre la grandezza del titolo su ogni riga della descrizione, che
-  l'esportatore C4-PlantUML chiude solo in fondo. Il testo di un nodo e' uno per tutti gli ambienti.
+  la descrizione nomina solo i vicini, separati da virgole su una riga (`Comunica con: <vicino>, …`): ciò
+  che passa sta sulle relazioni riassunte. Il disegno riapre la grandezza del titolo su ogni riga della
+  descrizione, che l'esportatore C4-PlantUML chiude solo in fondo. Il testo di un nodo e' uno per tutti gli ambienti.
 - **Nomi.** Il nome nel codice senza il prefisso comune ai progetti del repository, a segmenti interi e
   più corto di ogni nome. L'identificativo si ricava dal nome completo, così un repository nomina gli
   elementi degli altri senza leggerli. Nel modello di tutto il sistema un'applicazione si chiama con il
