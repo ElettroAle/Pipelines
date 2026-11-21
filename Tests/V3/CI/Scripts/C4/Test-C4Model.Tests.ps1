@@ -50,6 +50,34 @@ contoso_shop_ai_api = container "Api" "Riceve le richieste" "ASP.NET Core" "Appl
         Edit-Docs $Docs 'docs/architecture/05_building_block_view.md' '<!-- vista: componenti-worker -->' "<!-- vista: componenti-worker -->`n`n<!-- vista: componenti-api -->"
         return $Docs
     }
+
+    # Due gruppi generati con la relazione riassunta fra loro e la vista di uno dei due, come le scrive
+    # Export-C4CodeModel.ps1.
+    function Add-GroupedDeployment([System.Collections.IDictionary]$Docs) {
+        Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' "                containerInstance client`n            }" (@(
+                '                containerInstance client'
+                '            }'
+                '            rg_client = deploymentNode "rg-client" "Il gruppo del BFF" "ResourceGroup" "Generato" {'
+                '                containerInstance bff'
+                '            }'
+                '            rg_motore = deploymentNode "rg-motore" "Il gruppo del Motore" "ResourceGroup" "Generato" {'
+                '                containerInstance motore'
+                '            }'
+                '            rg_client -> rg_motore "inoltra" "" "Riassunto"') -join "`n")
+        Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' "        deployment sistema produzione `"deployment-produzione`" {" (@(
+                '        deployment sistema produzione "deployment-produzione-rg-client" "Comunica con:\nrg-motore (inoltra)" {'
+                '            title "Produzione · rg-client"'
+                '            include rg_client'
+                '            include rg_motore'
+                '            exclude "element.parent==rg_motore"'
+                '            exclude "relationship.tag==Riassunto"'
+                '            include "relationship.source==rg_client && relationship.destination==rg_motore"'
+                '            autoLayout lr'
+                '        }'
+                '        deployment sistema produzione "deployment-produzione" {') -join "`n")
+        Edit-Docs $Docs 'docs/architecture/07_deployment_view.md' '<!-- vista: deployment-produzione -->' "<!-- vista: deployment-produzione -->`n`n<!-- vista: deployment-produzione-rg-client -->"
+        return $Docs
+    }
 }
 
 
@@ -306,6 +334,21 @@ Describe "Funzionalità: Testo del modello sulla parte generata dal codice" {
 
         It "E un avviso nomina la vista con la misura del disegno piu' leggibile" {
             ($res.Output -split "`n") | Where-Object { "$_" -match '^##vso\[task\.logissue type=warning\]modello C4: vista contesto: \d+x\d+ px in (tb|lr)(-stretto)?, scala 0\.\d\d \(minima 0\.60\), troppo piena per leggersi\s*$' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+        }
+    }
+
+    Context "Scenario: Una vista che resta sotto la scala minima continua a dare l'avviso" {
+        BeforeAll {
+            $res = Invoke-ModelCheck (Add-GroupedDeployment (New-ValidDocs)) @{ C4_PAGE_WIDTH = '40'; C4_PAGE_HEIGHT = '40' }
+        }
+
+        It "Allora la verifica passa con la relazione riassunta fra due nodi generati, che il codice non dichiara (ADR-2112)" {
+            Get-Issues $res.Output | Should -BeNullOrEmpty -Because ($res.Output)
+            $res.ExitCode | Should -Be 0
+        }
+
+        It "E un avviso nomina la vista divisa che resta sotto la scala minima" {
+            ($res.Output -split "`n") | Where-Object { "$_" -match '^##vso\[task\.logissue type=warning\]modello C4: vista deployment-produzione-rg-client: \d+x\d+ px in (tb|lr)(-stretto)?, scala 0\.\d\d \(minima 0\.60\), troppo piena per leggersi\s*$' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
         }
     }
 

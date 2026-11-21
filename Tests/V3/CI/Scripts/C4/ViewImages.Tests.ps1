@@ -272,6 +272,17 @@ Describe "Funzionalità: disposizione di un diagramma C4-PlantUML" {
         Set-DiagramLayout $diagram 'tb-stretto' | Should -Be ($diagram -replace 'top to bottom direction', "top to bottom direction`nskinparam nodesep 20`nskinparam ranksep 30")
     }
 
+    It "Una descrizione su piu' righe nel titolo ha la sua grandezza su ogni riga" {
+        $diagram = "@startuml`ntitle <size:24>Produzione · rg-web</size>\n<size:24>Comunica con:\nrg-api (Chiama)</size>`ntop to bottom direction`n@enduml"
+        $variant = (Get-DiagramVariants $diagram)[0]
+        $variant.Diagram | Should -Match ([regex]::Escape('title <size:24>Produzione · rg-web</size>\n<size:24>Comunica con:</size>\n<size:24>rg-api (Chiama)</size>'))
+    }
+
+    It "Una riga fuori dal titolo resta com'e' anche se ha un a capo" {
+        $diagram = "@startuml`nContainer(api, `"Api`", `$descr=`"<size:24>uno\ndue</size>`")`ntop to bottom direction`n@enduml"
+        (Get-DiagramVariants $diagram)[0].Diagram | Should -Be $diagram
+    }
+
     It "Un diagramma senza direzione la riceve dopo @startuml" {
         Set-DiagramLayout "@startuml`nPerson(utente, `"Utente`")`n@enduml" 'lr' | Should -Be "@startuml`nleft to right direction`nPerson(utente, `"Utente`")`n@enduml"
     }

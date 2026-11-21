@@ -92,9 +92,23 @@ function New-ViewImage([byte[]]$Png, $Variant) {
     return [pscustomobject]@{ Png = $Png; Layout = $Variant.Layout; RankWidth = $Variant.RankWidth; Order = $Variant.Order; Width = $size.Width; Height = $size.Height; Scale = (Get-PageScale $size) }
 }
 
+# L'esportatore chiude la grandezza della descrizione solo in fondo, e Creole non porta un tag oltre un a
+# capo: senza riaprirlo su ogni riga, l'ultima riga di una descrizione su piu' righe mostra </size>.
+function Split-TitleSizes([string]$Diagram) {
+    return [regex]::new('(?m)^title .*$').Replace($Diagram, {
+            param($title)
+            [regex]::new('<size:(\d+)>(.*?)</size>').Replace($title.Value, {
+                    param($span)
+                    $open = "<size:$($span.Groups[1].Value)>"
+                    $open + $span.Groups[2].Value.Replace('\n', "</size>\n$open") + '</size>'
+                })
+        }, 1)
+}
+
 # Ogni disposizione con i ranghi come escono, poi con ogni larghezza che un rango supera, nell'ordine in cui
 # a parita' si preferiscono.
 function Get-DiagramVariants([string]$Diagram) {
+    $Diagram = Split-TitleSizes $Diagram
     $variants = [Collections.Generic.List[object]]::new()
     foreach ($width in @(0) + $RankWidths) {
         $wrapped = if ($width) { Add-RankWraps $Diagram $width } else { $Diagram }

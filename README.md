@@ -325,6 +325,8 @@ template d'ingresso: lo step `document-directories.yaml` le mette in `DOCS_DIREC
 |---|---|---|
 | Marcatore di vista | `<!-- vista: <chiave> -->`, `<!-- vista: <tipo>* -->`, `<!-- vista: <prefisso>* -->` | `<!-- view: <chiave> -->`, `<!-- view: <tipo>* -->`, `<!-- view: <prefisso>* -->` |
 | Tag dei container con vista dei componenti | `Applicazione` | `Application` |
+| Titoli delle viste generate | `Parti dell'ambiente <ambiente>`, `Container di <applicazione>`, `<container> · logica`, `<container> · accesso ai dati` | `Parts of the <ambiente> environment`, `Containers of <applicazione>`, `<container> · logic`, `<container> · data access` |
+| Riga dei vicini e relazioni riassunte | `Comunica con:`, `e altre <n>`, tag `Riassunto` | `Communicates with:`, `and <n> more`, tag `Summary` |
 | Parti della decisione con struttura e flusso nel codice | `Struttura nel codice`, `Flusso nel codice` | `Code structure`, `Code flow` |
 | Pagina della wiki (default di `wikiRoot`) | `Architettura` | `Architecture` |
 | Colonna dello stato nella wiki | `Stato` | `Status` |
@@ -395,7 +397,9 @@ Modello C4 (`c4-verify.yaml`, `CI/Scripts/C4/Test-C4Model.ps1`):
   non si controllano.
 - La parte generata dal codice (`c4-generate.yaml`) porta il tag `Generato` in italiano: ogni elemento
   generato ha una descrizione, ogni relazione generata dice cosa passa, e fra due elementi generati
-  nessuna relazione viene da fuori del codice, nemmeno per ripeterne una generata. Un riferimento a un elemento che nessuna
+  nessuna relazione viene da fuori del codice, nemmeno per ripeterne una generata. Fanno eccezione le relazioni
+  riassunte fra due nodi di deployment (tag `Riassunto` in italiano), che la generazione scrive da quelle fra le
+  loro istanze. Un riferimento a un elemento che nessuna
   parte contiene rende il modello non valido, e l'errore nomina l'identificativo.
 - Ogni vista si disegna come nella wiki (`CI/Scripts/C4/ViewImages.ps1`): dall'alto in basso e da sinistra
   a destra, con gli spazi di default e stretti, con i ranghi come escono e con i ranghi più larghi di 3, 5
@@ -502,6 +506,8 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   `views/<repository in minuscolo>.dsl`, che le viste del documento includono come cartella
   (`!include generated/views`). Ogni applicazione ha una vista dei container con chiave
   `container-<applicazione>`: l'applicazione e gli elementi con cui ha relazioni, in entrambe le direzioni.
+  Ogni vista generata ha un titolo suo, fatto dai nomi delle parti che mostra (`Container di <applicazione>`
+  in italiano).
   Una vista con tutte le applicazioni di un repository sommerebbe i loro vicini e non si leggerebbe alla
   scala minima. La vista appartiene al sistema che in `workspace.dsl`, accanto alla cartella delle parti generate,
   include la cartella `containers`; se il workspace non lo dichiara la generazione si ferma. Un container
@@ -509,7 +515,10 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   dell'accesso ai dati, con chiave `<container>-accesso-dati` in italiano, ciascuna solo se ha componenti.
   La vista della logica mostra i componenti che non sono di accesso ai dati e gli elementi fuori dal
   container in relazione con loro. Quella dell'accesso ai dati mostra i suoi componenti, ciò che ognuno usa
-  e gli elementi fuori dal container che li chiamano. Un componente è di accesso ai dati se un segmento del
+  e gli elementi fuori dal container che li chiamano. Il titolo di ognuna è il nome del container con il
+  livello (`<container> · logica`, `<container> · accesso ai dati`); se i suoi componenti hanno relazioni con
+  quelli dell'altro livello, la descrizione della vista li nomina dopo il titolo dell'altra vista
+  (`Comunica con: <titolo> (<componenti>)`). Un componente è di accesso ai dati se un segmento del
   suo nome, separato da punti, è fra `dataAccessSegments` (default `DataAccess`). Scrive
   infine `context.dsl`, da includere nel modello prima del sistema: le persone e i sistemi esterni del
   catalogo, i sistemi con il tag `Esterno` e, se tecnici, `Tecnico`. Si committa con le parti generate.
@@ -565,10 +574,22 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   ferma la lettura nominandola. Lo scrittore mette gli ambienti in `deployment/<repository>.dsl`, da
   includere nel modello dopo il sistema software, e le viste in `deployment-views/<repository>.dsl`, da
   includere nelle viste: per ogni ambiente la vista d'insieme (`deployment_<ambiente>`) con i nodi dei
-  primi due livelli (sottoscrizioni e gruppi di risorse) senza il loro contenuto, e una vista per ogni
-  nodo del secondo livello con istanze o nodi dell'infrastruttura (`deployment_<ambiente>_<gruppo>`), con
-  tutto il suo contenuto. Se due gruppi dello stesso ambiente hanno lo stesso nome, la chiave aggiunge
-  quello del nodo che li contiene. Il testo di un nodo e' uno per tutti gli ambienti.
+  primi due livelli (sottoscrizioni e gruppi di risorse) chiusi, cioè senza il loro contenuto, e una vista
+  per ogni nodo del secondo livello con istanze o nodi dell'infrastruttura (`deployment_<ambiente>_<gruppo>`).
+  Se due gruppi dello stesso ambiente hanno lo stesso nome, la chiave aggiunge quello del nodo che li
+  contiene. La vista di un nodo con istanze in un ramo solo mostra tutto il suo contenuto e le istanze degli
+  antenati in relazione con le sue; quella di un nodo con istanze in più rami mostra i figli chiusi, e ogni
+  figlio con contenuto ha la sua vista, `<chiave del padre>_<figlio>`. Ogni vista mostra chiusi anche i
+  vicini del suo nodo: i fratelli suoi e dei suoi antenati con cui le sue istanze hanno relazioni. Fra due
+  nodi chiusi le relazioni fra le loro istanze sono riassunte in una relazione sola, con i testi distinti in
+  ordine fino a due e il numero degli altri (`e altre <n>` in italiano) e il tag `Riassunto`: la vista
+  d'insieme mostra quelle fra i gruppi, la vista di un nodo quelle fra i figli chiusi e fra il nodo, o i
+  suoi figli chiusi, e i vicini. Il titolo di una vista è il nome dell'ambiente con i nomi dei nodi dal
+  gruppo al nodo della vista, separati da ` · ` (`Parti dell'ambiente <ambiente>` per la vista d'insieme);
+  la descrizione nomina i vicini, ognuno con i testi delle relazioni riassunte (`Comunica con: <vicino>
+  (<testi>); …`), un vicino per riga e a capo fra le parole oltre 100 caratteri, perché la descrizione
+  non allarghi l'immagine. Il disegno riapre la grandezza del titolo su ogni riga della descrizione, che
+  l'esportatore C4-PlantUML chiude solo in fondo. Il testo di un nodo e' uno per tutti gli ambienti.
 - **Nomi.** Il nome nel codice senza il prefisso comune ai progetti del repository, a segmenti interi e
   più corto di ogni nome. L'identificativo si ricava dal nome completo, così un repository nomina gli
   elementi degli altri senza leggerli. Nel modello di tutto il sistema un'applicazione si chiama con il
@@ -764,7 +785,9 @@ pubblicazione:
 - I marcatori di vista diventano le immagini PNG delle viste C4: la Structurizr CLI le esporta in
   C4-PlantUML e PlantUML (versione fissata, SHA-256 verificato) le disegna con le librerie C4 interne e il
   layout smetana, senza Graphviz e senza rete, nella disposizione che si legge meglio, come nella verifica
-  del modello. Le immagini stanno in `.attachments/<wikiRoot>/<vista>.png`.
+  del modello. Le immagini stanno in `.attachments/<wikiRoot>/<vista>.png`. Prima dell'immagine di una
+  vista con un titolo stanno il titolo, in grassetto, e la descrizione della vista, che ne è anche il testo
+  alternativo; una vista senza titolo ha la chiave come testo alternativo. Lo stesso vale nel documento unico.
   Con la proprieta' `c4plantuml.tags` delle viste, colori e forme vengono dagli stili del modello, che
   allora dichiara anche quelli di `Person`, `Software System`, `Container` e `Component`.
 - I blocchi ` ```mermaid ` diventano la sintassi della wiki `::: mermaid`. I link alle sezioni e alle
@@ -870,7 +893,7 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/Adr/Test-AdrCorpus.ps1` | Verifica il corpus degli ADR di un repository di documentazione (`quality-docs.yaml`): nome `NNNN-titolo.md`, stato ammesso, sezioni obbligatorie, versione intera, sostituzioni reciproche, ADR `accepted` con l'esito invariato e cambiati solo con una versione nuova rispetto al ramo di destinazione della PR |
 | `CI/Scripts/Adr/Register-Decisions.ps1`, `DecisionRegistration.ps1` | Registrazione delle decisioni (`adr-register.yaml`): PR completate nel ramo principale dei repository sorgente dal punto di partenza registrato nel repository all'istante del server, con le PR di sviluppo che una promozione contiene (`Merged PR <numero>`); ADR in Markdown del Task trascritto con stato, data, Task, PR e promozione nel frontmatter; sostituzione reciproca dalla riga con l'etichetta della lingua del documento; una decisione per Task; verifica del corpus con i soli rilievi nuovi; work item per un Task senza ADR, un ADR non in Markdown o una decisione respinta; registrazione ancora aperta unita prima di registrare |
 | `CI/Scripts/Arc42/Test-Arc42Document.ps1` | Struttura di un documento arc42 (`arc42-verify.yaml`): un file per sezione con nome e titolo del template ufficiale; release, URL e SHA-256 per lingua fissati nello script |
-| `CI/Scripts/C4/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, nessun elemento tecnico nelle viste di contesto, elementi e relazioni generati descritti, nessuna relazione fra elementi generati che il codice non dichiara, marcatori di vista nelle sezioni |
+| `CI/Scripts/C4/Test-C4Model.ps1` | Modello C4 in Structurizr DSL (`c4-verify.yaml`): modello valido, viste obbligatorie, componenti dei container con il tag delle applicazioni, nessun elemento tecnico nelle viste di contesto, elementi e relazioni generati descritti, nessuna relazione fra elementi generati che il codice non dichiara salvo le relazioni riassunte fra nodi, marcatori di vista nelle sezioni |
 | `CI/Scripts/Adr/Test-DecisionClasses.ps1` | Classi governate dalle decisioni (`adr-classes-verify.yaml`): ogni classe .NET che un pattern di `governs` copre sta nel diagramma delle classi della decisione, ogni voce copre almeno una classe |
 | `CI/Scripts/Adr/DecisionClasses.ps1` | Frontmatter `governs`, classi dei diagrammi delle classi e confronto con il codice, condivisi dalla verifica e dalla proposta delle classi delle decisioni |
 | `CI/Scripts/Adr/Repair-DecisionClasses.ps1` | Classi delle decisioni proposte con il modello linguistico (`CLASSES_REPAIR_PROVIDER`) (`adr-classes-verify.yaml` in modalità `fix`): voci di `governs` e struttura nel codice di ogni decisione respinta o con classi candidate, stesure accettate dalla verifica, registro delle candidate, ramo di avanzamento e ripresa |

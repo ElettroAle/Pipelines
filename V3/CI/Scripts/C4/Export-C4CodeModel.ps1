@@ -17,7 +17,10 @@
 # includere nel modello dopo il sistema software, e le loro viste in
 # GENERATED_DIRECTORY/deployment-views/<repository>.dsl: per ambiente quella d'insieme, deployment_<ambiente>,
 # e una per ogni gruppo del secondo livello che contiene qualcosa, deployment_<ambiente>_<gruppo>, divisa
-# nei nodi che contiene se ospita istanze in piu' rami.
+# nei nodi che contiene se ospita istanze in piu' rami. Le parti che una vista non apre, e i vicini del suo
+# nodo, restano chiusi, collegati dalle relazioni riassunte che l'ambiente dichiara con il tag della lingua.
+# Ogni vista generata ha un titolo con i nomi delle parti che mostra e, come descrizione, la riga delle
+# parti con cui comunica.
 # Le viste della parte stanno in GENERATED_DIRECTORY/views/<repository>.dsl. Ogni applicazione ha la vista
 # dei container container-<applicazione>, con gli elementi con cui ha relazioni, nel sistema che nel
 # workspace accanto a GENERATED_DIRECTORY include i container generati: una vista con tutte le applicazioni
@@ -43,6 +46,12 @@ $TechnicalTag = $DocumentLanguage.TechnicalTag
 $ExternalTag = $DocumentLanguage.ExternalTag
 $ApplicationTag = $DocumentLanguage.ApplicationTag
 $DataAccessViewSuffix = $DocumentLanguage.DataAccessViewSuffix
+$ViewTitles = $DocumentLanguage.ViewTitles
+$CommunicatesWith = $DocumentLanguage.CommunicatesWith
+$SummaryTag = $DocumentLanguage.SummaryTag
+$TitleSeparator = ' · '
+$SummaryTextLimit = 2
+$DescriptionWidth = 100
 $DataAccessSegments = @("$(if ($env:C4_DATA_ACCESS_SEGMENTS) { $env:C4_DATA_ACCESS_SEGMENTS } else { 'DataAccess' })" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $WorkspaceFile = Join-Path (Split-Path -Parent $GeneratedDirectory) 'workspace.dsl'
 $TextFileName = 'model.text.json'
@@ -256,23 +265,63 @@ function Get-ViewElements([string[]]$Shown, [string[]]$Container, [bool]$WithUse
     return @($Shown) + @($related | Where-Object { $Shown -notcontains $_ } | Sort-Object -Unique)
 }
 
-function Format-View([string]$Kind, [string]$Scope, [string]$Key, [string[]]$Elements, [string]$Layout) {
-    return "$Kind $Scope $(Format-Text $Key) {", "    include $($Elements -join ' ')", "    autoLayout $Layout", '}'
+# La descrizione di una vista e' la riga che nomina le parti con cui comunica: senza, la vista non la porta.
+function Format-ViewOpening([string]$Declaration, [string]$Key, [string]$Description) {
+    return (@($Declaration, (Format-Text $Key)) + @(if ($Description) { Format-Text $Description }) + '{') -join ' '
+}
+
+# Il disegno scrive la descrizione sotto il titolo, su una riga sola finche' non trova un a capo, e la vista
+# diventerebbe larga quanto la riga: ogni parte con cui la vista comunica va su una riga sua, spezzata fra
+# due parole oltre la larghezza. Nel DSL l'a capo e' la sequenza \n.
+function Format-Description([string[]]$Lines) {
+    return @($Lines | ForEach-Object { Split-DescriptionLine $_ }) -join '\n'
+}
+
+function Split-DescriptionLine([string]$Line) {
+    $current = ''
+    foreach ($word in ($Line -split ' ')) {
+        if ($current -and $current.Length + 1 + $word.Length -gt $DescriptionWidth) {
+            $current
+            $current = $word
+        }
+        else { $current = (@($current, $word) | Where-Object { $_ }) -join ' ' }
+    }
+    $current
+}
+
+function Format-View([string]$Kind, [string]$Scope, [string]$Key, [string]$Title, [string]$Description, [string[]]$Elements, [string]$Layout) {
+    return (Format-ViewOpening "$Kind $Scope" $Key $Description), "    title $(Format-Text $Title)", "    include $($Elements -join ' ')", "    autoLayout $Layout", '}'
+}
+
+# Una vista dei componenti non chiude in un riquadro quelli dell'altro livello, come fa un nodo di
+# deployment: la riga li nomina, con il titolo della vista che li mostra.
+function Format-LevelReference([string[]]$Shown, $Other, [string]$OtherTitle) {
+    $related = @($Other | Where-Object {
+            $id = $_.id
+            @($script:PartRelationships | Where-Object { ($Shown -contains $_.Source -and $_.Target -eq $id) -or ($Shown -contains $_.Target -and $_.Source -eq $id) }).Count
+        })
+    if (-not $related.Count) { return '' }
+    return Format-Description @($CommunicatesWith, "$OtherTitle ($(@($related | ForEach-Object name) -join ', '))")
 }
 
 function Format-ComponentViews($Container) {
     $components = @($Container.components | Where-Object { $_ })
     $ids = @($components | ForEach-Object id)
-    $dataAccess = @($components | Where-Object { Test-DataAccess $_ } | ForEach-Object id)
-    $logic = @($ids | Where-Object { $dataAccess -notcontains $_ })
-    if ($logic.Count) { Format-View 'component' $Container.id $Container.id (Get-ViewElements $logic $ids $false) 'tb' }
-    if ($dataAccess.Count) { Format-View 'component' $Container.id "$($Container.id)-$DataAccessViewSuffix" (Get-ViewElements $dataAccess $ids $true) 'tb' }
+    $dataAccess = @($components | Where-Object { Test-DataAccess $_ })
+    $logic = @($components | Where-Object { -not (Test-DataAccess $_) })
+    $dataAccessIds = @($dataAccess | ForEach-Object id)
+    $logicIds = @($logic | ForEach-Object id)
+    $name = Get-ContainerName $Container
+    $logicTitle = "$name$TitleSeparator$($ViewTitles.Logic)"
+    $dataAccessTitle = "$name$TitleSeparator$($ViewTitles.DataAccess)"
+    if ($logic.Count) { Format-View 'component' $Container.id $Container.id $logicTitle (Format-LevelReference $logicIds $dataAccess $dataAccessTitle) (Get-ViewElements $logicIds $ids $false) 'tb' }
+    if ($dataAccess.Count) { Format-View 'component' $Container.id "$($Container.id)-$DataAccessViewSuffix" $dataAccessTitle (Format-LevelReference $dataAccessIds $logic $logicTitle) (Get-ViewElements $dataAccessIds $ids $true) 'tb' }
 }
 
 function Format-Views($Fragments, [string]$System) {
     $lines = @("// Viste generate da $Repository con Export-C4CodeModel.ps1: non si modificano a mano.")
     foreach ($application in Get-Applications $Fragments) {
-        $lines += Format-View 'container' $System "container-$($application.id)" @("->$($application.id)->") 'lr'
+        $lines += Format-View 'container' $System "container-$($application.id)" ($ViewTitles.Containers -f (Get-ContainerName $application)) '' @("->$($application.id)->") 'lr'
     }
     foreach ($container in @($Fragments.Content.containers | Where-Object { @($_.components | Where-Object { $_ }).Count })) {
         $lines += Format-ComponentViews $container
@@ -287,6 +336,15 @@ function Get-DeploymentEnvironments($Fragments) {
     return @($Fragments | ForEach-Object { @($_.Content.deployment) } | Where-Object { $_ })
 }
 
+# Una vista include per identificativo le istanze che stanno direttamente in un antenato del suo nodo.
+function Get-InstanceId($Node, [string]$Container) {
+    return "$($Node.id)__$Container"
+}
+
+function Get-NodeInstances($Node) {
+    return @($Node.instances | Where-Object { $_ } | ForEach-Object { Get-KeptId $_ } | Select-Object -Unique)
+}
+
 function Format-DeploymentNode($Node, [string]$Indent) {
     $description = Format-Text $script:ModelText.Elements[$Node.text]
     if ($Node.kind -eq 'infrastructureNode') {
@@ -294,15 +352,20 @@ function Format-DeploymentNode($Node, [string]$Indent) {
     }
     $lines = @("$Indent$($Node.id) = deploymentNode $(Format-Text $Node.name) $description $(Format-Text $Node.technology) $(Format-Text $GeneratedTag) {")
     $lines += @($Node.children | Where-Object { $_ } | ForEach-Object { Format-DeploymentNode $_ "$Indent    " })
-    $lines += @($Node.instances | Where-Object { $_ } | ForEach-Object { Get-KeptId $_ } | Select-Object -Unique | ForEach-Object { "$Indent    containerInstance $_" })
+    $lines += @(Get-NodeInstances $Node | ForEach-Object { "$Indent    $(Get-InstanceId $Node $_) = containerInstance $_" })
     return $lines + "$Indent}"
 }
 
-function Format-Deployment($Environments) {
+function Format-Summary($Summary) {
+    return "    $($Summary.Source) -> $($Summary.Target) $(Format-Text $Summary.Text) `"`" $(Format-Text $SummaryTag)"
+}
+
+function Format-Deployment($Plans) {
     $lines = @("// Ambienti di deployment generati da $Repository con Export-C4CodeModel.ps1: non si modificano a mano.")
-    foreach ($environment in $Environments) {
-        $lines += "deploymentEnvironment $(Format-Text $environment.name) {"
-        $lines += @($environment.nodes | Where-Object { $_ } | ForEach-Object { Format-DeploymentNode $_ '    ' })
+    foreach ($plan in $Plans) {
+        $lines += "deploymentEnvironment $(Format-Text $plan.Environment.name) {"
+        $lines += @($plan.Environment.nodes | Where-Object { $_ } | ForEach-Object { Format-DeploymentNode $_ '    ' })
+        $lines += @($plan.Summaries.Values | ForEach-Object { Format-Summary $_ })
         $lines += '}'
     }
     return ($lines -join "`n") + "`n"
@@ -347,40 +410,184 @@ function Test-DeploymentBranches($Node) {
     return [bool]@(Get-DeploymentSubtree $Node | Where-Object { @(Get-DeploymentChildren $_ | Where-Object { Test-DeploymentInstances $_ }).Count -gt 1 }).Count
 }
 
-# Sotto il gruppo la vista di un nodo porta anche gli elementi in relazione con le sue istanze: la vista del
-# gruppo li mostrava, e senza di loro le istanze resterebbero senza relazioni.
-function Format-DeploymentNodeViews([string]$Environment, $Node, [string]$Key, [bool]$WithNeighbours) {
-    $lines = @("deployment * $(Format-Text $Environment) $(Format-Text $Key) {", "    include $($Node.id)")
-    if (Test-DeploymentBranches $Node) {
-        $children = @(Get-DeploymentChildren $Node)
-        $lines += @($children | ForEach-Object { "    exclude $(Format-Text "element.parent==$($_.id)")" })
-        $lines += '    autoLayout lr', '}'
-        foreach ($child in @($children | Where-Object { Test-DeploymentContent $_ })) {
-            $lines += Format-DeploymentNodeViews $Environment $child "${Key}_$(ConvertTo-Identifier $child.name)" $true
-        }
-        return $lines
+# Le istanze di due container in relazione sono in relazione in ogni ambiente, e la relazione puo' dichiararla
+# il codice di qualunque repository del sistema.
+function Get-SystemRelationships {
+    $contents = @(Read-FragmentContents | Where-Object { $_ })
+    $declared = @($contents | ForEach-Object { @($_.relationships) }) + @(Get-C4CallRelationships @(Resolve-C4Calls $contents))
+    $written = @{}
+    foreach ($relationship in @($declared | Where-Object { $_ })) {
+        $source = Get-KeptId $relationship.source
+        $target = Get-KeptId $relationship.target
+        if ($source -eq $target -or $written.ContainsKey("$source -> $target")) { continue }
+        $written["$source -> $target"] = $true
+        [pscustomobject]@{ Source = $source; Target = $target; Text = "$($script:ModelText.Relationships["$($relationship.source) -> $($relationship.target)"].description)".Trim() }
     }
-    if ($WithNeighbours) {
-        $lines += @(Get-DeploymentSubtree $Node | Where-Object { @($_.instances | Where-Object { $_ }).Count } | ForEach-Object { "    include $(Format-Text "->element.parent==$($_.id)->")" })
-    }
-    return $lines + @('    autoLayout lr', '}')
 }
 
-# Un ambiente intero non si legge alla scala minima: la vista d'insieme mostra i gruppi senza il loro
-# contenuto e ogni gruppo ha la sua vista con tutto cio' che contiene; un nodo con istanze in piu' rami si
-# divide allo stesso modo, nella vista d'insieme del nodo e in una vista per figlio, <chiave del padre>_<figlio>.
-function Format-DeploymentViews($Environments) {
-    $lines = @("// Viste di deployment generate da $Repository con Export-C4CodeModel.ps1: non si modificano a mano.")
-    foreach ($environment in $Environments) {
-        $key = "deployment_$(ConvertTo-Identifier $environment.name)"
-        $groups = @(Get-DeploymentGroups $environment)
-        $lines += "deployment * $(Format-Text $environment.name) $(Format-Text $key) {", '    include *'
-        $lines += @($groups | ForEach-Object { "    exclude $(Format-Text "element.parent==$($_.Node.id)")" })
-        $lines += '    autoLayout lr', '}'
-        foreach ($group in @($groups | Where-Object { Test-DeploymentContent $_.Node })) {
-            $lines += Format-DeploymentNodeViews $environment.name $group.Node "${key}_$($group.Slug)" $false
+function Initialize-DeploymentTree($Environment) {
+    $script:DeploymentRoots = @($Environment.nodes | Where-Object { $_ -and $_.kind -ne 'infrastructureNode' })
+    $script:DeploymentParents = @{}
+    $script:SubtreeContainers = @{}
+    $script:Summaries = [ordered]@{}
+    $script:DeploymentRoots | ForEach-Object { Register-DeploymentParents $_ }
+}
+
+function Register-DeploymentParents($Node) {
+    foreach ($child in Get-DeploymentChildren $Node) {
+        $script:DeploymentParents[$child.id] = $Node
+        Register-DeploymentParents $child
+    }
+}
+
+function Get-DeploymentAncestors($Node) {
+    $parent = $script:DeploymentParents[$Node.id]
+    while ($parent) {
+        $parent
+        $parent = $script:DeploymentParents[$parent.id]
+    }
+}
+
+function Get-DeploymentSiblings($Node) {
+    $parent = $script:DeploymentParents[$Node.id]
+    $family = if ($parent) { Get-DeploymentChildren $parent } else { $script:DeploymentRoots }
+    return @($family | Where-Object { $_.id -ne $Node.id })
+}
+
+function Get-SubtreeContainers($Node) {
+    if (-not $script:SubtreeContainers.ContainsKey($Node.id)) {
+        $script:SubtreeContainers[$Node.id] = @(Get-DeploymentSubtree $Node | ForEach-Object { Get-NodeInstances $_ } | Select-Object -Unique)
+    }
+    return , $script:SubtreeContainers[$Node.id]
+}
+
+function Get-InstanceRelationships([string[]]$Sources, [string[]]$Targets) {
+    return @($script:SystemRelationships | Where-Object { $Sources -contains $_.Source -and $Targets -contains $_.Target })
+}
+
+function Get-CrossingRelationships([string[]]$One, [string[]]$Other) {
+    return @(Get-InstanceRelationships $One $Other) + @(Get-InstanceRelationships $Other $One)
+}
+
+# I vicini di un nodo sono i fratelli suoi e dei suoi antenati con cui le sue istanze hanno relazioni.
+function Get-DeploymentNeighbours($Node) {
+    $own = Get-SubtreeContainers $Node
+    foreach ($level in @($Node) + @(Get-DeploymentAncestors $Node)) {
+        Get-DeploymentSiblings $level | Where-Object { (Get-CrossingRelationships $own (Get-SubtreeContainers $_)).Count }
+    }
+}
+
+# Un'istanza che sta direttamente in un antenato non ha un riquadro da chiudere: la vista la mostra se ha
+# relazioni con le istanze del nodo.
+function Get-RelatedAncestorInstances($Node) {
+    $own = Get-SubtreeContainers $Node
+    foreach ($ancestor in Get-DeploymentAncestors $Node) {
+        Get-NodeInstances $ancestor | Where-Object { (Get-CrossingRelationships $own @($_)).Count } | ForEach-Object { Get-InstanceId $ancestor $_ }
+    }
+}
+
+# Structurizr non ammette una relazione fra un'istanza e un nodo: quella fra due nodi riassume le relazioni fra
+# le loro istanze, con i testi distinti in ordine fino al limite e il numero di quelli che restano. Un testo
+# perde il punto finale perche' i testi si leggono in fila, separati da virgole.
+function Format-SummaryText($Relationships) {
+    $texts = [string[]]@($Relationships | ForEach-Object { "$($_.Text)".TrimEnd('.').Trim() } | Where-Object { $_ } | Select-Object -Unique)
+    [Array]::Sort($texts, [StringComparer]::Ordinal)
+    $shown = @($texts | Select-Object -First $SummaryTextLimit) -join ', '
+    if ($texts.Count -le $SummaryTextLimit) { return $shown }
+    return "$shown $($DocumentLanguage.SummaryMore -f ($texts.Count - $SummaryTextLimit))"
+}
+
+# Una relazione riassunta si scrive nell'ambiente solo se una vista la mostra, e una volta sola.
+function Use-Summary($Source, $Target) {
+    $relationships = Get-InstanceRelationships (Get-SubtreeContainers $Source) (Get-SubtreeContainers $Target)
+    if (-not $relationships.Count) { return }
+    $summary = [pscustomobject]@{ Source = $Source.id; Target = $Target.id; Text = Format-SummaryText $relationships }
+    $script:Summaries["$($summary.Source) -> $($summary.Target)"] = $summary
+    return $summary
+}
+
+function Use-SectionSummaries($Sections) {
+    foreach ($source in $Sections) {
+        $Sections | Where-Object { $_.id -ne $source.id } | ForEach-Object { Use-Summary $source $_ }
+    }
+}
+
+function Use-NeighbourSummaries($Parts, $Neighbours) {
+    foreach ($part in $Parts) {
+        foreach ($neighbour in $Neighbours) {
+            Use-Summary $part $neighbour
+            Use-Summary $neighbour $part
         }
     }
+}
+
+function Get-DeploymentViewTitle([string]$Environment, $Node) {
+    $ancestors = @(Get-DeploymentAncestors $Node)
+    $path = @($ancestors | Select-Object -First ([Math]::Max(0, $ancestors.Count - 1)))
+    [Array]::Reverse($path)
+    return (@($Environment) + @($path | ForEach-Object name) + $Node.name) -join $TitleSeparator
+}
+
+function Format-NeighbourLine($Node, $Neighbours) {
+    if (-not $Neighbours.Count) { return '' }
+    $own = Get-SubtreeContainers $Node
+    $parts = @(foreach ($neighbour in $Neighbours) {
+            $text = Format-SummaryText (Get-CrossingRelationships $own (Get-SubtreeContainers $neighbour))
+            if ($text) { "$($neighbour.name) ($text)" } else { $neighbour.name }
+        })
+    return Format-Description (@($CommunicatesWith) + @($parts | Select-Object -SkipLast 1 | ForEach-Object { "$_;" }) + $parts[-1])
+}
+
+# Un nodo chiuso mostra il suo riquadro senza contenuto. Le relazioni riassunte si escludono tutte e poi si
+# includono quelle della vista, perche' un nodo incluso porterebbe con se' anche quelle verso gli altri.
+function Format-DeploymentView([string]$Environment, [string]$Key, [string]$Title, [string]$Description, [string[]]$Shown, [string[]]$Closed, $Summaries) {
+    $lines = @((Format-ViewOpening "deployment * $(Format-Text $Environment)" $Key $Description), "    title $(Format-Text $Title)")
+    $lines += @($Shown | ForEach-Object { "    include $_" })
+    $lines += @($Closed | ForEach-Object { "    exclude $(Format-Text "element.parent==$_")" })
+    $lines += "    exclude $(Format-Text "relationship.tag==$SummaryTag")"
+    $lines += @($Summaries | Where-Object { $_ } | ForEach-Object { "    include $(Format-Text "relationship.source==$($_.Source) && relationship.destination==$($_.Target)")" })
+    return $lines + '    autoLayout lr' + '}'
+}
+
+# La vista di un nodo con un ramo solo mostra tutto il suo contenuto; quella di un nodo con istanze in piu'
+# rami chiude i figli, e ogni figlio con contenuto ha la sua vista, <chiave del padre>_<figlio>. Entrambe
+# chiudono i vicini.
+function Format-DeploymentNodeViews([string]$Environment, $Node, [string]$Key) {
+    $neighbours = @(Get-DeploymentNeighbours $Node)
+    $neighbourIds = @($neighbours | ForEach-Object id)
+    $title = Get-DeploymentViewTitle $Environment $Node
+    $description = Format-NeighbourLine $Node $neighbours
+    if (-not (Test-DeploymentBranches $Node)) {
+        $shown = @($Node.id) + @(Get-RelatedAncestorInstances $Node) + $neighbourIds
+        return Format-DeploymentView $Environment $Key $title $description $shown $neighbourIds @(Use-NeighbourSummaries @($Node) $neighbours)
+    }
+    $children = @(Get-DeploymentChildren $Node)
+    $sections = @($children | Where-Object { Test-DeploymentContent $_ })
+    $summaries = @(Use-SectionSummaries $sections) + @(Use-NeighbourSummaries $sections $neighbours)
+    $lines = Format-DeploymentView $Environment $Key $title $description (@($Node.id) + $neighbourIds) (@($children | ForEach-Object id) + $neighbourIds) $summaries
+    foreach ($section in $sections) {
+        $lines += Format-DeploymentNodeViews $Environment $section "${Key}_$(ConvertTo-Identifier $section.name)"
+    }
+    return $lines
+}
+
+# Un ambiente intero non si legge alla scala minima: la vista d'insieme mostra i gruppi chiusi, con le
+# relazioni riassunte fra loro, e ogni gruppo con contenuto ha la sua vista.
+function New-DeploymentPlan($Environment) {
+    Initialize-DeploymentTree $Environment
+    $key = "deployment_$(ConvertTo-Identifier $Environment.name)"
+    $groups = @(Get-DeploymentGroups $Environment)
+    $sections = @($groups | Where-Object { Test-DeploymentContent $_.Node })
+    $views = Format-DeploymentView $Environment.name $key ($ViewTitles.DeploymentOverview -f $Environment.name) '' @('*') @($groups | ForEach-Object { $_.Node.id }) @(Use-SectionSummaries @($sections | ForEach-Object Node))
+    foreach ($group in $sections) {
+        $views += Format-DeploymentNodeViews $Environment.name $group.Node "${key}_$($group.Slug)"
+    }
+    return [pscustomobject]@{ Environment = $Environment; Views = $views; Summaries = $script:Summaries }
+}
+
+function Format-DeploymentViews($Plans) {
+    $lines = @("// Viste di deployment generate da $Repository con Export-C4CodeModel.ps1: non si modificano a mano.")
+    $lines += @($Plans | ForEach-Object { $_.Views })
     return ($lines -join "`n") + "`n"
 }
 
@@ -427,12 +634,14 @@ function Get-GenerationIssues {
     $system = Get-DocumentSystem
     if ((Get-Applications $fragments).Count -and -not $system) { return New-Issue $Repository 'sistema che include le parti generate non trovato' ($WorkspaceFile -replace '\\', '/') }
     $script:PartRelationships = @(Get-PartRelationships $fragments)
+    $script:SystemRelationships = @(Get-SystemRelationships)
     $name = $Repository.ToLowerInvariant()
     $outputs = [ordered]@{ "containers/$name.dsl" = Format-Model $fragments; "views/$name.dsl" = Format-Views $fragments $system; 'context.dsl' = Format-Context }
     $environments = Get-DeploymentEnvironments $fragments
     if ($environments) {
-        $outputs["deployment/$name.dsl"] = Format-Deployment $environments
-        $outputs["deployment-views/$name.dsl"] = Format-DeploymentViews $environments
+        $plans = @($environments | ForEach-Object { New-DeploymentPlan $_ })
+        $outputs["deployment/$name.dsl"] = Format-Deployment $plans
+        $outputs["deployment-views/$name.dsl"] = Format-DeploymentViews $plans
     }
     & $ModeActions[$Mode] $outputs
 }

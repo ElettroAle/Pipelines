@@ -19,6 +19,7 @@ $WorkspaceDsl = Join-Path $docsDirectory 'c4/workspace.dsl'
 $ApplicationTag = $DocumentLanguage.ApplicationTag
 $TechnicalTag = $DocumentLanguage.TechnicalTag
 $GeneratedTag = $DocumentLanguage.GeneratedTag
+$SummaryTag = $DocumentLanguage.SummaryTag
 $ModelScope = 'modello C4'
 $RequiredLevels = [ordered]@{ systemContextViews = 'vista di contesto'; containerViews = 'vista dei container' }
 $ViewKinds = @('systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews', 'dynamicViews', 'deploymentViews')
@@ -90,11 +91,11 @@ function Test-GeneratedRelationshipsDescribed($Elements) {
 }
 
 # Fra due elementi nati dal codice solo il codice dichiara relazioni: il testo del modello le descrive e
-# non ne aggiunge.
+# non ne aggiunge. Una relazione riassunta fra due nodi la scrive la generazione da quelle fra le loro istanze.
 function Test-RelationshipsOnlyFromCode($Elements) {
     $generated = @($Elements | Where-Object { Test-HasTag $_ $GeneratedTag } | ForEach-Object id)
     Get-DeclaredRelationships $Elements |
-        Where-Object { -not (Test-HasTag $_ $GeneratedTag) -and $generated -contains $_.sourceId -and $generated -contains $_.destinationId } |
+        Where-Object { -not (Test-HasTag $_ $GeneratedTag) -and -not (Test-HasTag $_ $SummaryTag) -and $generated -contains $_.sourceId -and $generated -contains $_.destinationId } |
         ForEach-Object { New-Issue $ModelScope 'relazione fra elementi generati che il codice non dichiara' (Get-RelationshipName $_ $Elements) }
 }
 

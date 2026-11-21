@@ -180,6 +180,26 @@ function Get-ViewImagePath([string]$View) {
     return "$AttachmentsFolder/$(ConvertTo-WikiName $wikiRoot)/$View.png"
 }
 
+function Get-ViewCaption($Workspace, [string]$Key) {
+    $view = @($Workspace.views.PSObject.Properties | Where-Object Name -Like '*Views' | ForEach-Object { @($_.Value) } | Where-Object { $_ -and $_.key -eq $Key }) | Select-Object -First 1
+    $description = @("$($view.description)" -split '\r?\n' | ForEach-Object Trim | Where-Object { $_ }) -join ' '
+    return [pscustomobject]@{ Title = "$($view.title)".Trim(); Description = $description }
+}
+
+function ConvertTo-MarkdownLiteral([string]$Text) {
+    return $Text -replace '([\\`*_\[\]<>])', '\$1'
+}
+
+# Il titolo e la descrizione di una vista, che nomina le parti con cui comunica, accompagnano la sua immagine
+# anche fuori dal disegno, la descrizione su una riga sola; una vista senza titolo resta la sola immagine, con
+# la chiave.
+function Format-ViewImage([string]$Key, $Caption, $Document) {
+    $target = if ($Document) { Get-DocumentViewFile $Key } else { "/$(Get-ViewImagePath $Key)" }
+    if (-not $Caption.Title) { return , $(if ($Document) { "![]($target)" } else { "![$Key]($target)" }) }
+    $title = ConvertTo-MarkdownLiteral $Caption.Title
+    return @("**$title**", '') + @(if ($Caption.Description) { (ConvertTo-MarkdownLiteral $Caption.Description), '' }) + "![$title]($target)"
+}
+
 # Con $Document il corpo va nel documento unico invece che in una pagina: i link portano dentro il documento,
 # i diagrammi Mermaid diventano immagini e le viste i file PNG accanto al documento.
 function Convert-PageBody($Page, [hashtable]$PagesBySource, $Views, [hashtable]$ShownViews, $Document = $null) {
@@ -220,7 +240,8 @@ function Convert-PageBody($Page, [hashtable]$PagesBySource, $Views, [hashtable]$
             if (-not $keys.Count -or @($keys | Where-Object { -not $Views.Diagrams.ContainsKey($_) }).Count) { throw "$($Page.Source): la vista $marker non esiste nel modello C4" }
             foreach ($key in $keys) {
                 $ShownViews[$key] = $Views.Diagrams[$key]
-                $output.Add($(if ($Document) { "![]($(Get-DocumentViewFile $key))" } else { "![$key](/$(Get-ViewImagePath $key))" }))
+                if ($key -ne $keys[0]) { $output.Add('') }
+                foreach ($line in (Format-ViewImage $key (Get-ViewCaption $Views.Workspace $key) $Document)) { $output.Add($line) }
             }
         }
         else { $output.Add((& $convertLinks $line)) }
