@@ -58,8 +58,10 @@ Scrivi il testo di un container del modello C4 di un'architettura software. La s
 relazioni) nasce dal codice e non si cambia: scrivi solo il testo, nella lingua del documento, per chi
 lavora sulla piattaforma.
 
-- elements: una voce per ogni elemento della parte, con il suo identificativo. La descrizione dice cosa
-  fa l'elemento e a cosa serve, in una o due frasi, senza ripetere il nome o la tecnologia.
+- elements: una voce per ogni elemento della parte, con il suo identificativo. La descrizione dice il
+  ruolo dell'elemento nella piattaforma, cioe' che cosa fa per il sistema e per chi, in una o due frasi,
+  senza ripetere il nome, senza nominare la tecnologia o il tipo di risorsa e senza parole che valgono per
+  ogni elemento dello stesso tipo. Due elementi della parte non hanno la stessa descrizione.
 - relationships: una voce per ogni relazione della parte, con sorgente e destinazione date. description
   dice cio' che passa, al presente (ad esempio: "Invia i messaggi della conversazione"); technology dice
   il protocollo o il mezzo, vuoto se il codice non lo mostra.
@@ -69,8 +71,8 @@ lavora sulla piattaforma.
 - links: le relazioni fra una persona o un sistema esterno (del catalogo o nuovo) e un elemento della
   parte, in una delle due direzioni, con cio' che passa.
 - Una parte di tecnologia deployment elenca i nodi dell'infrastruttura di un modulo: la descrizione di un
-  nodo dice cosa ospita o cosa separa e a cosa serve, vale per ogni ambiente e non nomina l'ambiente; la
-  parte non ha relazioni, persone ne' sistemi esterni.
+  nodo dice quali parti del sistema ospita o collega e perche', vale per ogni ambiente e non nomina
+  l'ambiente; la parte non ha relazioni, persone ne' sistemi esterni.
 
 I container del sistema e le applicazioni dei repository sorgente del sistema fanno parte del sistema:
 non sono mai persone ne' sistemi esterni.
@@ -503,12 +505,52 @@ function ConvertTo-Draft($Answer) {
     return $draft
 }
 
-function Merge-Drafts($Kept, $New) {
+# Una voce che nomina la tecnologia del suo elemento, o che ripete la descrizione di un altro elemento della
+# parte, descrive il tipo di risorsa e non il ruolo: chi legge non distingue gli elementi.
+function Get-TechnologyNames([string]$Technology) {
+    return @(@($Technology.Trim(), ($Technology.Trim() -split '[/.]')[-1]) | Where-Object { $_ } | Select-Object -Unique)
+}
+
+function Test-NamesTechnology([string]$Description, [string]$Technology) {
+    foreach ($name in (Get-TechnologyNames $Technology)) {
+        if ($Description -match "(?i)(?<![\p{L}\p{N}_])$([regex]::Escape($name))(?![\p{L}\p{N}_])") { return $true }
+    }
+    return $false
+}
+
+function Get-DescriptionKey([string]$Description) {
+    return (($Description -replace '\s+', ' ').Trim().TrimEnd('.', ';', ':', '!', '?', ',').Trim()).ToLowerInvariant()
+}
+
+# La parte dei nodi di deployment ha come tecnologia il suo tipo, non quella di una risorsa: una descrizione che
+# dice «deployment» non nomina una tecnologia.
+function Get-ElementTechnologies($Unit) {
+    $technologies = @{ "$($Unit.Container.id)" = $(if ($Unit.Deployment) { '' } else { "$($Unit.Container.technology)" }) }
+    @($Unit.Container.components) | Where-Object { $_ } | ForEach-Object { $technologies["$($_.id)"] = "$($_.technology)" }
+    return $technologies
+}
+
+function Get-DescriptionRejections($Unit, $Elements) {
+    $technologies = Get-ElementTechnologies $Unit
+    $described = @{}
+    foreach ($id in $Unit.ElementIds) {
+        $description = "$(if ($Elements.Contains($id)) { $Elements[$id] })"
+        if (-not $description.Trim()) { continue }
+        if (Test-NamesTechnology $description $technologies[$id]) { [pscustomobject]@{ Id = $id; Reason = "descrizione che nomina la tecnologia: $id" } }
+        $key = Get-DescriptionKey $description
+        if ($described.ContainsKey($key)) { [pscustomobject]@{ Id = $id; Reason = "descrizione uguale a quella di $($described[$key]): $id" } }
+        else { $described[$key] = $id }
+    }
+}
+
+function Merge-Drafts($Kept, $New, $Unit) {
     $merged = [ordered]@{}
+    $rejectedElements = @(Get-DescriptionRejections $Unit $Kept.Elements | ForEach-Object Id)
     foreach ($collection in @($Kept.Keys)) {
         $items = [ordered]@{}
         foreach ($key in $Kept[$collection].Keys) {
-            $keep = -not @(Get-ItemRejections $collection $key $Kept[$collection][$key]) -or -not $New[$collection].Contains($key)
+            $rejected = @(Get-ItemRejections $collection $key $Kept[$collection][$key]).Count -or ($collection -eq 'Elements' -and $rejectedElements -contains $key)
+            $keep = -not $rejected -or -not $New[$collection].Contains($key)
             $items[$key] = if ($keep) { $Kept[$collection][$key] } else { $New[$collection][$key] }
         }
         foreach ($key in $New[$collection].Keys) { if (-not $items.Contains($key)) { $items[$key] = $New[$collection][$key] } }
@@ -586,6 +628,7 @@ function Get-PendingRejections($Unit, $Draft) {
     foreach ($collection in 'People', 'ExternalSystems', 'Links') {
         foreach ($key in $Draft[$collection].Keys) { Get-ItemRejections $collection $key $Draft[$collection][$key] }
     }
+    Get-DescriptionRejections $Unit $Draft.Elements | ForEach-Object Reason
 }
 
 function Get-ActorKey([string]$Name) {
@@ -691,14 +734,14 @@ function Remove-StaleText($Text, $Units) {
 function Write-UnitText($Unit, $Units, $Text, [string[]]$GeneratedIds, $Progress) {
     $catalogue = Get-Catalogue $Text
     $previous = $Text.units.($Unit.Id)
-    $kept = $null
-    $rejections = @()
+    $kept = if ($previous -and $previous.basis -eq $Unit.Basis) { ConvertTo-SavedDraft $previous }
+    $rejections = if ($kept) { @(Get-PendingRejections $Unit $kept) } else { @() }
     for ($round = 1; $round -le $MaxDrafts; $round++) {
         $answer = Invoke-Writer (Get-SystemMessage) (Get-UserMessage $Unit $Units $catalogue $previous $rejections)
         Remove-SourceRepositoryDraftSystems $answer | ForEach-Object { Add-Correction "$($Unit.Id): $_" }
         Merge-CatalogueActors $answer $catalogue
         $draft = ConvertTo-Draft $answer
-        if ($kept) { $draft = Merge-Drafts $kept $draft }
+        if ($kept) { $draft = Merge-Drafts $kept $draft $Unit }
         Repair-Draft $Unit $draft $catalogue $GeneratedIds | ForEach-Object { Add-Correction "$($Unit.Id): $_" }
         $rejections = @(Get-PendingRejections $Unit $draft)
         $kept = $draft
@@ -715,8 +758,26 @@ function Write-UnitText($Unit, $Units, $Text, [string[]]$GeneratedIds, $Progress
     Write-Host "Testo di $($Unit.Id) scritto in $round stesure"
 }
 
+# Il testo accettato di una parte la cui struttura non cambia riparte come stesura: le voci gia' accettate
+# restano e il modello riscrive solo quelle che i controlli respingono.
+function ConvertTo-SavedDraft($Saved) {
+    $draft = [ordered]@{ Elements = [ordered]@{}; Relationships = [ordered]@{}; People = [ordered]@{}; ExternalSystems = [ordered]@{}; Links = [ordered]@{} }
+    @($Saved.elements.PSObject.Properties) | Where-Object { $_ } | ForEach-Object { $draft.Elements[$_.Name] = "$($_.Value)" }
+    foreach ($relationship in @($Saved.relationships.PSObject.Properties | Where-Object { $_ })) {
+        $ends = $relationship.Name -split ' -> ', 2
+        $draft.Relationships[$relationship.Name] = [pscustomobject]@{ source = $ends[0]; target = $ends[1]; description = $relationship.Value.description; technology = $relationship.Value.technology }
+    }
+    @($Saved.links) | Where-Object { $_ } | ForEach-Object { $draft.Links[(Get-RelationshipKey $_)] = $_ }
+    return $draft
+}
+
+# Una parte il cui testo accettato non passa i controlli si riscrive anche se la struttura non cambia: la base
+# del testo non contiene le istruzioni, e senza questo un testo accettato non tornerebbe mai ai controlli.
 function Get-PendingUnits($Units, $Text) {
-    return @($Units | Where-Object { $Text.units.($_.Id).basis -ne $_.Basis })
+    return @($Units | Where-Object {
+            $saved = $Text.units.($_.Id)
+            $saved.basis -ne $_.Basis -or @(Get-DescriptionRejections $_ (ConvertTo-SavedDraft $saved).Elements).Count
+        })
 }
 
 function Get-CatalogueMessage($Units, $Text, [string[]]$Rejections) {

@@ -109,6 +109,17 @@ BeforeAll {
     function Add-ViewCaption([System.Collections.IDictionary]$Docs) {
         Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' 'deployment sistema produzione "deployment-produzione" {' "deployment sistema produzione `"deployment-produzione`" `"Comunica con:\nAzure (inoltra)`" {`n            title `"Produzione, nodo Azure`""
     }
+
+    # Una vista di allocazione come la scrive Export-C4CodeModel.ps1: la frase dello scopo, la proprieta' con
+    # gli ambienti di cui elencare i gruppi di risorse e gli elementi con il gruppo e il modulo che li dichiarano.
+    function Add-ResourceGroupView([System.Collections.IDictionary]$Docs) {
+        $placement = "properties {`n`"resourceGroup`" `"rg-web`"`n`"module`" `"Client`"`n}"
+        Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' 'containerInstance client' (@(
+                'deploymentNode "asp-web" {', $placement, "containerInstance client {`n$placement`n}", '}'
+                "infrastructureNode `"kv-a|b`" {`nproperties {`n`"resourceGroup`" `"rg-dati`"`n`"module`" `"Platform`"`n}`n}"
+            ) -join "`n")
+        Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' 'deployment sistema produzione "deployment-produzione" {' "deployment sistema produzione `"deployment-produzione`" `"Dove gira ogni applicazione dell'ambiente.`" {`n            title `"Allocazione · Produzione`"`n            properties {`n                `"resourceGroups`" `"Produzione`"`n            }"
+    }
 }
 
 
@@ -232,6 +243,34 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
             $building = Get-WikiPage $wiki 'Architettura/5.-Building-Block-View.md'
             $building | Should -Match ([regex]::Escape('![contenitori](/.attachments/Architettura/contenitori.png)'))
             $building | Should -Not -Match '\*\*\n\n!\[contenitori\]'
+        }
+    }
+
+    Context "Scenario: i gruppi di risorse stanno in una tabella generata nel testo, con il contenuto e il modulo che li dichiara; la frase dello scopo accompagna l'immagine" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-ValidDocs
+            Add-ResourceGroupView $docs
+            $res = Invoke-WikiPublish $docs $wiki
+            $page = Get-WikiPage $wiki 'Architettura/7.-Deployment-View.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora sotto l'immagine della vista una tabella elenca per gruppo di risorse il contenuto e il modulo, in ordine di nome" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $page | Should -Match ([regex]::Escape((@(
+                            '![Allocazione · Produzione](/.attachments/Architettura/deployment-produzione.png)', ''
+                            '| Gruppo di risorse | Contenuto | Modulo |', '| --- | --- | --- |'
+                            '| rg-dati | kv-a\|b | Platform |', '| rg-web | asp-web, Client | Client |'
+                        ) -join "`n")))
+        }
+
+        It "E la frase dello scopo della vista precede l'immagine" {
+            $page | Should -Match ([regex]::Escape("**Allocazione · Produzione**`n`nDove gira ogni applicazione dell'ambiente.`n`n![Allocazione"))
+        }
+
+        It "E una vista senza la proprieta' dei gruppi di risorse non ha la tabella" {
+            Get-WikiPage $wiki 'Architettura/5.-Building-Block-View.md' | Should -Not -Match 'Gruppo di risorse'
         }
     }
 

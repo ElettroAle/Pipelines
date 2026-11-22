@@ -5,9 +5,9 @@
 # richiesta legge la parte da descrivere e la sua struttura dal messaggio, e scrive una stesura che
 # descrive ogni elemento e ogni relazione. answers.json nella cartella di stato cambia la stesura di
 # una parte, una voce per stesura: omitElement toglie un elemento, extraRelationship aggiunge una
-# relazione, longDescription allunga la descrizione di un elemento, people, externalSystems e links si
-# aggiungono. La voce catalogue cambia la risposta al controllo del catalogo: identificativo e sameAs,
-# omit toglie le voci elencate; senza voce ogni identificativo resta distinto. La voce review cambia la
+# relazione, longDescription allunga la descrizione di un elemento, descriptions da' la descrizione di
+# elementi scelti, people, externalSystems e links si aggiungono. La voce catalogue cambia la risposta al
+# controllo del catalogo: identificativo e sameAs, omit toglie le voci elencate; senza voce ogni identificativo resta distinto. La voce review cambia la
 # risposta alla revisione del modello: notInProduction, noEvidence, wrongQuote e drop elencano i sistemi
 # esterni e le relazioni da cambiare, names e sameAs danno nome e unione dei container; senza voce ogni
 # sistema esterno e' in produzione con la prima riga del primo file di configurazione, ogni relazione
@@ -29,7 +29,7 @@ function New-Draft($Structure, $Spec) {
     $container = $Structure.container
     $ids = @($container.id) + @($container.components | Where-Object { $_ } | ForEach-Object id)
     $elements = @($ids | Where-Object { $_ -ne $Spec.omitElement } | ForEach-Object {
-            $description = if ($_ -eq $Spec.longDescription) { (@('parola') * 40) -join ' ' } else { "Descrizione di $_." }
+            $description = if ($Spec.descriptions.$_) { $Spec.descriptions.$_ } elseif ($_ -eq $Spec.longDescription) { (@('parola') * 40) -join ' ' } else { "Descrizione di $_." }
             @{ id = $_; description = $description }
         })
     $relationships = @($Structure.relationships | Where-Object { $_ } | ForEach-Object {

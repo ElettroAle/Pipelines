@@ -180,8 +180,12 @@ function Get-ViewImagePath([string]$View) {
     return "$AttachmentsFolder/$(ConvertTo-WikiName $wikiRoot)/$View.png"
 }
 
+function Get-WorkspaceView($Workspace, [string]$Key) {
+    return @($Workspace.views.PSObject.Properties | Where-Object Name -Like '*Views' | ForEach-Object { @($_.Value) } | Where-Object { $_ -and $_.key -eq $Key }) | Select-Object -First 1
+}
+
 function Get-ViewCaption($Workspace, [string]$Key) {
-    $view = @($Workspace.views.PSObject.Properties | Where-Object Name -Like '*Views' | ForEach-Object { @($_.Value) } | Where-Object { $_ -and $_.key -eq $Key }) | Select-Object -First 1
+    $view = Get-WorkspaceView $Workspace $Key
     $description = @("$($view.description)" -split '\r?\n' | ForEach-Object Trim | Where-Object { $_ }) -join ' '
     return [pscustomobject]@{ Title = "$($view.title)".Trim(); Description = $description }
 }
@@ -190,7 +194,7 @@ function ConvertTo-MarkdownLiteral([string]$Text) {
     return $Text -replace '([\\`*_\[\]<>])', '\$1'
 }
 
-# Il titolo e la descrizione di una vista, che nomina le parti con cui comunica, accompagnano la sua immagine
+# Il titolo e la descrizione di una vista, che comincia con la frase del suo scopo, accompagnano la sua immagine
 # anche fuori dal disegno, la descrizione su una riga sola; una vista senza titolo resta la sola immagine, con
 # la chiave.
 function Format-ViewImage([string]$Key, $Caption, $Document) {
@@ -198,6 +202,35 @@ function Format-ViewImage([string]$Key, $Caption, $Document) {
     if (-not $Caption.Title) { return , $(if ($Document) { "![]($target)" } else { "![$Key]($target)" }) }
     $title = ConvertTo-MarkdownLiteral $Caption.Title
     return @("**$title**", '') + @(if ($Caption.Description) { (ConvertTo-MarkdownLiteral $Caption.Description), '' }) + "![$title]($target)"
+}
+
+function Get-DeploymentEntries($Nodes, [string[]]$Environments, [hashtable]$ContainerNames) {
+    foreach ($node in @($Nodes | Where-Object { $_ })) {
+        if ($Environments -contains $node.environment) {
+            [pscustomobject]@{ Properties = $node.properties; Name = $node.name }
+            @($node.infrastructureNodes) | Where-Object { $_ } | ForEach-Object { [pscustomobject]@{ Properties = $_.properties; Name = $_.name } }
+            @($node.containerInstances) | Where-Object { $_ } | ForEach-Object { [pscustomobject]@{ Properties = $_.properties; Name = $ContainerNames["$($_.containerId)"] } }
+        }
+        Get-DeploymentEntries $node.children $Environments $ContainerNames
+    }
+}
+
+function ConvertTo-TableCell([string[]]$Values) {
+    return (ConvertTo-MarkdownLiteral (@($Values | Where-Object { $_ } | Sort-Object -Unique) -join ', ')) -replace '\|', '\|'
+}
+
+# Una vista con la proprieta' resourceGroups porta, sotto l'immagine, la tabella dei gruppi di risorse degli
+# ambienti che nomina: per gruppo, cio' che contiene e i moduli che lo dichiarano, dalle proprieta' degli elementi.
+function Format-ResourceGroupTable($Workspace, [string]$Key) {
+    $environments = @("$((Get-WorkspaceView $Workspace $Key).properties.resourceGroups)" -split ';' | Where-Object { $_ })
+    if (-not $environments) { return @() }
+    $containerNames = @{}
+    @($Workspace.model.softwareSystems | Where-Object { $_ } | ForEach-Object { @($_.containers) }) | Where-Object { $_ } | ForEach-Object { $containerNames["$($_.id)"] = $_.name }
+    $groups = @(Get-DeploymentEntries $Workspace.model.deploymentNodes $environments $containerNames | Where-Object { $_.Properties.resourceGroup } | Group-Object { $_.Properties.resourceGroup } | Sort-Object Name)
+    if (-not $groups) { return @() }
+    $columns = $DocumentLanguage.ResourceGroupTable
+    $rows = @($groups | ForEach-Object { "| $(ConvertTo-TableCell @($_.Name)) | $(ConvertTo-TableCell @($_.Group.Name)) | $(ConvertTo-TableCell @($_.Group | ForEach-Object { $_.Properties.module })) |" })
+    return @('', "| $($columns.Group) | $($columns.Content) | $($columns.Module) |", '| --- | --- | --- |') + $rows
 }
 
 # Con $Document il corpo va nel documento unico invece che in una pagina: i link portano dentro il documento,
@@ -242,6 +275,7 @@ function Convert-PageBody($Page, [hashtable]$PagesBySource, $Views, [hashtable]$
                 $ShownViews[$key] = $Views.Diagrams[$key]
                 if ($key -ne $keys[0]) { $output.Add('') }
                 foreach ($line in (Format-ViewImage $key (Get-ViewCaption $Views.Workspace $key) $Document)) { $output.Add($line) }
+                foreach ($line in (Format-ResourceGroupTable $Views.Workspace $key)) { $output.Add($line) }
             }
         }
         else { $output.Add((& $convertLinks $line)) }

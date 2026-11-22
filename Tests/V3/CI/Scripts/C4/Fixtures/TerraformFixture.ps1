@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Repository Terraform finto per il lettore Terraform del modello C4: un modulo radice condiviso (shared)
-# con la rete delle risorse comuni, un modulo radice App in dev, sta e prod con il suo modulo WebApp, un
-# modulo radice Customers istanziato per cliente. Le chiavi sono i percorsi sotto source/.
+# con la rete delle risorse comuni, un modulo radice App in dev, sta e prod con il suo modulo WebApp, il suo
+# ingresso (Front Door, Application Gateway) e il peering con la rete condivisa, un modulo radice Customers
+# istanziato per cliente. Le chiavi sono i percorsi sotto source/.
 
 . "$PSScriptRoot/C4CodeFixture.ps1"
 
@@ -47,6 +48,18 @@ resource "azurerm_subnet" "endpoints" {
 
 output "endpoints_subnet_id" {
   value = azurerm_subnet.endpoints.id
+}
+
+output "vnet_id" {
+  value = azurerm_virtual_network.shared.id
+}
+
+output "vnet_name" {
+  value = azurerm_virtual_network.shared.name
+}
+
+output "resource_group_name" {
+  value = azurerm_resource_group.shared.name
 }
 '@
     $files['source/Shared/environments/shared/backend.tf'] = New-Backend 'contoso-shared'
@@ -163,6 +176,119 @@ resource "azurerm_private_endpoint" "api" {
   name                = "pe-${local.suffix}-api"
   resource_group_name = azurerm_resource_group.app.name
   subnet_id           = data.terraform_remote_state.shared.outputs.endpoints_subnet_id
+
+  private_service_connection {
+    name                           = "api"
+    private_connection_resource_id = module.api.id
+    subresource_names              = ["sites"]
+  }
+}
+
+resource "azurerm_private_endpoint" "api_scm" {
+  name                = "pe-${local.suffix}-api-scm"
+  resource_group_name = azurerm_resource_group.app.name
+  subnet_id           = data.terraform_remote_state.shared.outputs.endpoints_subnet_id
+
+  private_service_connection {
+    name                           = "api-scm"
+    private_connection_resource_id = module.api.id
+    subresource_names              = ["scm"]
+  }
+}
+
+resource "azurerm_subnet" "gateway" {
+  name                 = "snet-gateway"
+  resource_group_name  = azurerm_resource_group.app.name
+  virtual_network_name = azurerm_virtual_network.app.name
+  address_prefixes     = ["10.1.3.0/24"]
+}
+
+resource "azurerm_public_ip" "gateway" {
+  name                = "pip-${local.suffix}"
+  resource_group_name = azurerm_resource_group.app.name
+}
+
+resource "azurerm_application_gateway" "edge" {
+  name                = "agw-${local.suffix}"
+  resource_group_name = azurerm_resource_group.app.name
+  location            = azurerm_resource_group.app.location
+
+  gateway_ip_configuration {
+    name      = "gateway"
+    subnet_id = azurerm_subnet.gateway.id
+  }
+
+  frontend_ip_configuration {
+    name                 = "public"
+    public_ip_address_id = azurerm_public_ip.gateway.id
+  }
+
+  backend_address_pool {
+    name  = "api"
+    fqdns = [module.api.default_hostname]
+  }
+
+  dynamic "backend_address_pool" {
+    for_each = { endpoint = azurerm_private_endpoint.api.private_service_connection[0].private_ip_address }
+    content {
+      name         = backend_address_pool.key
+      ip_addresses = [backend_address_pool.value]
+    }
+  }
+}
+
+resource "azurerm_cdn_frontdoor_profile" "edge" {
+  name                = "afd-${local.suffix}"
+  resource_group_name = azurerm_resource_group.app.name
+}
+
+resource "azurerm_cdn_frontdoor_endpoint" "edge" {
+  name                     = "fde-${local.suffix}"
+  cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.edge.id
+}
+
+resource "azurerm_cdn_frontdoor_origin_group" "edge" {
+  name                     = "gateway"
+  cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.edge.id
+}
+
+resource "azurerm_dns_a_record" "origin" {
+  name                = "origin"
+  zone_name           = "contoso.example"
+  resource_group_name = azurerm_resource_group.app.name
+  records             = [azurerm_public_ip.gateway.ip_address]
+}
+
+resource "azurerm_cdn_frontdoor_origin" "gateway" {
+  name                          = "gateway"
+  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.edge.id
+  host_name                     = "${azurerm_dns_a_record.origin.name}.${azurerm_dns_a_record.origin.zone_name}"
+}
+
+resource "azurerm_cdn_frontdoor_origin" "external" {
+  name                          = "external"
+  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.edge.id
+  host_name                     = "www.example.org"
+}
+
+resource "azurerm_cdn_frontdoor_route" "edge" {
+  name                          = "all"
+  cdn_frontdoor_endpoint_id     = azurerm_cdn_frontdoor_endpoint.edge.id
+  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.edge.id
+}
+
+resource "azurerm_virtual_network_peering" "app_to_shared" {
+  name                      = "app-to-shared"
+  resource_group_name       = azurerm_resource_group.app.name
+  virtual_network_name      = azurerm_virtual_network.app.name
+  remote_virtual_network_id = data.terraform_remote_state.shared.outputs.vnet_id
+}
+
+resource "azurerm_virtual_network_peering" "shared_to_app" {
+  name                      = "shared-to-app"
+  resource_group_name       = data.terraform_remote_state.shared.outputs.resource_group_name
+  virtual_network_name      = data.terraform_remote_state.shared.outputs.vnet_name
+  remote_virtual_network_id = azurerm_virtual_network.app.id
 }
 
 resource "azurerm_role_assignment" "secrets" {
@@ -201,6 +327,10 @@ output "id" {
 
 output "principal_id" {
   value = azurerm_linux_web_app.this.identity[0].principal_id
+}
+
+output "default_hostname" {
+  value = azurerm_linux_web_app.this.default_hostname
 }
 '@
     foreach ($environment in 'dev', 'sta', 'prod') {
@@ -300,6 +430,10 @@ function Invoke-TerraformReader([System.Collections.IDictionary]$Files, [hashtab
 
 function Get-DeploymentEnvironment($Fragment, [string]$Name) {
     return $Fragment.deployment | Where-Object name -EQ $Name
+}
+
+function Get-InstanceContainers($Node) {
+    return @($Node.instances | Where-Object { $_ } | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.container } })
 }
 
 function Get-AllNodes($Nodes) {

@@ -8,10 +8,26 @@
     CodeNameProperty = 'code'
     ExternalTag    = 'External'
     DataAccessViewSuffix = 'data-access'
-    ViewTitles     = @{ DeploymentOverview = 'Parts of the {0} environment'; Containers = 'Containers of {0}'; Logic = 'logic'; DataAccess = 'data access' }
+    ViewTitles     = @{
+        Allocation = 'Allocation · {0}'; ApplicationAllocation = 'Allocation · {0} · {1}'; Network = 'Network · {0}'; NetworkPart = 'Network · {0} · {1}'
+        Containers = 'Containers of {0}'; Logic = 'logic'; DataAccess = 'data access'
+    }
+    ViewPurposes   = @{
+        Allocation            = 'Where each application of the environment runs: the compute plans, the applications they host and the calls between the applications.'
+        ApplicationAllocation = 'What an application relies on in the environment: its compute plan, the managed services and the other applications it communicates with.'
+        Network               = 'How the networks of the environment connect: the incoming traffic, the virtual networks and the peerings between them.'
+        NetworkPart           = 'What a virtual network holds: the subnets, the applications integrated in them, the private endpoints and the path of the incoming traffic.'
+        Containers            = 'The containers an application communicates with and what passes between them.'
+        Logic                 = 'The logic components of a container and how they depend on each other.'
+        DataAccess            = 'The components of a container that read and write the data, and who uses them.'
+    }
     CommunicatesWith = 'Communicates with:'
     SummaryTag     = 'Summary'
-    SummaryMore    = 'and {0} more'
+    NetworkTag     = 'Network'
+    NetworkRelationships = @{ Peering = 'Connects the two networks with a peering'; Origin = 'Forwards the requests to the origin'; Backend = 'Forwards the requests to the backend' }
+    NetworkViewSuffix = 'network'
+    NetworkEnvironmentSuffix = 'network'
+    ResourceGroupTable = @{ Group = 'Resource group'; Content = 'Content'; Module = 'Module' }
     TextLanguage   = 'English'
     AdrSections    = @('Context and Problem Statement', 'Considered Options', 'Decision Outcome')
     StyleRuleParts = @{ Common = 'Rules'; Sections = 'Section rules'; Decisions = 'Decision rules' }

@@ -325,8 +325,10 @@ template d'ingresso: lo step `document-directories.yaml` le mette in `DOCS_DIREC
 |---|---|---|
 | Marcatore di vista | `<!-- vista: <chiave> -->`, `<!-- vista: <tipo>* -->`, `<!-- vista: <prefisso>* -->` | `<!-- view: <chiave> -->`, `<!-- view: <tipo>* -->`, `<!-- view: <prefisso>* -->` |
 | Tag dei container con vista dei componenti | `Applicazione` | `Application` |
-| Titoli delle viste generate | `Parti dell'ambiente <ambiente>`, `Container di <applicazione>`, `<container> · logica`, `<container> · accesso ai dati` | `Parts of the <ambiente> environment`, `Containers of <applicazione>`, `<container> · logic`, `<container> · data access` |
-| Riga dei vicini e relazioni riassunte | `Comunica con:`, `e altre <n>`, tag `Riassunto` | `Communicates with:`, `and <n> more`, tag `Summary` |
+| Titoli delle viste generate | `Allocazione · <ambiente>`, `Allocazione · <ambiente> · <applicazione>`, `Rete · <ambiente>`, `Rete · <ambiente> · <rete>`, `Container di <applicazione>`, `<container> · logica`, `<container> · accesso ai dati` | `Allocation · <ambiente>`, `Allocation · <ambiente> · <applicazione>`, `Network · <ambiente>`, `Network · <ambiente> · <rete>`, `Containers of <applicazione>`, `<container> · logic`, `<container> · data access` |
+| Frasi dello scopo delle viste generate | `ViewPurposes` in `IT.psd1` | `ViewPurposes` in `EN.psd1` |
+| Ambiente e viste della rete, relazioni di rete e riassunte | `<ambiente> rete`, tag `Rete` e `Riassunto`, `Comunica con:` fra i livelli dei componenti | `<ambiente> network`, tag `Network` and `Summary`, `Communicates with:` between the component levels |
+| Colonne della tabella dei gruppi di risorse | `Gruppo di risorse`, `Contenuto`, `Modulo` | `Resource group`, `Content`, `Module` |
 | Parti della decisione con struttura e flusso nel codice | `Struttura nel codice`, `Flusso nel codice` | `Code structure`, `Code flow` |
 | Pagina della wiki (default di `wikiRoot`) | `Architettura` | `Architecture` |
 | Colonna dello stato nella wiki | `Stato` | `Status` |
@@ -398,8 +400,8 @@ Modello C4 (`c4-verify.yaml`, `CI/Scripts/C4/Test-C4Model.ps1`):
 - La parte generata dal codice (`c4-generate.yaml`) porta il tag `Generato` in italiano: ogni elemento
   generato ha una descrizione, ogni relazione generata dice cosa passa, e fra due elementi generati
   nessuna relazione viene da fuori del codice, nemmeno per ripeterne una generata. Fanno eccezione le relazioni
-  riassunte fra due nodi di deployment (tag `Riassunto` in italiano), che la generazione scrive da quelle fra le
-  loro istanze. Un riferimento a un elemento che nessuna
+  riassunte fra due nodi di deployment (tag `Riassunto` in italiano), che la generazione scrive da quelle fra i
+  loro elementi. Un riferimento a un elemento che nessuna
   parte contiene rende il modello non valido, e l'errore nomina l'identificativo.
 - Ogni vista si disegna come nella wiki (`CI/Scripts/C4/ViewImages.ps1`): dall'alto in basso e da sinistra
   a destra, con gli spazi di default e stretti, con i ranghi come escono e con i ranghi più larghi di 3, 5
@@ -507,7 +509,7 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   (`!include generated/views`). Ogni applicazione ha una vista dei container con chiave
   `container-<applicazione>`: l'applicazione e gli elementi con cui ha relazioni, in entrambe le direzioni.
   Ogni vista generata ha un titolo suo, fatto dai nomi delle parti che mostra (`Container di <applicazione>`
-  in italiano).
+  in italiano), e come descrizione la frase fissa che dice il suo scopo (`ViewPurposes` della lingua).
   Una vista con tutte le applicazioni di un repository sommerebbe i loro vicini e non si leggerebbe alla
   scala minima. La vista appartiene al sistema che in `workspace.dsl`, accanto alla cartella delle parti generate,
   include la cartella `containers`; se il workspace non lo dichiara la generazione si ferma. Un container
@@ -517,8 +519,8 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   container in relazione con loro. Quella dell'accesso ai dati mostra i suoi componenti, ciò che ognuno usa
   e gli elementi fuori dal container che li chiamano. Il titolo di ognuna è il nome del container con il
   livello (`<container> · logica`, `<container> · accesso ai dati`); se i suoi componenti hanno relazioni con
-  quelli dell'altro livello, la descrizione della vista li nomina dopo il titolo dell'altra vista
-  (`Comunica con: <titolo> (<componenti>)`). Un componente è di accesso ai dati se un segmento del
+  quelli dell'altro livello, la descrizione della vista li nomina, dopo la frase dello scopo, con il titolo
+  dell'altra vista (`Comunica con: <titolo> (<componenti>)`). Un componente è di accesso ai dati se un segmento del
   suo nome, separato da punti, è fra `dataAccessSegments` (default `DataAccess`). Scrive
   infine `context.dsl`, da includere nel modello prima del sistema: le persone e i sistemi esterni del
   catalogo, i sistemi con il tag `Esterno` e, se tecnici, `Tecnico`. Si committa con le parti generate.
@@ -564,34 +566,35 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   una risorsa dei nodi, o un'espressione che il valutatore non conosce, ferma la lettura con file e riga.
   `environments` associa a ogni ambiente del modello la sua directory d'ambiente; una directory che non
   vi compare entra negli ambienti con cui scambia remote state. `instances` istanzia un modulo radice
-  per ogni directory di un glob, con il nome della directory in una variabile. I nodi si annidano per
-  identificativo Azure: sottoscrizione (quella del provider della risorsa), gruppo di risorse, rete
-  virtuale, subnet, piano di hosting; un'applicazione sta nel suo piano, il piano nella subnet a cui
-  l'applicazione si integra (o nel gruppo di risorse), un private endpoint nella sua subnet, un servizio
-  dati nel gruppo di risorse. Un container dei frammenti sta sulla risorsa con il suo nome nel codice o
-  su quella che un frammento dichiara in `hosts`; altrimenti la risorsa e' un nodo dell'infrastruttura.
-  Una risorsa che ospita un container o che gira su un piano, di un tipo che le regole non riconoscono,
-  ferma la lettura nominandola. Lo scrittore mette gli ambienti in `deployment/<repository>.dsl`, da
-  includere nel modello dopo il sistema software, e le viste in `deployment-views/<repository>.dsl`, da
-  includere nelle viste: per ogni ambiente la vista d'insieme (`deployment_<ambiente>`) con i nodi dei
-  primi due livelli (sottoscrizioni e gruppi di risorse) chiusi, cioè senza il loro contenuto, e una vista
-  per ogni nodo del secondo livello con istanze o nodi dell'infrastruttura (`deployment_<ambiente>_<gruppo>`).
-  Se due gruppi dello stesso ambiente hanno lo stesso nome, la chiave aggiunge quello del nodo che li
-  contiene. La vista di un nodo con istanze in un ramo solo mostra tutto il suo contenuto e le istanze degli
-  antenati in relazione con le sue; quella di un nodo con istanze in più rami mostra i figli chiusi, senza
-  le istanze dirette del nodo in relazione con le istanze dei figli (una freccia fra un'istanza e un nodo
-  chiuso non si disegna: compaiono nelle viste dei figli), e ogni figlio con contenuto ha la sua vista,
-  `<chiave del padre>_<figlio>`. Ogni vista mostra chiusi anche i
-  vicini del suo nodo: i fratelli suoi e dei suoi antenati con cui le sue istanze hanno relazioni. Fra due
-  nodi chiusi le relazioni fra le loro istanze sono riassunte in una relazione sola, con i testi distinti in
-  ordine fino a due e il numero degli altri (`e altre <n>` in italiano) se ne restano almeno due, altrimenti
-  tutti, e il tag `Riassunto`: la vista
-  d'insieme mostra quelle fra i gruppi, la vista di un nodo quelle fra i figli chiusi e fra il nodo, o i
-  suoi figli chiusi, e i vicini. Il titolo di una vista è il nome dell'ambiente con i nomi dei nodi dal
-  gruppo al nodo della vista, separati da ` · ` (`Parti dell'ambiente <ambiente>` per la vista d'insieme);
-  la descrizione nomina solo i vicini, separati da virgole su una riga (`Comunica con: <vicino>, …`): ciò
-  che passa sta sulle relazioni riassunte. Il disegno riapre la grandezza del titolo su ogni riga della
-  descrizione, che l'esportatore C4-PlantUML chiude solo in fondo. Il testo di un nodo e' uno per tutti gli ambienti.
+  per ogni directory di un glob, con il nome della directory in una variabile. Ogni ambiente del modello
+  ne scrive due, ciascuno per una domanda. L'allocazione, `<ambiente>`: la regione della risorsa (o del suo
+  gruppo di risorse), con i piani di calcolo e le applicazioni che ospitano; un'applicazione senza piano sta
+  nella regione, e cosi' un servizio che ospita un container. La rete, `<ambiente> rete` in italiano: le reti
+  virtuali con le subnet, le applicazioni che vi si integrano, i private endpoint, con il nome della risorsa
+  che espongono e i servizi esposti, e gli Application Gateway; i profili Front Door con i loro endpoint; le
+  relazioni di peering fra due reti (una per coppia), di origine dall'endpoint del Front Door alla risorsa
+  che l'origine nomina, anche attraverso un record DNS e un IP pubblico, e di backend dall'Application
+  Gateway all'applicazione o al private endpoint del suo pool. Un collegamento che la dichiarazione non
+  risolve, come un nome fuori dalla dichiarazione, da' un avviso e non ferma la lettura. Ogni elemento porta
+  il gruppo di risorse e il modulo radice che lo dichiara. Un container dei frammenti sta sulla risorsa con
+  il suo nome nel codice o su quella che un frammento dichiara in `hosts`. Una risorsa che ospita un
+  container o che gira su un piano, di un tipo che le regole non riconoscono, ferma la lettura nominandola.
+  Lo scrittore mette gli ambienti in `deployment/<repository>.dsl`, da includere nel modello dopo il
+  sistema software, e le viste in `deployment-views/<repository>.dsl`, da includere nelle viste. Le viste
+  nascono dalle domande e non dalla forma dell'albero dei nodi: per ogni ambiente l'allocazione
+  (`deployment_<ambiente>`), con i soli piani di calcolo, le applicazioni che ospitano e le chiamate fra le
+  applicazioni; per ogni applicazione ospitata la sua allocazione (`deployment_<ambiente>_app_<container>`),
+  con il suo piano, i servizi e le applicazioni con cui ha relazioni e solo le sue relazioni; la rete
+  (`deployment_<ambiente>_rete`), con le reti e i profili d'ingresso chiusi e fra loro le relazioni di rete,
+  riassunte con il tag `Riassunto` quando passano fra elementi interni; per ogni rete con subnet la sua
+  vista (`deployment_<ambiente>_rete_<rete>`), con chiuse le radici con cui ha relazioni. Le viste di rete
+  mostrano solo le relazioni con il tag `Rete`. Il titolo dice il tipo della vista, l'ambiente e la parte
+  (`Allocazione · prod · Bff.Web` in italiano) e la descrizione e' la frase fissa dello scopo del tipo.
+  L'allocazione dichiara nella proprieta' `resourceGroups` gli ambienti di cui la pubblicazione elenca i
+  gruppi di risorse in una tabella sotto l'immagine. Due nodi fratelli con lo stesso nome, che Structurizr
+  rifiuta, aggiungono al nome i servizi esposti, il gruppo di risorse o il nome della risorsa, e la
+  posizione se restano uguali. Il disegno riapre la grandezza del titolo su ogni riga della descrizione,
+  che l'esportatore C4-PlantUML chiude solo in fondo. Il testo di un nodo e' uno per tutti gli ambienti.
 - **Nomi.** Il nome nel codice senza il prefisso comune ai progetti del repository, a segmenti interi e
   più corto di ogni nome. L'identificativo si ricava dal nome completo, così un repository nomina gli
   elementi degli altri senza leggerli. Nel modello di tutto il sistema un'applicazione si chiama con il
@@ -903,7 +906,7 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/C4/C4CodeModel.ps1` | Contratto del frammento del modello C4 generato, incluso dai lettori: file di progetto letti, container, componenti, relazioni, indirizzi di avvio e chiamati e il loro legame |
 | `CI/Scripts/C4/Read-C4DotNet10Model.ps1` | Lettore .NET 10 (`c4-read-dotnet10.yaml`): applicazioni come container, progetti di produzione come componenti, regole di .NET 10; un progetto di un'altra versione ferma la lettura |
 | `CI/Scripts/C4/Read-C4Angular18Model.ps1` | Lettore Angular 18 (`c4-read-angular18.yaml`): l'applicazione come container, cartelle di funzionalità e moduli di base come componenti; un workspace di un'altra versione ferma la lettura |
-| `CI/Scripts/C4/Read-C4TerraformModel.ps1` | Lettore Terraform (`c4-read-terraform.yaml`): ambienti di deployment con i nodi annidati per identificativo Azure e le istanze dei container dei frammenti; una risorsa di hosting di un tipo che le regole non riconoscono ferma la lettura |
+| `CI/Scripts/C4/Read-C4TerraformModel.ps1` | Lettore Terraform (`c4-read-terraform.yaml`): per ambiente l'allocazione (regioni, piani di calcolo, istanze dei container dei frammenti) e la rete (reti virtuali, subnet, private endpoint, Application Gateway, Front Door, peering, origini e backend), con gruppo di risorse e modulo di ogni elemento; una risorsa di hosting di un tipo che le regole non riconoscono ferma la lettura |
 | `CI/Scripts/C4/TerraformCode.ps1` | Blocchi dei file Terraform e riferimenti delle loro espressioni seguiti per nome fino alle risorse, condivisi dai lettori dell'infrastruttura |
 | `CI/Scripts/C4/TerraformValues.ps1` | Valori della dichiarazione Terraform di un ambiente: espressioni, funzioni, variabili, locals, moduli, override e remote state, con i valori sconosciuti |
 | `CI/Scripts/C4/Write-C4ModelText.ps1` | Testo del modello C4 di tutto il sistema (`c4-describe.yaml`): stesure del modello linguistico (`C4_TEXT_PROVIDER`) corrette in modo deterministico o rimandate al modello, catalogo unico di persone e sistemi esterni controllato dal modello, revisione di tutto il modello con prove verificate nella configurazione di produzione, testo salvato un container alla volta e ripreso al rilancio, correzioni elencate |
