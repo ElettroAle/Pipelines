@@ -769,3 +769,239 @@ Describe "Funzionalità: Documentazione architetturale nella wiki e come documen
         }
     }
 }
+
+
+# Gli scenari del requisito 2124 «Il lavoro arrivato in staging si legge nella wiki come bozza delle pagine che
+# cambia» che riguardano la wiki, con il testo dei criteri di accettazione: un It per ogni Allora e ogni E. La bozza
+# e' il documento del ramo di bozza, in una seconda cartella accanto a quella del documento ufficiale.
+Describe "Funzionalità: Bozza della documentazione per il lavoro arrivato in staging" {
+
+    BeforeAll {
+        $DraftNotice = '> <span style="color:darkorange;font-weight:bold">BOZZA. La pagina descrive il lavoro arrivato in staging e non ancora in produzione.</span>'
+
+        # Il documento del ramo di bozza: lo stesso documento ufficiale, con le modifiche del lavoro di staging.
+        function Add-DraftDocs([System.Collections.IDictionary]$Docs, [scriptblock]$Change = {}) {
+            $draft = New-ValidDocs
+            & $Change $draft
+            foreach ($path in $draft.Keys) { $Docs["staging/$path"] = $draft[$path] }
+            return $Docs
+        }
+
+        function Add-Notifier([System.Collections.IDictionary]$Docs) {
+            Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' '            worker = container' "            notifier = container `"Notifier`" `"Notifiche push`" `"Functions`" `"Applicazione`"`n            worker = container"
+            Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' 'motore -> worker "accoda"' "motore -> worker `"accoda`"`n        motore -> notifier `"chiede le notifiche push`""
+            Edit-Docs $Docs 'docs/architecture/05_building_block_view.md' "L'API del Motore accoda i lavori lunghi al Worker." "L'API del Motore accoda i lavori lunghi al Worker.`n`nIl Notifier invia le notifiche push."
+        }
+
+        function Invoke-DraftPublish([System.Collections.IDictionary]$Docs, $Wiki, [string]$Formats = '', [string]$Language = '') {
+            return Invoke-DocsScript $ScriptPath $Docs @{
+                DOCUMENT_FORMATS          = $Formats
+                DOCUMENT_LANGUAGE         = $Language
+                WIKI_DIRECTORY            = $Wiki.Checkout
+                SYSTEM_COLLECTIONURI      = 'https://dev.azure.com/Org/'
+                SYSTEM_TEAMPROJECT        = 'Progetto'
+                BUILD_REPOSITORY_NAME     = 'Architettura.Repo'
+                BUILD_SOURCEVERSION       = '0123456789abcdef'
+                SYSTEM_ACCESSTOKEN        = ''
+                DRAFT_DOCS_DIRECTORY      = 'staging/docs/architecture'
+                DRAFT_DECISIONS_DIRECTORY = 'staging/docs/decisions'
+                DRAFT_BRANCH              = 'staging'
+            }
+        }
+
+        function Get-WikiFiles($Wiki) {
+            $previousEncoding = [Console]::OutputEncoding
+            [Console]::OutputEncoding = [Text.UTF8Encoding]::new()
+            try { return @(git -C $Wiki.Origin -c core.quotepath=false ls-tree -r --name-only wikiMaster) }
+            finally { [Console]::OutputEncoding = $previousEncoding }
+        }
+
+        function Get-FirstLine([string]$Page) {
+            return ($Page -split "`n")[0]
+        }
+
+        $notifierWiki = New-Wiki
+        $notifierDocs = Add-DraftDocs (New-ValidDocs) { param($Draft) Add-Notifier $Draft }
+        $notifier = Invoke-DraftPublish $notifierDocs $notifierWiki 'pdf, docx'
+        $rootOrder = @((Get-WikiPage $notifierWiki 'Architettura/.order') -split "`n")
+        $draftPage = Get-WikiPage $notifierWiki 'Architettura/5.-Building-Block-View-(bozza).md'
+        $officialPage = Get-WikiPage $notifierWiki 'Architettura/5.-Building-Block-View.md'
+    }
+    AfterAll { Remove-Item -Recurse -Force $notifierWiki.Root -ErrorAction SilentlyContinue }
+
+    Context "Scenario: una pagina cambiata dal lavoro di staging ha la sua bozza" {
+
+        It 'Allora la wiki ha la pagina "5. Building Block View (bozza)" accanto a "5. Building Block View"' {
+            $notifier.ExitCode | Should -Be 0 -Because $notifier.Output
+            $draftPage | Should -Not -BeNullOrEmpty
+            [Array]::IndexOf($rootOrder, '5.-Building-Block-View-(bozza)') | Should -Be ([Array]::IndexOf($rootOrder, '5.-Building-Block-View') + 1)
+        }
+
+        It 'E "5. Building Block View (bozza)" contiene il container "Notifier" e porta in testa l''avviso di bozza' {
+            $draftPage | Should -Match 'Il Notifier invia le notifiche push'
+            $draftPage | Should -Match ([regex]::Escape('![contenitori](/.attachments/Architettura/draft/contenitori.png)'))
+            $draftImage = Get-WikiFileBytes $notifierWiki '.attachments/Architettura/draft/contenitori.png'
+            Test-Png $draftImage | Should -BeTrue
+            [Convert]::ToHexString($draftImage) | Should -Not -Be ([Convert]::ToHexString((Get-WikiFileBytes $notifierWiki '.attachments/Architettura/contenitori.png'))) -Because 'la vista dei container della bozza mostra il Notifier'
+            Get-FirstLine $draftPage | Should -Be $DraftNotice
+        }
+
+        It 'E "5. Building Block View" non contiene il container "Notifier" e rimanda a "5. Building Block View (bozza)"' {
+            $officialPage | Should -Not -Match 'Notifier'
+            $officialPage | Should -Match ([regex]::Escape('![contenitori](/.attachments/Architettura/contenitori.png)'))
+            Get-FirstLine $officialPage | Should -Be '> Il lavoro arrivato in staging e non ancora in produzione cambia questa pagina: [5. Building Block View (bozza)](/Architettura/5.-Building-Block-View-%28bozza%29).'
+        }
+
+        It "E le pagine che il lavoro di staging non cambia non hanno una bozza" {
+            @(Get-WikiFiles $notifierWiki | Where-Object { $_ -like 'Architettura/*' -and $_ -match '\(bozza\)' }) | Should -Be @('Architettura/5.-Building-Block-View-(bozza).md')
+            @($rootOrder | Where-Object { $_ -match '\(bozza\)' }) | Should -Be @('5.-Building-Block-View-(bozza)')
+            @(Get-WikiFiles $notifierWiki | Where-Object { $_ -like '.attachments/Architettura/draft/*' }) | Should -Be @('.attachments/Architettura/draft/contenitori.png')
+        }
+    }
+
+    Context "Scenario: una decisione nuova di staging compare solo come bozza" {
+        BeforeAll {
+            $decisionWiki = New-Wiki
+            $decisionDocs = Add-DraftDocs (New-ValidDocs) {
+                param($Draft)
+                $Draft['docs/decisions/0040-notifiche-push.md'] = "---`nstatus: accepted`n---`n`n# Notifiche push con un'applicazione dedicata`n`nIl Notifier invia le notifiche push.`n"
+            }
+            $decision = Invoke-DraftPublish $decisionDocs $decisionWiki
+            $decisionsOrder = @((Get-WikiPage $decisionWiki 'Architettura/9.-Decisioni-di-progettazione/.order') -split "`n")
+            $decisionDraft = Get-WikiPage $decisionWiki 'Architettura/9.-Decisioni-di-progettazione/0040-Notifiche-push-(bozza).md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $decisionWiki.Root -ErrorAction SilentlyContinue }
+
+        It 'Allora la wiki ha la pagina della decisione "0040-notifiche-push" con il suffisso "(bozza)" e l''avviso di bozza' {
+            $decision.ExitCode | Should -Be 0 -Because $decision.Output
+            $decisionDraft | Should -Match 'Il Notifier invia le notifiche push'
+            Get-FirstLine $decisionDraft | Should -Be $DraftNotice
+            $decisionsOrder | Should -Be @('0001-Esempio', '0040-Notifiche-push-(bozza)')
+        }
+
+        It 'E la wiki non ha la pagina ufficiale della decisione "0040-notifiche-push"' {
+            Get-WikiPage $decisionWiki 'Architettura/9.-Decisioni-di-progettazione/0040-Notifiche-push.md' | Should -BeNullOrEmpty
+            @(Get-WikiFiles $decisionWiki | Where-Object { $_ -match '\(bozza\)' }) | Should -Be @('Architettura/9.-Decisioni-di-progettazione/0040-Notifiche-push-(bozza).md')
+        }
+    }
+
+    Context "Scenario: nulla da aggiornare in staging" {
+        BeforeAll {
+            $unchangedWiki = New-Wiki
+            $unchangedDocs = Add-DraftDocs (New-ValidDocs) { param($Draft) $Draft['.draft-sources'] = '{"sources":[]}' }
+            $unchanged = Invoke-DraftPublish $unchangedDocs $unchangedWiki
+        }
+        AfterAll { Remove-Item -Recurse -Force $unchangedWiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora la wiki non ha pagine in bozza nuove" {
+            $unchanged.ExitCode | Should -Be 0 -Because $unchanged.Output
+            @(Get-WikiFiles $unchangedWiki | Where-Object { $_ -match '\(bozza\)' -or $_ -like '.attachments/Architettura/draft/*' }) | Should -BeNullOrEmpty
+            Get-FirstLine (Get-WikiPage $unchangedWiki 'Architettura/5.-Building-Block-View.md') | Should -Not -Match 'bozza'
+        }
+    }
+
+    Context "Scenario: la bozza non entra nel PDF e nel Word" {
+
+        It 'Allora il PDF e il Word non contengono il container "Notifier"' {
+            $notifier.ExitCode | Should -Be 0 -Because $notifier.Output
+            $pdf = Read-PdfDocument (Get-WikiFileBytes $notifierWiki '.attachments/Architettura/Architettura.pdf')
+            $word = Read-WordDocument (Get-WikiFileBytes $notifierWiki '.attachments/Architettura/Architettura.docx')
+            ($pdf.Text -replace '\s+', '') | Should -Match 'BuildingBlockView'
+            ($pdf.Text -replace '\s+', '') | Should -Not -Match 'Notifier'
+            $word.Text | Should -Match 'Building Block View'
+            $word.Text | Should -Not -Match 'Notifier'
+            @(Get-WikiFiles $notifierWiki | Where-Object { $_ -match '\.(pdf|docx)$' }) | Should -Be @('.attachments/Architettura/Architettura.docx', '.attachments/Architettura/Architettura.pdf')
+        }
+    }
+}
+
+
+# I casi della pubblicazione della bozza oltre gli scenari del requisito: la pagina che cambia solo nel disegno di una
+# vista, la pagina che esiste solo nella bozza fra due pagine ufficiali, la lingua inglese.
+Describe "Bozza della documentazione nella wiki" {
+
+    BeforeAll {
+        function Invoke-DraftWiki([System.Collections.IDictionary]$Docs, [string]$Language = '') {
+            $wiki = New-Wiki
+            $result = Invoke-DocsScript $ScriptPath $Docs @{
+                DOCUMENT_LANGUAGE         = $Language
+                WIKI_DIRECTORY            = $wiki.Checkout
+                SYSTEM_COLLECTIONURI      = 'https://dev.azure.com/Org/'
+                SYSTEM_TEAMPROJECT        = 'Progetto'
+                BUILD_REPOSITORY_NAME     = 'Architettura.Repo'
+                BUILD_SOURCEVERSION       = '0123456789abcdef'
+                SYSTEM_ACCESSTOKEN        = ''
+                DRAFT_DOCS_DIRECTORY      = 'bozza/docs/architecture'
+                DRAFT_DECISIONS_DIRECTORY = 'bozza/docs/decisions'
+                DRAFT_BRANCH              = 'staging'
+            }
+            return [pscustomobject]@{ Wiki = $wiki; Result = $result }
+        }
+
+        function Add-Draft([System.Collections.IDictionary]$Docs, [System.Collections.IDictionary]$Draft) {
+            foreach ($path in $Draft.Keys) { $Docs["bozza/$path"] = $Draft[$path] }
+            return $Docs
+        }
+    }
+
+    Context "Una vista che cambia solo nel disegno" {
+        BeforeAll {
+            $draft = New-ValidDocs
+            Edit-Docs $draft 'docs/architecture/c4/workspace.dsl' 'motore -> worker "accoda"' 'motore -> worker "accoda i lavori lunghi"'
+            $run = Invoke-DraftWiki (Add-Draft (New-ValidDocs) $draft)
+            $files = @(git -C $run.Wiki.Origin ls-tree -r --name-only wikiMaster)
+        }
+        AfterAll { Remove-Item -Recurse -Force $run.Wiki.Root -ErrorAction SilentlyContinue }
+
+        It "da' la bozza alla pagina che mostra la vista, con l'immagine della bozza e il testo uguale" {
+            $run.Result.ExitCode | Should -Be 0 -Because $run.Result.Output
+            $page = Get-WikiPage $run.Wiki 'Architettura/5.-Building-Block-View-(bozza).md'
+            $page | Should -Match ([regex]::Escape('![contenitori](/.attachments/Architettura/draft/contenitori.png)'))
+            $page | Should -Match ([regex]::Escape('![componenti-client](/.attachments/Architettura/componenti-client.png)')) -Because 'una vista uguale mostra l''immagine ufficiale'
+        }
+
+        It "e nessuna bozza alle pagine con le altre viste" {
+            @($files | Where-Object { $_ -match '\(bozza\)' }) | Should -Be @('Architettura/5.-Building-Block-View-(bozza).md')
+            @($files | Where-Object { $_ -like '.attachments/Architettura/draft/*' }) | Should -Be @('.attachments/Architettura/draft/contenitori.png')
+        }
+    }
+
+    Context "Una sezione che nella bozza cambia titolo" {
+        BeforeAll {
+            $draft = New-ValidDocs
+            Edit-Docs $draft 'docs/architecture/06_runtime_view.md' '# Runtime View' '# Vista a runtime'
+            $run = Invoke-DraftWiki (Add-Draft (New-ValidDocs) $draft)
+            $order = @((Get-WikiPage $run.Wiki 'Architettura/.order') -split "`n")
+        }
+        AfterAll { Remove-Item -Recurse -Force $run.Wiki.Root -ErrorAction SilentlyContinue }
+
+        It "e' una pagina solo della bozza, dopo la pagina che la precede nella bozza, con l'avviso" {
+            $run.Result.ExitCode | Should -Be 0 -Because $run.Result.Output
+            [Array]::IndexOf($order, '6.-Vista-a-runtime-(bozza)') | Should -Be ([Array]::IndexOf($order, '5.-Building-Block-View') + 1)
+            Get-WikiPage $run.Wiki 'Architettura/6.-Vista-a-runtime-(bozza).md' | Should -Match 'BOZZA'
+        }
+
+        It "e la pagina ufficiale con il titolo di prima resta senza bozza e senza rimando" {
+            $order | Should -Contain '6.-Runtime-View'
+            $order | Should -Not -Contain '6.-Runtime-View-(bozza)'
+            (Get-WikiPage $run.Wiki 'Architettura/6.-Runtime-View.md') | Should -Not -Match 'bozza'
+        }
+    }
+
+    Context "Documento in inglese" {
+        BeforeAll {
+            $draft = ConvertTo-EnglishConventions (New-ValidDocs)
+            Edit-Docs $draft 'docs/architecture/02_architecture_constraints.md' 'La piattaforma gira su Azure.' 'La piattaforma gira su Azure in Italia.'
+            $run = Invoke-DraftWiki (Add-Draft (ConvertTo-EnglishConventions (New-ValidDocs)) $draft) 'EN'
+            $page = Get-WikiPage $run.Wiki 'Architecture/2.-Vincoli-di-architettura-(draft).md'
+            $official = Get-WikiPage $run.Wiki 'Architecture/2.-Vincoli-di-architettura.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $run.Wiki.Root -ErrorAction SilentlyContinue }
+
+        It "usa il suffisso, l'avviso e il rimando della lingua" {
+            $run.Result.ExitCode | Should -Be 0 -Because $run.Result.Output
+            ($page -split "`n")[0] | Should -Be '> <span style="color:darkorange;font-weight:bold">DRAFT. The page describes the work merged into staging and not yet in production.</span>'
+            ($official -split "`n")[0] | Should -Be '> The work merged into staging and not yet in production changes this page: [2. Vincoli di architettura (draft)](/Architecture/2.-Vincoli-di-architettura-%28draft%29).'
+        }
+    }
+}

@@ -164,6 +164,14 @@ Describe 'Impostazioni dalle variabili della pipeline' {
         $settings.MaxDrafts | Should -Be 3
         $settings.WorkItemType | Should -Be 'Bug'
         $settings.ReasoningEffort | Should -Be 'high'
+        $settings.TargetBranch | Should -Be 'main'
+    }
+
+    It 'Il ramo di destinazione arriva senza il prefisso refs/heads' {
+        $previous = $env:TARGET_BRANCH
+        $env:TARGET_BRANCH = 'refs/heads/staging'
+        try { (Get-UpdateSettings).TargetBranch | Should -Be 'staging' }
+        finally { $env:TARGET_BRANCH = $previous }
     }
 
     It 'Una variabile non definita arriva come macro e vale il default' {
@@ -416,7 +424,7 @@ Describe 'Stesure scartate' {
             $workItems[0].Path | Should -Be '/organizzazione/Progetto%20di%20prova/_apis/wit/workitems/$Bug'
             $workItems[0].Headers.authorization | Should -Be 'Bearer token-della-build'
             $fields = @($workItems[0].Body)
-            ($fields | Where-Object path -EQ '/fields/System.Title').value | Should -Match '^Documentazione non aggiornata: Merged PR 77: coda dei lavori'
+            ($fields | Where-Object path -EQ '/fields/System.Title').value | Should -Match '^Documentazione non aggiornata in main: Merged PR 77: coda dei lavori'
             ($fields | Where-Object path -EQ '/fields/Microsoft.VSTS.TCM.ReproSteps').value | Should -Match 'Merged PR 77[\s\S]*Motivi del rifiuto[\s\S]*0099-assente'
         }
 
@@ -434,6 +442,38 @@ Describe 'Stesure scartate' {
         Reset-ModelEndpoint $Model @(New-Draft @(New-SectionDraft -Text $NewStrategy))
         try { (Invoke-Update $repository).Outcome.Status | Should -Be 'updated' }
         finally { Remove-UpdateRepository $repository }
+    }
+}
+
+# Lo scenario del requisito 2124 «Il lavoro arrivato in staging si legge nella wiki come bozza delle pagine che
+# cambia» che riguarda l'aggiornamento della bozza, con il testo dei criteri di accettazione. Il checkout e' quello
+# del ramo di bozza del documento, che l'aggiornamento riceve come ramo di destinazione.
+Describe "Funzionalità: Bozza della documentazione per il lavoro arrivato in staging" {
+
+    Context "Scenario: bozza respinta dalle verifiche" {
+        BeforeAll {
+            $repository = New-UpdateRepository -Change $QueueChange
+            $broken = Get-SectionText 'La piattaforma usa una coda, come dice la [decisione](../decisions/0099-assente.md).'
+            Reset-ModelEndpoint $Model @(New-Draft @(New-SectionDraft -Text $broken))
+            Reset-ModelEndpoint $Boards @(New-ModelResponse 200 @{ id = 4343 })
+            $result = Invoke-Update $repository @{ TargetBranch = 'staging' }
+            $workItems = @(Get-ModelEndpointRequests $Boards)
+        }
+
+        AfterAll { Remove-UpdateRepository $repository }
+
+        It "Allora le pagine in bozza non cambiano" {
+            $result.Outcome.Status | Should -Be 'rejected'
+            Get-UncommittedChanges $repository 'docs' | Should -BeNullOrEmpty
+            $result.Outcome.Paths | Should -Be @('.documentation-baseline')
+        }
+
+        It "E la board riceve un Bug che nomina il cambiamento da documentare e il motivo del rifiuto" {
+            $workItems.Count | Should -Be 1
+            $fields = @($workItems[0].Body)
+            ($fields | Where-Object path -EQ '/fields/System.Title').value | Should -Match '^Documentazione non aggiornata in staging: Merged PR 77: coda dei lavori'
+            ($fields | Where-Object path -EQ '/fields/Microsoft.VSTS.TCM.ReproSteps').value | Should -Match 'Cambiamento da documentare: Merged PR 77: coda dei lavori[\s\S]*Motivi del rifiuto[\s\S]*0099-assente'
+        }
     }
 }
 

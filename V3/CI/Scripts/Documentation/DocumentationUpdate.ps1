@@ -6,7 +6,8 @@
 # punto di partenza e restano fuori. Il modello linguistico riscrive i documenti che il cambiamento tocca;
 # le verifiche della documentazione giudicano ogni stesura, e una stesura che porta rilievi nuovi torna al
 # modello con i motivi dello scarto. Il punto di partenza avanza con i documenti, nella stessa PR: con il
-# modello non disponibile resta dov'e', e la run successiva riprende lo stesso cambiamento.
+# modello non disponibile resta dov'e', e la run successiva riprende lo stesso cambiamento. Il ramo di
+# destinazione, quello principale o un ramo di bozza, compare nel titolo del work item di un rifiuto.
 
 . "$PSScriptRoot/../LanguageModel/LanguageModel.ps1"
 . "$PSScriptRoot/../Common/DocumentLanguage.ps1"
@@ -78,6 +79,7 @@ function Get-UpdateSettings {
         ReasoningEffort    = Get-Setting $env:DOCS_UPDATE_REASONING_EFFORT 'high'
         MaxTokens          = [int]"0$env:DOCS_UPDATE_MAX_TOKENS"
         AccessToken        = $env:DOCS_UPDATE_TOKEN
+        TargetBranch       = (Get-Setting $env:TARGET_BRANCH 'main') -replace '^refs/heads/', ''
     }
 }
 
@@ -365,7 +367,7 @@ function Get-RejectionSteps($Origin, $Change, [string[]]$Rejections) {
 }
 
 function New-RejectionWorkItem($Settings, $Origin, $Change, [string[]]$Rejections) {
-    $title = "Documentazione non aggiornata: $($Origin.Label)"
+    $title = "Documentazione non aggiornata in $($Settings.TargetBranch): $($Origin.Label)"
     if ($title.Length -gt $WorkItemTitleLength) { $title = $title.Substring(0, $WorkItemTitleLength) }
     $fields = @(
         @{ op = 'add'; path = '/fields/System.Title'; value = $title }

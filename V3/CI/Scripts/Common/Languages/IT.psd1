@@ -42,6 +42,10 @@
     StatusColumn   = 'Stato'
     StatusLabels   = @{ proposed = 'proposta'; accepted = 'accettata'; rejected = 'respinta'; deprecated = 'deprecata'; superseded = 'sostituita' }
     StatusNotices  = @{ superseded = 'DECISIONE SOSTITUITA. Al suo posto vale la'; deprecated = 'DECISIONE DEPRECATA. Non vale piu'' e nessuna decisione la sostituisce.'; rejected = 'DECISIONE RESPINTA. Resta come traccia della discussione.' }
+    DraftSuffix    = ' (bozza)'
+    DraftNotice    = 'BOZZA. La pagina descrive il lavoro arrivato in {0} e non ancora in produzione.'
+    DraftNoticeColor = 'darkorange'
+    DraftLink      = 'Il lavoro arrivato in {0} e non ancora in produzione cambia questa pagina:'
     UpdateOriginPullRequest = 'PR {0} di {1}'
     UpdateOriginCommit = 'commit {0} di {1}'
     Reference      = @{

@@ -8,6 +8,8 @@
 # Il repo consumer dichiara due repository resource: `infrastructure` (questo repo, con gli
 # script) e il repository della wiki, il cui alias passa in wikiRepository. Con "Protect access
 # to repositories in YAML pipelines" il System.AccessToken scrive solo nei repository dichiarati.
+# Con draftRepository, l'alias di una repository resource sul ramo di bozza del documento, la pubblicazione
+# legge anche la bozza e aggiunge le pagine che essa cambia accanto a quelle ufficiali.
 #
 # Parametri
 # ─────────
@@ -23,6 +25,9 @@
 #   documentFormats    → formati del documento unico allegato alla wiki, 'pdf' e 'docx' (default: nessuno)
 #   referenceRoot      → radice della reference nella wiki (reference-publish.yaml), i cui link si
 #                        aggiungono alle pagine e non al documento unico (default: nessuna)
+#   draftRepository    → alias della repository resource del documento sul ramo di bozza (default: nessuna
+#                        bozza)
+#   draftBranch        → ramo della bozza, nominato nell'avviso delle pagine (default: staging)
 #   pool               → pool del job (default: hosted ubuntu-latest)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -65,6 +70,14 @@ parameters:
     type: string
     default: ''
 
+  - name: draftRepository
+    type: string
+    default: ''
+
+  - name: draftBranch
+    type: string
+    default: 'staging'
+
   - name: pool
     type: object
     default:
@@ -88,6 +101,10 @@ stages:
           - checkout: ${{ parameters.wikiRepository }}
             path: wiki
 
+          - ${{ if ne(parameters.draftRepository, '') }}:
+            - checkout: ${{ parameters.draftRepository }}
+              path: draft
+
           - checkout: ${{ parameters.checkoutRepository }}
             path: s
 
@@ -108,3 +125,7 @@ stages:
               sourcesDirectory: '$(Pipeline.Workspace)/s'
               documentFormats: ${{ parameters.documentFormats }}
               referenceRoot: ${{ parameters.referenceRoot }}
+              ${{ if ne(parameters.draftRepository, '') }}:
+                draftDocsDirectory: '$(Pipeline.Workspace)/draft/${{ parameters.docsDirectory }}'
+                draftDecisionsDirectory: '$(Pipeline.Workspace)/draft/${{ parameters.decisionsDirectory }}'
+              draftBranch: ${{ parameters.draftBranch }}

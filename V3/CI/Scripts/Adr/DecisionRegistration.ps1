@@ -6,7 +6,9 @@
 # con un ramo di sviluppo sono promozioni, e i Task vengono dalle PR di sviluppo che contengono. L'ADR del
 # Task, scritto in Markdown, entra nel corpus senza modifiche, accettato, con data, Task e PR nel
 # frontmatter. Ogni Task da' una sola decisione. Un Task senza ADR, un ADR non in Markdown o una decisione
-# che la verifica del corpus respinge aprono un work item e lasciano il corpus com'era.
+# che la verifica del corpus respinge aprono un work item e lasciano il corpus com'era. Il ramo di integrazione
+# dei repository sorgente e' SOURCE_BRANCH, di default il ramo di destinazione: un repository che non ha quel
+# ramo si legge su main.
 
 . "$PSScriptRoot/../Common/DocumentLanguage.ps1"
 
@@ -44,6 +46,7 @@ function Get-RegistrationSettings {
         BaselineFile       = Get-Setting $env:ADR_REGISTER_BASELINE '.decisions-baseline'
         Branch             = (Get-Setting $env:ADR_REGISTER_BRANCH 'decisions/register') -replace '^refs/heads/', ''
         TargetBranch       = (Get-Setting $env:TARGET_BRANCH 'main') -replace '^refs/heads/', ''
+        SourceBranch       = (Get-Setting $env:SOURCE_BRANCH (Get-Setting $env:TARGET_BRANCH 'main')) -replace '^refs/heads/', ''
         WorkItemType       = Get-Setting $env:ADR_REGISTER_WORK_ITEM_TYPE 'Bug'
         DescriptionFile    = Get-Setting $env:ADR_REGISTER_DESCRIPTION_FILE ''
         CollectionUri      = "$env:SYSTEM_COLLECTIONURI".TrimEnd('/')
@@ -99,8 +102,15 @@ function Get-RepositoryPath([string]$Repository) {
     return "git/repositories/$([uri]::EscapeDataString($Repository))"
 }
 
-function Get-CompletedPullRequests($Settings, [string]$Repository, [DateTimeOffset]$From, [DateTimeOffset]$To) {
-    $criteria = "searchCriteria.status=completed&searchCriteria.targetRefName=refs/heads/$($Settings.TargetBranch)" +
+function Get-IntegrationBranch($Settings, [string]$Repository) {
+    if ($Settings.SourceBranch -eq 'main') { return 'main' }
+    $heads = @((Invoke-DevOpsApi $Settings "$(Get-RepositoryPath $Repository)/refs?filter=heads/$([uri]::EscapeDataString($Settings.SourceBranch))").Body.value)
+    if (@($heads | Where-Object { $_.name -eq "refs/heads/$($Settings.SourceBranch)" }).Count) { return $Settings.SourceBranch }
+    return 'main'
+}
+
+function Get-CompletedPullRequests($Settings, [string]$Repository, [string]$Branch, [DateTimeOffset]$From, [DateTimeOffset]$To) {
+    $criteria = "searchCriteria.status=completed&searchCriteria.targetRefName=refs/heads/$Branch" +
     "&searchCriteria.queryTimeRangeType=closed&searchCriteria.minTime=$($From.ToString('o'))&searchCriteria.maxTime=$($To.ToString('o'))"
     $found = [Collections.Generic.List[object]]::new()
     for ($skip = 0; ; $skip += $PageSize) {
@@ -145,11 +155,13 @@ function Get-LinkedWorkItems($Settings, [string]$Repository, [int]$PullRequest) 
 
 function Get-Integrations($Settings, [DateTimeOffset]$From, [DateTimeOffset]$To) {
     $integrations = foreach ($source in $Settings.Sources) {
-        foreach ($integration in Get-CompletedPullRequests $Settings $source.Name $From $To) {
+        $branch = Get-IntegrationBranch $Settings $source.Name
+        foreach ($integration in Get-CompletedPullRequests $Settings $source.Name $branch $From $To) {
             $promotion = if ($source.DevelopmentBranch) { [int]$integration.pullRequestId } else { $null }
             foreach ($pullRequest in Get-DevelopmentPullRequests $Settings $source $integration) {
                 [pscustomobject]@{
                     Repository  = $source.Name
+                    Branch      = $branch
                     PullRequest = $pullRequest
                     Promotion   = $promotion
                     Closed      = [DateTimeOffset]$integration.closedDate
@@ -320,10 +332,10 @@ function Get-IntegrationLabel($Integration) {
 }
 
 function New-RejectionWorkItem($Settings, $Task, $Integration, [string[]]$Reasons) {
-    $title = "Decisione del Task $($Task.Id) non registrata: $($Reasons -join '; ')"
+    $title = "Decisione del Task $($Task.Id) non registrata in $($Settings.TargetBranch): $($Reasons -join '; ')"
     if ($title.Length -gt $WorkItemTitleLength) { $title = $title.Substring(0, $WorkItemTitleLength) }
     $reasons = @($Reasons | ForEach-Object { "<li>$(ConvertTo-HtmlText $_)</li>" }) -join ''
-    $steps = "<p>La decisione del Task $($Task.Id), arrivato nel ramo $(ConvertTo-HtmlText $Settings.TargetBranch) con la $(ConvertTo-HtmlText (Get-IntegrationLabel $Integration)), non entra nel corpus delle decisioni.</p><p>Motivi:</p><ul>$reasons</ul>"
+    $steps = "<p>La decisione del Task $($Task.Id), arrivato nel ramo $(ConvertTo-HtmlText $Integration.Branch) con la $(ConvertTo-HtmlText (Get-IntegrationLabel $Integration)), non entra nel corpus delle decisioni.</p><p>Motivi:</p><ul>$reasons</ul>"
     $operations = @(
         @{ op = 'add'; path = '/fields/System.Title'; value = $title }
         @{ op = 'add'; path = '/fields/Microsoft.VSTS.TCM.ReproSteps'; value = $steps }

@@ -8,6 +8,9 @@
 # WIKI_ROOT, le sue immagini e la sua voce nell'ordine della radice: il resto della wiki resta com'e'.
 # Con DOCUMENT_FORMATS (pdf, docx) le stesse pagine diventano anche un documento unico (Arc42Document.ps1), che
 # lo stesso commit allega alla wiki e che la pagina WIKI_ROOT nomina.
+# Con DRAFT_DOCS_DIRECTORY ogni pagina che il documento in bozza cambia, o che esiste solo nella bozza, ha una pagina
+# sorella con il suffisso della lingua e l'avviso di bozza, e la pagina ufficiale vi rimanda; il documento unico
+# resta quello ufficiale.
 
 . "$PSScriptRoot/../Common/MarkdownText.ps1"
 . "$PSScriptRoot/../Common/WikiNames.ps1"
@@ -24,6 +27,9 @@ $wikiDirectory = $env:WIKI_DIRECTORY
 $wikiRoot = if ($env:WIKI_ROOT) { $env:WIKI_ROOT } else { $DocumentLanguage.WikiRoot }
 $wikiBranch = if ($env:WIKI_BRANCH) { $env:WIKI_BRANCH } else { 'wikiMaster' }
 $repositoryUrl = "$($env:SYSTEM_COLLECTIONURI)$($env:SYSTEM_TEAMPROJECT)/_git/$($env:BUILD_REPOSITORY_NAME)"
+$draftDocsDirectory = "$env:DRAFT_DOCS_DIRECTORY"
+$draftDecisionsDirectory = "$env:DRAFT_DECISIONS_DIRECTORY"
+$draftBranch = if ($env:DRAFT_BRANCH) { $env:DRAFT_BRANCH } else { 'staging' }
 $sourceVersion = if ($env:BUILD_SOURCEVERSION) { $env:BUILD_SOURCEVERSION.Substring(0, [math]::Min(8, $env:BUILD_SOURCEVERSION.Length)) } else { 'locale' }
 
 $SectionFilePattern = '^(\d+)[_-].+\.md$'
@@ -33,11 +39,29 @@ $DecisionsSectionNumber = 9
 $MaxPushAttempts = 3
 # La wiki tiene immagini e allegati nella cartella .attachments della radice.
 $AttachmentsFolder = '.attachments'
+$DraftFolder = 'draft'
 $LinkPattern = '(\[[^\]]*\]\()([^)\s]+)(\))'
 $ExternalLinkPattern = '^(?:[a-z][a-z0-9+.-]*:|#)'
 
 function ConvertTo-RepositoryPath([string]$Path) {
     return ([IO.Path]::GetRelativePath((Get-Location).Path, $Path) -replace '\\', '/')
+}
+
+function Join-RepositoryPath([string]$Directory, [string]$Name) {
+    if ($Directory -in '', '.') { return $Name }
+    return "$Directory/$Name"
+}
+
+# Le pagine della bozza prendono il percorso nel repository del file ufficiale corrispondente: i loro link si
+# risolvono come quelli delle pagine ufficiali, e una pagina che non cambia produce lo stesso testo.
+function New-DocumentLocation([string]$Docs, [string]$Decisions, $Official = $null) {
+    $location = (Get-Location).Path
+    return [pscustomobject]@{
+        Docs            = $Docs
+        Decisions       = $Decisions
+        DocsSource      = if ($Official) { $Official.DocsSource } else { ConvertTo-RepositoryPath ([IO.Path]::GetFullPath($Docs, $location)) }
+        DecisionsSource = if ($Official) { $Official.DecisionsSource } else { ConvertTo-RepositoryPath ([IO.Path]::GetFullPath($Decisions, $location)) }
+    }
 }
 
 function Read-Markdown([string]$Path) {
@@ -66,6 +90,8 @@ function Get-DecisionPageName([string]$FileName) {
 function New-Page([string]$Source, [string]$Name, [string]$ParentPath, $Markdown, [string]$Title = $Name) {
     return [pscustomobject]@{
         Source   = $Source
+        Key      = $Source
+        DisplayName = $Name
         Title    = $Title
         Name     = ConvertTo-WikiName $Name
         WikiPath = "$ParentPath/$(ConvertTo-WikiName $Name)"
@@ -73,26 +99,30 @@ function New-Page([string]$Source, [string]$Name, [string]$ParentPath, $Markdown
         SupersededBy = $Markdown.SupersededBy
         Body     = $Markdown.Body
         Children = [Collections.Generic.List[object]]::new()
+        Counterpart = $null
+        DraftOnly = $false
+        Drafted  = $false
     }
 }
 
-function Get-DocumentPages {
+function Get-DocumentPages($Location) {
     $rootPath = "/$(ConvertTo-WikiName $wikiRoot)"
-    $sections = foreach ($file in (Get-ChildItem -Path $docsDirectory -File | Where-Object Name -Match $SectionFilePattern)) {
+    $sections = foreach ($file in (Get-ChildItem -Path $Location.Docs -File | Where-Object Name -Match $SectionFilePattern)) {
         $number = [int]([regex]::Match($file.Name, $SectionFilePattern).Groups[1].Value)
         $markdown = Read-Markdown $file.FullName
         if (-not $markdown.Title) { throw "$($file.Name): la sezione non ha un titolo" }
         $title = ConvertTo-PlainText $markdown.Title
-        [pscustomobject]@{ Number = $number; Page = New-Page (ConvertTo-RepositoryPath $file.FullName) "$number. $title" $rootPath $markdown $title }
+        [pscustomobject]@{ Number = $number; Page = New-Page (Join-RepositoryPath $Location.DocsSource $file.Name) "$number. $title" $rootPath $markdown $title }
     }
     $sections = @($sections | Sort-Object Number)
-    if (-not $sections) { throw "nessuna sezione in $docsDirectory" }
+    if (-not $sections) { throw "nessuna sezione in $($Location.Docs)" }
 
     $decisionsSection = $sections | Where-Object Number -EQ $DecisionsSectionNumber | Select-Object -First 1
     $decisionsParent = if ($decisionsSection) { $decisionsSection.Page } else { $null }
     $decisionsPath = if ($decisionsParent) { $decisionsParent.WikiPath } else { $rootPath }
-    $decisions = foreach ($file in (Get-ChildItem -Path $decisionsDirectory -File -ErrorAction SilentlyContinue | Where-Object Name -Match $DecisionFilePattern | Sort-Object Name)) {
-        New-Page (ConvertTo-RepositoryPath $file.FullName) (Get-DecisionPageName $file.Name) $decisionsPath (Read-Markdown $file.FullName)
+    $files = if ($Location.Decisions) { @(Get-ChildItem -Path $Location.Decisions -File -ErrorAction SilentlyContinue) } else { @() }
+    $decisions = foreach ($file in ($files | Where-Object Name -Match $DecisionFilePattern | Sort-Object Name)) {
+        New-Page (Join-RepositoryPath $Location.DecisionsSource $file.Name) (Get-DecisionPageName $file.Name) $decisionsPath (Read-Markdown $file.FullName)
     }
 
     $topLevel = [Collections.Generic.List[object]]::new()
@@ -141,9 +171,9 @@ function Get-RowDecision([string]$Row, $Page, [hashtable]$PagesBySource) {
 }
 
 # Word e PDF non mostrano lo stile HTML della wiki: nel documento l'avviso e' in grassetto.
-function Format-Alert([string]$Text, $Document) {
+function Format-Alert([string]$Text, $Document, [string]$Color = 'red') {
     if ($Document) { return "**$Text**" }
-    return "<span style=`"color:red;font-weight:bold`">$Text</span>"
+    return "<span style=`"color:$Color;font-weight:bold`">$Text</span>"
 }
 
 function Get-StatusLabel([string]$Status, $Document) {
@@ -176,8 +206,16 @@ function Add-DecisionStatus([string[]]$Table, $Page, [hashtable]$PagesBySource, 
     return $rows
 }
 
-function Get-ViewImagePath([string]$View) {
-    return "$AttachmentsFolder/$(ConvertTo-WikiName $wikiRoot)/$View.png"
+function Get-ViewImagePath([string]$View, [string]$Folder = '') {
+    $root = "$AttachmentsFolder/$(ConvertTo-WikiName $wikiRoot)"
+    if ($Folder) { return "$root/$Folder/$View.png" }
+    return "$root/$View.png"
+}
+
+# Una vista della bozza che disegna lo stesso diagramma della vista ufficiale mostra l'immagine ufficiale.
+function Get-ViewImageFolder($Views, [string]$Key) {
+    if ($Views.DraftViews.ContainsKey($Key)) { return $DraftFolder }
+    return ''
 }
 
 function Get-WorkspaceView($Workspace, [string]$Key) {
@@ -197,8 +235,8 @@ function ConvertTo-MarkdownLiteral([string]$Text) {
 # Il titolo e la descrizione di una vista, che comincia con la frase del suo scopo, accompagnano la sua immagine
 # anche fuori dal disegno, la descrizione su una riga sola; una vista senza titolo resta la sola immagine, con
 # la chiave.
-function Format-ViewImage([string]$Key, $Caption, $Document) {
-    $target = if ($Document) { Get-DocumentViewFile $Key } else { "/$(Get-ViewImagePath $Key)" }
+function Format-ViewImage([string]$Key, $Caption, $Document, $Views) {
+    $target = if ($Document) { Get-DocumentViewFile $Key } else { "/$(Get-ViewImagePath $Key (Get-ViewImageFolder $Views $Key))" }
     if (-not $Caption.Title) { return , $(if ($Document) { "![]($target)" } else { "![$Key]($target)" }) }
     $title = ConvertTo-MarkdownLiteral $Caption.Title
     return @("**$title**", '') + @(if ($Caption.Description) { (ConvertTo-MarkdownLiteral $Caption.Description), '' }) + "![$title]($target)"
@@ -274,7 +312,7 @@ function Convert-PageBody($Page, [hashtable]$PagesBySource, $Views, [hashtable]$
             foreach ($key in $keys) {
                 $ShownViews[$key] = $Views.Diagrams[$key]
                 if ($key -ne $keys[0]) { $output.Add('') }
-                foreach ($line in (Format-ViewImage $key (Get-ViewCaption $Views.Workspace $key) $Document)) { $output.Add($line) }
+                foreach ($line in (Format-ViewImage $key (Get-ViewCaption $Views.Workspace $key) $Document $Views)) { $output.Add($line) }
                 foreach ($line in (Format-ResourceGroupTable $Views.Workspace $key)) { $output.Add($line) }
             }
         }
@@ -296,7 +334,7 @@ function Write-WikiFile([string]$RelativePath, [string]$Content) {
 
 function Write-PageTree($Pages, [string]$Folder, [hashtable]$Contents) {
     foreach ($page in $Pages) {
-        Write-WikiFile "$Folder/$($page.Name).md" $Contents[$page.Source]
+        Write-WikiFile "$Folder/$($page.Name).md" $Contents[$page.Key]
         if ($page.Children.Count) { Write-PageTree $page.Children "$Folder/$($page.Name)" $Contents }
     }
     Write-WikiFile "$Folder/.order" ((@($Pages | ForEach-Object Name) -join "`n") + "`n")
@@ -312,10 +350,10 @@ function Update-RootOrder([string]$RootName) {
 }
 
 function Write-ViewImages([hashtable]$Images) {
-    foreach ($view in $Images.Keys) {
-        $path = Join-Path $wikiDirectory (Get-ViewImagePath $view)
+    foreach ($file in $Images.Keys) {
+        $path = Join-Path $wikiDirectory $file
         New-Item -ItemType Directory -Force -Path (Split-Path $path) | Out-Null
-        [IO.File]::WriteAllBytes($path, $Images[$view])
+        [IO.File]::WriteAllBytes($path, $Images[$file])
     }
 }
 
@@ -387,13 +425,13 @@ function Publish-Document($Pages, [hashtable]$Contents, [hashtable]$Images, [Sys
 
 # Le immagini vengono dai diagrammi C4-PlantUML; il tipo di ogni vista, che un marcatore come component*
 # nomina, dal workspace in JSON.
-function Get-Views {
-    $workspace = Join-Path $docsDirectory 'c4/workspace.dsl'
-    if (-not (Test-Path $workspace -PathType Leaf)) { return [pscustomobject]@{ Diagrams = @{}; Workspace = $null } }
+function Get-Views([string]$Directory) {
+    $workspace = Join-Path $Directory 'c4/workspace.dsl'
+    if (-not (Test-Path $workspace -PathType Leaf)) { return [pscustomobject]@{ Diagrams = @{}; Workspace = $null; DraftViews = @{} } }
     $path = (Resolve-Path $workspace).Path
     $export = Export-StructurizrWorkspace $path
     if ($export.Error) { throw "modello C4 non valido: $($export.Error)" }
-    return [pscustomobject]@{ Diagrams = (Export-StructurizrC4PlantUml $path); Workspace = $export.Workspace }
+    return [pscustomobject]@{ Diagrams = (Export-StructurizrC4PlantUml $path); Workspace = $export.Workspace; DraftViews = @{} }
 }
 
 function Get-ViewImages([hashtable]$ShownViews) {
@@ -412,20 +450,146 @@ function Add-ReferenceLinksToPages([hashtable]$Contents) {
     foreach ($source in @($Contents.Keys)) { $Contents[$source] = Add-ReferenceLinks $Contents[$source] $entries }
 }
 
+#region Bozza
+
+function Get-DraftName($Page) {
+    return "$($Page.DisplayName)$($DocumentLanguage.DraftSuffix)"
+}
+
+function Set-DraftName($Page, [string]$ParentPath) {
+    $Page.Name = ConvertTo-WikiName (Get-DraftName $Page)
+    $Page.WikiPath = "$ParentPath/$($Page.Name)"
+}
+
+# Una pagina della bozza si confronta con la pagina ufficiale dello stesso percorso; senza, esiste solo nella
+# bozza e ne prende subito il nome, cosi' i link delle altre pagine della bozza la raggiungono.
+function Set-DraftCounterparts($Pages, [string]$ParentPath, [hashtable]$OfficialByPath, [bool]$InDraftOnly) {
+    foreach ($page in $Pages) {
+        $page.WikiPath = "$ParentPath/$($page.Name)"
+        $page.Counterpart = if ($InDraftOnly) { $null } else { $OfficialByPath[$page.WikiPath] }
+        if (-not $page.Counterpart) {
+            $page.DraftOnly = $true
+            Set-DraftName $page $ParentPath
+        }
+        Set-DraftCounterparts $page.Children $page.WikiPath $OfficialByPath $page.DraftOnly
+    }
+}
+
+function Get-ChangedViews($Views, $DraftViews) {
+    $changed = @{}
+    foreach ($key in $DraftViews.Diagrams.Keys) {
+        if (-not $Views.Diagrams.ContainsKey($key) -or $Views.Diagrams[$key] -cne $DraftViews.Diagrams[$key]) { $changed[$key] = $true }
+    }
+    return $changed
+}
+
+function Format-DraftNotice {
+    return "> $(Format-Alert ($DocumentLanguage.DraftNotice -f $draftBranch) $null $DocumentLanguage.DraftNoticeColor)`n`n"
+}
+
+function Format-DraftLink($Draft) {
+    $target = $Draft.WikiPath.Replace('(', '%28').Replace(')', '%29')
+    return "> $($DocumentLanguage.DraftLink -f $draftBranch) [$(Get-DraftName $Draft)]($target).`n`n"
+}
+
+# Il testo si confronta prodotto con lo stesso codice e con le immagini ufficiali; una vista che disegna un
+# diagramma diverso cambia la pagina anche a parita' di testo.
+function Test-DraftDiffers($Page, [string]$Text, [hashtable]$PageViews, [hashtable]$ChangedViews, [hashtable]$Contents) {
+    if (-not $Page.Counterpart) { return $true }
+    if ($Text -cne $Contents[$Page.Counterpart.Key]) { return $true }
+    return [bool]@($PageViews.Keys | Where-Object { $ChangedViews.ContainsKey($_) }).Count
+}
+
+function Add-DraftContent($Page, [string]$Content, [hashtable]$Contents) {
+    $Page.Drafted = $true
+    $Page.Key = "draft:$($Page.Source)"
+    if ($Page.Counterpart) { Set-DraftName $Page $Page.WikiPath.Substring(0, $Page.WikiPath.LastIndexOf('/')) }
+    $Contents[$Page.Key] = (Format-DraftNotice) + $Content
+    if ($Page.Counterpart) { $Contents[$Page.Counterpart.Key] = (Format-DraftLink $Page) + $Contents[$Page.Counterpart.Key] }
+}
+
+function New-TreeNode([string]$Name, [string]$Key, $Children, $Owner) {
+    return [pscustomobject]@{ Name = $Name; Key = $Key; Children = $Children; Owner = $Owner }
+}
+
+function Get-LastOwnedNode([Collections.Generic.List[object]]$Nodes, $Owner) {
+    for ($i = $Nodes.Count - 1; $i -ge 0; $i--) { if ($Nodes[$i].Owner -eq $Owner) { return $i } }
+    return -1
+}
+
+# La pagina in bozza sta subito dopo la sua pagina ufficiale; una pagina solo della bozza sta dopo quella che la
+# precede nella bozza.
+function Merge-DraftTree($Official, $Draft) {
+    $nodes = [Collections.Generic.List[object]]::new()
+    foreach ($page in @($Official | Where-Object { $_ })) {
+        $counterpart = @($Draft | Where-Object { $_.Counterpart -eq $page }) | Select-Object -First 1
+        $draftChildren = if ($counterpart) { $counterpart.Children } else { $null }
+        $nodes.Add((New-TreeNode $page.Name $page.Key (Merge-DraftTree $page.Children $draftChildren) $page))
+        if ($counterpart -and $counterpart.Drafted) { $nodes.Add((New-TreeNode $counterpart.Name $counterpart.Key @() $page)) }
+    }
+    $anchor = -1
+    foreach ($page in @($Draft | Where-Object { $_ })) {
+        if ($page.Counterpart) { $anchor = Get-LastOwnedNode $nodes $page.Counterpart; continue }
+        $anchor++
+        $nodes.Insert($anchor, (New-TreeNode $page.Name $page.Key (Merge-DraftTree @() $page.Children) $page))
+    }
+    return , $nodes
+}
+
+function Add-DraftPages($Pages, [hashtable]$Contents, $Views, $Location) {
+    $officialByPath = @{}
+    foreach ($page in (Get-AllPages $Pages)) { $officialByPath[$page.WikiPath] = $page }
+    $draftPages = Get-DocumentPages $Location
+    Set-DraftCounterparts $draftPages "/$(ConvertTo-WikiName $wikiRoot)" $officialByPath $false
+    $draftBySource = @{}
+    foreach ($page in (Get-AllPages $draftPages)) { $draftBySource[$page.Source] = $page }
+
+    $draftViews = Get-Views $Location.Docs
+    $changedViews = Get-ChangedViews $Views $draftViews
+    $comparedViews = [pscustomobject]@{ Diagrams = $draftViews.Diagrams; Workspace = $draftViews.Workspace; DraftViews = @{} }
+    $draftViews.DraftViews = $changedViews
+    $shownViews = @{}
+    # Ogni pagina si confronta prima che una bozza cambi nome o contenuto: i link della bozza portano alle pagine
+    # ufficiali, e il testo ufficiale confrontato e' ancora senza rimando.
+    $drafted = foreach ($page in @(Get-AllPages $draftPages)) {
+        $pageViews = @{}
+        $text = Convert-PageBody $page $draftBySource $comparedViews $pageViews
+        if (Test-DraftDiffers $page $text $pageViews $changedViews $Contents) {
+            [pscustomobject]@{ Page = $page; Content = Convert-PageBody $page $draftBySource $draftViews $shownViews }
+        }
+    }
+    foreach ($entry in @($drafted)) { Add-DraftContent $entry.Page $entry.Content $Contents }
+    $drawn = @{}
+    foreach ($key in $shownViews.Keys) { if ($changedViews.ContainsKey($key)) { $drawn[$key] = $shownViews[$key] } }
+    Write-Host "Bozza di $($Location.Docs): $(@(Get-AllPages $draftPages | Where-Object Drafted).Count) pagine diverse dal documento ufficiale"
+    return [pscustomobject]@{ Tree = (Merge-DraftTree $Pages $draftPages); Images = (Get-ViewImages $drawn) }
+}
+
+#endregion
+
 function Publish-Arc42Wiki {
     if (-not $wikiDirectory -or -not (Test-Path (Join-Path $wikiDirectory '.git'))) { throw "WIKI_DIRECTORY non indica un checkout della wiki: '$wikiDirectory'" }
     $formats = Get-DocumentFormats "$env:DOCUMENT_FORMATS"
-    $pages = Get-DocumentPages
+    $official = New-DocumentLocation $docsDirectory $decisionsDirectory
+    $pages = Get-DocumentPages $official
     $pagesBySource = @{}
     foreach ($page in (Get-AllPages $pages)) { $pagesBySource[$page.Source] = $page }
-    $views = Get-Views
+    $views = Get-Views $docsDirectory
     $shownViews = @{}
     $contents = @{}
-    foreach ($page in $pagesBySource.Values) { $contents[$page.Source] = Convert-PageBody $page $pagesBySource $views $shownViews }
+    foreach ($page in $pagesBySource.Values) { $contents[$page.Key] = Convert-PageBody $page $pagesBySource $views $shownViews }
     $images = Get-ViewImages $shownViews
     $documents = if ($formats) { New-Arc42Document $pages $pagesBySource $views $images $formats } else { [ordered]@{} }
+    $imageFiles = @{}
+    foreach ($key in $images.Keys) { $imageFiles[(Get-ViewImagePath $key)] = $images[$key] }
+    $tree = $pages
+    if ($draftDocsDirectory) {
+        $draft = Add-DraftPages $pages $contents $views (New-DocumentLocation $draftDocsDirectory $draftDecisionsDirectory $official)
+        $tree = $draft.Tree
+        foreach ($key in $draft.Images.Keys) { $imageFiles[(Get-ViewImagePath $key $DraftFolder)] = $draft.Images[$key] }
+    }
     Add-ReferenceLinksToPages $contents
-    Publish-Document $pages $contents $images $documents
+    Publish-Document $tree $contents $imageFiles $documents
 }
 
 try { Publish-Arc42Wiki }
