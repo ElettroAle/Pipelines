@@ -258,14 +258,14 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
     Context "Scenario: nodi di deployment descritti" {
         BeforeAll {
             . "$PSScriptRoot/Fixtures/TerraformFixture.ps1"
-            Reset-Stub
+            $unit = 'contoso_infrastructure_deployment_app'
+            Reset-Stub @{ $unit = @(@{ descriptions = @{ $unit = 'Raccoglie i nodi di deployment del modulo App.' } }) }
             $infrastructure = 'Contoso.Infrastructure'
             $files = Add-Sources (New-DescribedEngine) $infrastructure (New-TerraformRepository)
             $root = New-Workspace $files
             $deploymentEnvironment = @{ SOURCE_REPOSITORIES = "$C4SourceRepositories,$infrastructure"; C4_DEPLOYMENT_ENVIRONMENTS = 'dev=dev-x;sta=sta-x;prod=prod-x'; C4_TERRAFORM_INSTANCES = 'Customers:customer_id=environments/{environment}/data/*' }
             $res = Invoke-Text $root @($Engine, $infrastructure) @{ $infrastructure = @('terraform') } $deploymentEnvironment
             $deployment = $res.Generated['deployment/contoso.infrastructure.dsl']
-            $unit = 'contoso_infrastructure_deployment_app'
             $subnet = 'contoso_infrastructure_app_azurerm_subnet_engine'
             Remove-Workspace $root
         }
@@ -282,6 +282,11 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
 
         It "E la parte dei nodi non compare fra i container del sistema" {
             Get-StubRequests | ForEach-Object { Get-UserMessage $_ } | Where-Object { $_ -match "ALTRI CONTAINER DEL SISTEMA:(?s:.*)$unit" } | Should -BeNullOrEmpty
+        }
+
+        It "E la descrizione della parte che nomina il suo tipo, deployment, non si respinge come una tecnologia" {
+            Get-UnitRequests $unit | Should -HaveCount 1
+            $res.Text.units.$unit.elements.$unit | Should -Be 'Raccoglie i nodi di deployment del modulo App.'
         }
 
         It "E il nodo ha la descrizione del testo in ogni ambiente" {
@@ -381,6 +386,8 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
     Context "Schema dello scenario: stesura respinta, il modello riscrive solo le voci da riscrivere — <difetto>" -ForEach @(
         @{ difetto = 'un elemento senza descrizione'; first = @{ omitElement = 'contoso_shop_ai_api__contoso_shop_ai_utils' }; motivo = 'elemento senza descrizione: contoso_shop_ai_api__contoso_shop_ai_utils' }
         @{ difetto = 'una frase troppo lunga'; first = @{ longDescription = 'contoso_shop_ai_api__contoso_shop_ai_utils' }; motivo = 'frase di contoso_shop_ai_api__contoso_shop_ai_utils oltre 25 parole' }
+        @{ difetto = 'una descrizione che nomina la tecnologia invece del ruolo'; first = @{ descriptions = @{ 'contoso_shop_ai_api__contoso_shop_ai_utils' = 'Raccoglie le utilita'' .NET condivise.' } }; motivo = 'descrizione che nomina la tecnologia: contoso_shop_ai_api__contoso_shop_ai_utils' }
+        @{ difetto = 'una descrizione uguale a quella di un altro elemento'; first = @{ descriptions = @{ 'contoso_shop_ai_api__contoso_shop_ai_utils' = 'descrizione di contoso_shop_ai_api' } }; motivo = 'descrizione uguale a quella di contoso_shop_ai_api: contoso_shop_ai_api__contoso_shop_ai_utils' }
     ) {
         BeforeAll {
             Reset-Stub @{ $Api = @($first, @{ longDescription = $Api }) }
@@ -407,6 +414,39 @@ Describe "Funzionalità: Testo del modello C4 scritto dal generatore" {
         }
 
         It "E la voce accettata alla prima stesura resta" {
+            $res.Text.units.$Api.elements.$Api | Should -Be "Descrizione di $Api."
+        }
+    }
+
+    Context "Scenario: un testo accettato che descrive il tipo di risorsa si riscrive anche se la struttura non cambia" {
+        BeforeAll {
+            Reset-Stub
+            $root = New-Workspace (New-DescribedEngine)
+            Invoke-Text $root | Out-Null
+            $textFile = Join-Path $root 'docs/architecture/c4/generated/model.text.json'
+            $saved = Get-Content -Raw $textFile | ConvertFrom-Json
+            $saved.units.$Api.elements.$Utils = 'Libreria .NET.'
+            [IO.File]::WriteAllText($textFile, ($saved | ConvertTo-Json -Depth 20))
+            Reset-Stub
+            $res = Invoke-Text $root
+            Remove-Workspace $root
+            $apiRequests = Get-UnitRequests $Api
+        }
+
+        It "Allora la generazione riesce" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+
+        It "E il modello riscrive solo la parte con la voce respinta" {
+            Get-RequestedUnits | Should -Be @($Api)
+        }
+
+        It "E la richiesta nomina il motivo" {
+            Get-UserMessage $apiRequests[0] | Should -Match ([regex]::Escape("descrizione che nomina la tecnologia: $Utils"))
+        }
+
+        It "E la voce respinta prende il testo della nuova stesura, mentre le voci accettate restano" {
+            $res.Text.units.$Api.elements.$Utils | Should -Be "Descrizione di $Utils."
             $res.Text.units.$Api.elements.$Api | Should -Be "Descrizione di $Api."
         }
     }

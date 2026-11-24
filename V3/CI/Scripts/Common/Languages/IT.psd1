@@ -8,10 +8,26 @@
     CodeNameProperty = 'codice'
     ExternalTag    = 'Esterno'
     DataAccessViewSuffix = 'accesso-dati'
-    ViewTitles     = @{ DeploymentOverview = 'Parti dell''ambiente {0}'; Containers = 'Container di {0}'; Logic = 'logica'; DataAccess = 'accesso ai dati' }
+    ViewTitles     = @{
+        Allocation = 'Allocazione · {0}'; ApplicationAllocation = 'Allocazione · {0} · {1}'; Network = 'Rete · {0}'; NetworkPart = 'Rete · {0} · {1}'
+        Containers = 'Container di {0}'; Logic = 'logica'; DataAccess = 'accesso ai dati'
+    }
+    ViewPurposes   = @{
+        Allocation            = 'Dove gira ogni applicazione dell''ambiente: i piani di calcolo, le applicazioni che ospitano e le chiamate fra le applicazioni.'
+        ApplicationAllocation = 'Su che cosa si appoggia un''applicazione nell''ambiente: il suo piano di calcolo, i servizi gestiti e le altre applicazioni con cui comunica.'
+        Network               = 'Come si collegano le reti dell''ambiente: l''ingresso del traffico, le reti virtuali e i peering fra loro.'
+        NetworkPart           = 'Che cosa sta in una rete virtuale: le subnet, le applicazioni che vi si integrano, i private endpoint e il percorso del traffico in ingresso.'
+        Containers            = 'I container con cui un''applicazione comunica e che cosa passa fra loro.'
+        Logic                 = 'I componenti della logica di un container e come dipendono l''uno dall''altro.'
+        DataAccess            = 'I componenti di un container che leggono e scrivono i dati, e chi li usa.'
+    }
     CommunicatesWith = 'Comunica con:'
     SummaryTag     = 'Riassunto'
-    SummaryMore    = 'e altre {0}'
+    NetworkTag     = 'Rete'
+    NetworkRelationships = @{ Peering = 'Collega le due reti con un peering'; Origin = 'Inoltra le richieste all''origine'; Backend = 'Inoltra le richieste al backend' }
+    NetworkViewSuffix = 'rete'
+    NetworkEnvironmentSuffix = 'rete'
+    ResourceGroupTable = @{ Group = 'Gruppo di risorse'; Content = 'Contenuto'; Module = 'Modulo' }
     TextLanguage   = 'italiano'
     AdrSections    = @('Contesto e problema', 'Opzioni considerate', 'Esito della decisione')
     StyleRuleParts = @{ Common = 'Regole'; Sections = 'Regole delle sezioni'; Decisions = 'Regole delle decisioni' }
