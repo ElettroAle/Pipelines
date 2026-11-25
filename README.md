@@ -307,7 +307,7 @@ parametri di formato e senza condizioni sul formato.
 | `documentation-draft-sync.yaml` | `Sync-DocumentationDraft.ps1` | dopo un aggiornamento del ramo principale del documento, una PR in auto-complete lo porta nel ramo di bozza | nessun formato |
 
 Con `targetBranch` diverso da `main` `documentation-update.yaml` e `adr-register.yaml` scrivono la bozza del
-documento su quel ramo: il ramo della PR prende il suo nome come suffisso (es. `documentation/update/staging`),
+documento su quel ramo: il ramo della PR prende il suo nome come suffisso (es. `documentation/update-staging`),
 le integrazioni delle decisioni sono quelle nel ramo `sourceBranch` dei repository sorgente (`main` per un
 repository che non lo ha) e il work item di un rifiuto nomina il ramo nel titolo. `documentation-draft-sources.yaml`
 registra da quali alberi dei repository sorgente viene la bozza; quando la documentazione del ramo principale trova
