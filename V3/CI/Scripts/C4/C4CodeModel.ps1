@@ -9,8 +9,8 @@
 # Un frammento puo' dichiarare le risorse dell'infrastruttura che ospitano un container (hosts, con
 # l'indirizzo Terraform <modulo radice>/<indirizzo> senza chiavi d'istanza in resource o con il nome Azure
 # della risorsa in name) e gli ambienti di deployment
-# (deployment: per ambiente i nodi annidati, ognuno con il testo che lo descrive, i figli e i container
-# che vi girano).
+# (deployment: per ambiente i nodi annidati, ognuno con il suo livello, da cui lo scrittore compone la
+# descrizione, i figli e i container che vi girano).
 # Un frammento puo' dichiarare anche gli indirizzi a cui un container si avvia in locale (addresses) e
 # quelli che chiama in locale (calls), ciascuno con il file che lo dichiara: un indirizzo chiamato a cui si
 # avvia un solo container di qualunque repository e' la relazione fra i due.

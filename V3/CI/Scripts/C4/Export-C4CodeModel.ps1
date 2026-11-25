@@ -50,6 +50,7 @@ $CommunicatesWith = $DocumentLanguage.CommunicatesWith
 $SummaryTag = $DocumentLanguage.SummaryTag
 $NetworkTag = $DocumentLanguage.NetworkTag
 $NetworkViewSuffix = $DocumentLanguage.NetworkViewSuffix
+$NodeDescriptions = $DocumentLanguage.NodeDescriptions
 $TitleSeparator = ' · '
 $DescriptionWidth = 100
 $DataAccessSegments = @("$(if ($env:C4_DATA_ACCESS_SEGMENTS) { $env:C4_DATA_ACCESS_SEGMENTS } else { 'DataAccess' })" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
@@ -329,10 +330,23 @@ function Format-Views($Fragments, [string]$System) {
 }
 
 # Gli ambienti di deployment della parte: il modello li accetta solo fuori dal sistema software e dopo i
-# container a cui le istanze rimandano, quindi stanno in un file proprio. Il testo di un nodo e' uno per
-# tutti gli ambienti.
+# container a cui le istanze rimandano, quindi stanno in un file proprio.
 function Get-DeploymentEnvironments($Fragments) {
     return @($Fragments | ForEach-Object { @($_.Content.deployment) } | Where-Object { $_ })
+}
+
+function Get-TreeNodes($Nodes) {
+    foreach ($node in @($Nodes | Where-Object { $_ })) {
+        $node
+        Get-TreeNodes $node.children
+    }
+}
+
+# Un livello di nodo nuovo si descrive aggiungendo le sue frasi alla lingua, mai con codice.
+function Get-NodeKindIssues($Environments) {
+    $kinds = @($Environments | ForEach-Object { Get-TreeNodes $_.nodes } | ForEach-Object { "$($_.kind)" } | Sort-Object -Unique)
+    $kinds | Where-Object { -not $_ -or -not $NodeDescriptions.ContainsKey($_) } |
+        ForEach-Object { New-Issue $Repository 'livello di nodo senza frasi nella lingua' $(if ($_) { $_ } else { '(nessuno)' }) }
 }
 
 # Una vista include per identificativo le istanze dei container.
@@ -346,8 +360,14 @@ function Get-NodeInstances($Node) {
         $container = Get-KeptId $(if ($instance -is [string]) { $instance } else { "$($instance.container)" })
         if ($seen.ContainsKey($container)) { continue }
         $seen[$container] = $true
-        [pscustomobject]@{ Container = $container; ResourceGroup = $instance.resourceGroup; Module = $instance.module }
+        [pscustomobject]@{ Container = $container; ResourceGroup = $instance.resourceGroup; Module = $instance.module; AzureName = $instance.azureName }
     }
+}
+
+function Get-InstanceName([string]$Container) {
+    $name = Get-ContainerName ([pscustomobject]@{ id = $Container; name = $script:SystemContainers[$Container].name })
+    if ($name) { return $name }
+    return $Container
 }
 
 # Un private endpoint si chiama con la risorsa che espone, con il nome che il container ha nel modello.
@@ -382,11 +402,10 @@ function Format-DeploymentNodes($Nodes, [string]$Indent) {
     foreach ($child in $children) { Format-DeploymentNode $child $Indent $names[$child.id] }
 }
 
-function Format-ElementProperties([string]$ResourceGroup, [string]$Module, [string]$Indent) {
-    $values = [ordered]@{ resourceGroup = $ResourceGroup; module = $Module }
-    $written = @($values.Keys | Where-Object { $values[$_] })
+function Format-ElementProperties([System.Collections.IDictionary]$Values, [string]$Indent) {
+    $written = @($Values.Keys | Where-Object { $Values[$_] })
     if (-not $written) { return @() }
-    return @("${Indent}properties {") + @($written | ForEach-Object { "$Indent    $(Format-Text $_) $(Format-Text $values[$_])" }) + "${Indent}}"
+    return @("${Indent}properties {") + @($written | ForEach-Object { "$Indent    $(Format-Text $_) $(Format-Text $Values[$_])" }) + "${Indent}}"
 }
 
 function Format-Block([string]$Head, [string[]]$Body, [string]$Indent) {
@@ -395,12 +414,13 @@ function Format-Block([string]$Head, [string[]]$Body, [string]$Indent) {
 }
 
 function Format-DeploymentNode($Node, [string]$Indent, [string]$Name) {
-    $head = "$Indent$($Node.id) = $($Node.kind) $(Format-Text $Name) $(Format-Text $script:ModelText.Elements[$Node.text]) $(Format-Text $Node.technology) $(Format-Text $GeneratedTag)"
-    $body = @(Format-ElementProperties $Node.resourceGroup $Node.module "$Indent    ")
-    if ($Node.kind -eq 'infrastructureNode') { return Format-Block $head $body $Indent }
+    $head = "$Indent$($Node.id) = $($Node.element) $(Format-Text $Name) $(Format-Text $script:NodeTexts[$Node.id]) $(Format-Text $Node.technology) $(Format-Text $GeneratedTag)"
+    $body = @(Format-ElementProperties ([ordered]@{ resourceGroup = $Node.resourceGroup; module = $Node.module; azureName = $Node.azureName }) "$Indent    ")
+    if ($Node.element -eq 'infrastructureNode') { return Format-Block $head $body $Indent }
     $body += @(Format-DeploymentNodes $Node.children "$Indent    ")
     foreach ($instance in @(Get-NodeInstances $Node)) {
-        $body += Format-Block "$Indent    $(Get-InstanceId $Node $instance.Container) = containerInstance $($instance.Container)" @(Format-ElementProperties $instance.ResourceGroup $instance.Module "$Indent        ") "$Indent    "
+        $properties = [ordered]@{ resourceGroup = $instance.ResourceGroup; module = $instance.Module; azureName = $instance.AzureName }
+        $body += Format-Block "$Indent    $(Get-InstanceId $Node $instance.Container) = containerInstance $($instance.Container)" @(Format-ElementProperties $properties "$Indent        ") "$Indent    "
     }
     return Format-Block $head $body $Indent
 }
@@ -411,7 +431,8 @@ function Get-ElementReference($Node, [string]$Container) {
 }
 
 function Format-EnvironmentRelationship($Relationship) {
-    return "    $($Relationship.Source) -> $($Relationship.Target) $(Format-Text $Relationship.Text) `"`" $(Format-Text ($Relationship.Tags -join ','))"
+    $identifier = if ($Relationship.Id) { "$($Relationship.Id) = " } else { '' }
+    return "    $identifier$($Relationship.Source) -> $($Relationship.Target) $(Format-Text $Relationship.Text) `"`" $(Format-Text ($Relationship.Tags -join ','))"
 }
 
 function Format-Deployment($Plans) {
@@ -420,6 +441,7 @@ function Format-Deployment($Plans) {
         $lines += "deploymentEnvironment $(Format-Text $environment.Environment.name) {"
         $lines += @(Format-DeploymentNodes $environment.Environment.nodes '    ')
         $lines += @($environment.Relationships | ForEach-Object { Format-EnvironmentRelationship $_ })
+        $lines += @($environment.Derived.Values | ForEach-Object { Format-EnvironmentRelationship $_ })
         $lines += '}'
     }
     return ($lines -join "`n") + "`n"
@@ -427,12 +449,12 @@ function Format-Deployment($Plans) {
 
 # Structurizr non disegna un nodo senza istanze ne' nodi dell'infrastruttura.
 function Test-DeploymentContent($Node) {
-    return $Node.kind -eq 'infrastructureNode' -or @($Node.instances | Where-Object { $_ }).Count -or
+    return $Node.element -eq 'infrastructureNode' -or @($Node.instances | Where-Object { $_ }).Count -or
         @($Node.children | Where-Object { $_ -and (Test-DeploymentContent $_) }).Count
 }
 
 function Get-DeploymentRoots($Environment) {
-    return @($Environment.nodes | Where-Object { $_ -and $_.kind -ne 'infrastructureNode' })
+    return @($Environment.nodes | Where-Object { $_ -and $_.element -ne 'infrastructureNode' })
 }
 
 # Le istanze di due container in relazione sono in relazione in ogni ambiente, e la relazione puo' dichiararla
@@ -450,22 +472,181 @@ function Get-SystemRelationships {
     }
 }
 
-# Una vista dichiara la frase del suo scopo come prima riga della descrizione. Un nodo chiuso mostra il suo
-# riquadro senza contenuto; con dei filtri sulle relazioni la vista le esclude tutte e include solo quelle.
-function Format-DeploymentView([string]$Environment, [string]$Key, [string]$Title, [string]$Description, [string[]]$Shown, [string[]]$Closed = @(), [string[]]$RelationshipFilters = @(), [System.Collections.IDictionary]$Properties = @{}) {
-    $lines = @((Format-ViewOpening "deployment * $(Format-Text $Environment)" $Key $Description), "    title $(Format-Text $Title)")
-    $lines += @($Shown | ForEach-Object { "    include $_" })
-    $lines += @($Closed | Where-Object { $_ } | ForEach-Object { "    exclude $(Format-Text "element.parent==$_")" })
-    if ($RelationshipFilters) { $lines += '    exclude relationship==*' }
-    $lines += @($RelationshipFilters | ForEach-Object { "    include $(Format-Text $_)" })
-    if ($Properties.Count) { $lines += @('    properties {') + @($Properties.Keys | ForEach-Object { "        $(Format-Text $_) $(Format-Text $Properties[$_])" }) + '    }' }
+# L'albero di un ambiente: il padre di ogni nodo e di ogni istanza, e il nome con cui le descrizioni li elencano.
+function New-EnvironmentTree($Environment) {
+    $tree = @{ Parents = @{}; Names = @{}; Elements = @{} }
+    foreach ($node in @($Environment.nodes | Where-Object { $_ })) { Register-TreeNode $node $null $tree }
+    return $tree
+}
+
+function Register-TreeNode($Node, [string]$Parent, [hashtable]$Tree) {
+    $Tree.Parents[$Node.id] = $Parent
+    $Tree.Names[$Node.id] = Get-NodeName $Node
+    $Tree.Elements[$Node.id] = $Node.element
+    foreach ($instance in @(Get-NodeInstances $Node)) {
+        $id = Get-InstanceId $Node $instance.Container
+        $Tree.Parents[$id] = $Node.id
+        $Tree.Names[$id] = Get-InstanceName $instance.Container
+        $Tree.Elements[$id] = 'containerInstance'
+    }
+    $Node.children | Where-Object { $_ } | ForEach-Object { Register-TreeNode $_ $Node.id $Tree }
+}
+
+function Test-Within([string]$Id, [string]$Ancestor, [hashtable]$Tree) {
+    for ($current = $Id; $current; $current = $Tree.Parents[$current]) { if ($current -eq $Ancestor) { return $true } }
+    return $false
+}
+
+function Get-TreeRoot([string]$Id, [hashtable]$Tree) {
+    $current = $Id
+    while ($Tree.Parents[$current]) { $current = $Tree.Parents[$current] }
+    return $current
+}
+
+# Le frasi della lingua per il livello del nodo, ognuna con i nomi di cio' che elenca in ordine di nome:
+# i figli, il nodo che lo contiene, la risorsa che espone, le relazioni di un tipo che dal nodo o dal suo
+# contenuto escono o vi entrano. Una frase con un elenco vuoto non si scrive.
+function Get-NodeDescription($Node, [hashtable]$Tree, $Relationships) {
+    $sentences = foreach ($phrase in @($NodeDescriptions[$Node.kind])) {
+        $lists = @($phrase.Lists | ForEach-Object { @(Get-DescribedNames $Node $_ $Tree $Relationships) -join ', ' })
+        if ($lists -contains '') { continue }
+        $phrase.Text -f $lists
+    }
+    return @($sentences) -join ' '
+}
+
+function Get-DescribedNames($Node, [string]$Binding, [hashtable]$Tree, $Relationships) {
+    $names = foreach ($source in ($Binding -split ',' | ForEach-Object Trim)) {
+        $direction, $kind = $source -split '\.', 2
+        switch ($direction) {
+            'Children' {
+                @($Node.children | Where-Object { $_ } | ForEach-Object { $Tree.Names[$_.id] })
+                @(Get-NodeInstances $Node | ForEach-Object { $Tree.Names[(Get-InstanceId $Node $_.Container)] })
+            }
+            'Exposes' { if ($Node.exposes) { Get-InstanceName (Get-KeptId $Node.exposes) } else { $Node.exposedName } }
+            'Parent' { if ($Tree.Parents[$Node.id]) { $Tree.Names[$Tree.Parents[$Node.id]] } }
+            'Outgoing' {
+                $Relationships | Where-Object { $_.Kind -eq $kind -and (Test-Within $_.Source $Node.id $Tree) -and -not (Test-Within $_.Target $Node.id $Tree) } |
+                    ForEach-Object { $Tree.Names[$_.Target] }
+            }
+            'Incoming' {
+                $Relationships | Where-Object { $_.Kind -eq $kind -and (Test-Within $_.Target $Node.id $Tree) -and -not (Test-Within $_.Source $Node.id $Tree) } |
+                    ForEach-Object { $Tree.Names[$_.Source] }
+            }
+        }
+    }
+    return @($names | Where-Object { $_ } | Sort-Object -Unique)
+}
+
+function Get-NetworkRelationships($Network) {
+    foreach ($relationship in @($Network.relationships | Where-Object { $_ })) {
+        [pscustomobject]@{
+            Source = Get-ElementReference $relationship.source $relationship.sourceContainer
+            Target = Get-ElementReference $relationship.target $relationship.targetContainer
+            Kind = $relationship.kind; Text = $DocumentLanguage.NetworkRelationships[$relationship.kind]; Tags = @($GeneratedTag, $NetworkTag)
+        }
+    }
+}
+
+function New-PlanEnvironment($Environment, $Relationships) {
+    $tree = New-EnvironmentTree $Environment
+    Get-TreeNodes $Environment.nodes | ForEach-Object { $script:NodeTexts[$_.id] = Get-NodeDescription $_ $tree $Relationships }
+    return [pscustomobject]@{ Environment = $Environment; Tree = $tree; Relationships = @($Relationships); Derived = [ordered]@{} }
+}
+
+# Una vista dichiara gli elementi che mostra: un nodo incluso con il suo contenuto, un nodo chiuso solo con il
+# suo riquadro. Con dei filtri sulle relazioni la vista le esclude tutte e include solo quelle.
+function New-DeploymentView([string]$Environment, [string]$Key, [string]$Title, [string]$Purpose, [string[]]$Shown, [string[]]$Closed = @(), [string[]]$Filters = @(), [System.Collections.IDictionary]$Properties = @{}) {
+    return [pscustomobject]@{
+        Environment = $Environment; Key = $Key; Title = $Title; Purpose = $Purpose; Shown = @($Shown); Closed = @($Closed | Where-Object { $_ })
+        Filters = @($Filters); Properties = $Properties; Visible = $null; Own = @(); Excluded = @()
+    }
+}
+
+function Get-VisibleElements($View, [hashtable]$Tree) {
+    $visible = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($id in $View.Shown) {
+        if ($id -eq '*') { $Tree.Parents.Keys | ForEach-Object { [void]$visible.Add($_) }; continue }
+        [void]$visible.Add($id)
+        if ($View.Closed -notcontains $id) { $Tree.Parents.Keys | Where-Object { Test-Within $_ $id $Tree } | ForEach-Object { [void]$visible.Add($_) } }
+    }
+    return , $visible
+}
+
+function Get-ShownAncestor([string]$Id, [System.Collections.Generic.HashSet[string]]$Visible, [hashtable]$Tree) {
+    for ($current = $Id; $current; $current = $Tree.Parents[$current]) { if ($Visible.Contains($current)) { return $current } }
+    return $null
+}
+
+# Structurizr non accetta una relazione fra un nodo di deployment e un'istanza: l'estremita' dell'istanza sale al
+# nodo mostrato che la contiene.
+function Get-PermittedEnds([string]$Source, [string]$Target, $View, [hashtable]$Tree) {
+    $kinds = @($Tree.Elements[$Source], $Tree.Elements[$Target])
+    if ($kinds -notcontains 'deploymentNode' -or $kinds -notcontains 'containerInstance') { return $Source, $Target }
+    if ($kinds[0] -eq 'containerInstance') { return (Get-ShownAncestor $Tree.Parents[$Source] $View.Visible $Tree), $Target }
+    return $Source, (Get-ShownAncestor $Tree.Parents[$Target] $View.Visible $Tree)
+}
+
+# Ogni relazione dell'ambiente si disegna fra gli antenati piu' vicini delle sue estremita' che la vista mostra:
+# fra le estremita' stesse e' la relazione del modello, fra due antenati una derivata che fonde quelle che vi
+# arrivano, con i testi distinti. Structurizr non crea relazioni implicite fra nodi di deployment.
+function Get-DerivedRelationships($View, $Plan) {
+    $pairs = [ordered]@{}
+    foreach ($relationship in $Plan.Relationships) {
+        $source, $target = Get-PermittedEnds (Get-ShownAncestor $relationship.Source $View.Visible $Plan.Tree) (Get-ShownAncestor $relationship.Target $View.Visible $Plan.Tree) $View $Plan.Tree
+        if (-not $source -or -not $target -or $source -eq $target -or ($source -eq $relationship.Source -and $target -eq $relationship.Target)) { continue }
+        if (-not $pairs.Contains("$source -> $target")) { $pairs["$source -> $target"] = [pscustomobject]@{ Source = $source; Target = $target; Represented = [System.Collections.Generic.List[object]]::new() } }
+        $pairs["$source -> $target"].Represented.Add($relationship)
+    }
+    foreach ($pair in $pairs.Values) {
+        $tags = @($pair.Represented | ForEach-Object { $_.Tags } | Select-Object -Unique) + $SummaryTag
+        [pscustomobject]@{ Source = $pair.Source; Target = $pair.Target; Text = (@($pair.Represented.Text | Sort-Object -Unique) -join ', '); Tags = $tags }
+    }
+}
+
+# Una derivata uguale per piu' viste si scrive una volta, con un identificativo con cui le viste la escludono.
+function Register-Derived($Derived, $Plan) {
+    $key = "$($Derived.Source) -> $($Derived.Target): $($Derived.Text)"
+    if ($Plan.Derived.Contains($key)) { return $Plan.Derived[$key] }
+    $base = "$($Derived.Source)__to__$($Derived.Target)"
+    $taken = @($Plan.Derived.Values | ForEach-Object Id)
+    $id = $base
+    for ($index = 2; $taken -contains $id; $index++) { $id = "${base}_$index" }
+    $Derived | Add-Member -NotePropertyName Id -NotePropertyValue $id
+    $Plan.Derived[$key] = $Derived
+    return $Derived
+}
+
+# Una derivata di un'altra vista con entrambe le estremita' mostrate si escluderebbe solo per caso: si esclude
+# per identificativo.
+function Set-ViewRelationships($Views, $Plans) {
+    foreach ($view in $Views) {
+        $plan = $Plans | Where-Object { $_.Environment.name -eq $view.Environment } | Select-Object -First 1
+        $view.Visible = Get-VisibleElements $view $plan.Tree
+        $view.Own = @(Get-DerivedRelationships $view $plan | ForEach-Object { (Register-Derived $_ $plan).Id })
+    }
+    foreach ($view in $Views) {
+        $plan = $Plans | Where-Object { $_.Environment.name -eq $view.Environment } | Select-Object -First 1
+        $view.Excluded = @($plan.Derived.Values | Where-Object { $view.Own -notcontains $_.Id -and $view.Visible.Contains($_.Source) -and $view.Visible.Contains($_.Target) } | ForEach-Object Id)
+    }
+}
+
+# Una vista dichiara la frase del suo scopo come prima riga della descrizione.
+function Format-DeploymentView($View) {
+    $lines = @((Format-ViewOpening "deployment * $(Format-Text $View.Environment)" $View.Key (Format-Description @($View.Purpose))), "    title $(Format-Text $View.Title)")
+    $lines += @($View.Shown | ForEach-Object { "    include $_" })
+    $lines += @($View.Closed | ForEach-Object { "    exclude $(Format-Text "element.parent==$_")" })
+    if ($View.Filters) { $lines += '    exclude relationship==*' }
+    $lines += @($View.Filters | ForEach-Object { "    include $(Format-Text $_)" })
+    $lines += @($View.Excluded | ForEach-Object { "    exclude $_" })
+    if ($View.Properties.Count) { $lines += @('    properties {') + @($View.Properties.Keys | ForEach-Object { "        $(Format-Text $_) $(Format-Text $View.Properties[$_])" }) + '    }' }
     return $lines + '    autoLayout lr' + '}'
 }
 
 function Get-AllocationInstances($Environment) {
     foreach ($root in (Get-DeploymentRoots $Environment)) {
         foreach ($instance in @(Get-NodeInstances $root)) { [pscustomobject]@{ Container = $instance.Container; Id = Get-InstanceId $root $instance.Container; Placed = $false } }
-        foreach ($node in @($root.children | Where-Object { $_ -and $_.kind -ne 'infrastructureNode' })) {
+        foreach ($node in @($root.children | Where-Object { $_ -and $_.element -ne 'infrastructureNode' })) {
             foreach ($instance in @(Get-NodeInstances $node)) { [pscustomobject]@{ Container = $instance.Container; Id = Get-InstanceId $node $instance.Container; Placed = $true } }
         }
     }
@@ -478,58 +659,25 @@ function Get-RelatedContainers([string]$Container) {
 }
 
 # Una vista per applicazione ospitata: le sue istanze, quelle in relazione con loro e solo le loro relazioni.
-function Format-ApplicationAllocationView([string]$Environment, [string]$Key, [string]$Container, $Instances) {
+function New-ApplicationAllocationView([string]$Environment, [string]$Key, [string]$Container, $Instances) {
     $own = @($Instances | Where-Object Container -EQ $Container | ForEach-Object Id)
     $related = Get-RelatedContainers $Container
     $neighbours = @($Instances | Where-Object { $_.Container -ne $Container -and $related -contains $_.Container } | ForEach-Object Id | Select-Object -Unique)
     $filters = @($own | ForEach-Object { "relationship.source==$_"; "relationship.destination==$_" })
-    $name = Get-ContainerName ([pscustomobject]@{ id = $Container; name = $script:SystemContainers[$Container].name })
-    return Format-DeploymentView $Environment "${Key}_app_$Container" ($ViewTitles.ApplicationAllocation -f $Environment, $name) (Format-Description @($ViewPurposes.ApplicationAllocation)) (@($own) + $neighbours) @() $filters
+    return New-DeploymentView $Environment "${Key}_app_$Container" ($ViewTitles.ApplicationAllocation -f $Environment, (Get-InstanceName $Container)) $ViewPurposes.ApplicationAllocation (@($own) + $neighbours) @() $filters
 }
 
 # La vista d'insieme mostra i piani di calcolo e le applicazioni senza piano, con le loro istanze e le chiamate
 # fra le applicazioni; porta gli ambienti di cui la pubblicazione elenca i gruppi di risorse.
-function Format-AllocationViews($Environment, $Network) {
+function Get-AllocationViews($Environment, $Network) {
     $key = "deployment_$(ConvertTo-Identifier $Environment.name)"
     $placed = @(Get-DeploymentRoots $Environment | ForEach-Object { @($_.children | Where-Object { $_ }) } | ForEach-Object id)
     $shown = if ($placed) { $placed } else { @('*') }
     $groups = [ordered]@{ resourceGroups = (@($Environment.name) + @(if ($Network) { $Network.name })) -join ';' }
-    $views = Format-DeploymentView $Environment.name $key ($ViewTitles.Allocation -f $Environment.name) (Format-Description @($ViewPurposes.Allocation)) $shown @() @() $groups
+    New-DeploymentView $Environment.name $key ($ViewTitles.Allocation -f $Environment.name) $ViewPurposes.Allocation $shown @() @() $groups
     $instances = @(Get-AllocationInstances $Environment)
     foreach ($container in @($instances | Where-Object Placed | ForEach-Object Container | Sort-Object -Unique)) {
-        $views += Format-ApplicationAllocationView $Environment.name $key $container $instances
-    }
-    return $views
-}
-
-function Register-RootElements($Node, [string]$Root, [hashtable]$Roots) {
-    $Roots[$Node.id] = $Root
-    Get-NodeInstances $Node | ForEach-Object { $Roots[(Get-InstanceId $Node $_.Container)] = $Root }
-    $Node.children | Where-Object { $_ } | ForEach-Object { Register-RootElements $_ $Root $Roots }
-}
-
-function Get-NetworkRelationships($Network) {
-    foreach ($relationship in @($Network.relationships | Where-Object { $_ })) {
-        [pscustomobject]@{
-            Source = Get-ElementReference $relationship.source $relationship.sourceContainer
-            Target = Get-ElementReference $relationship.target $relationship.targetContainer
-            Text = $DocumentLanguage.NetworkRelationships[$relationship.kind]; Tags = @($GeneratedTag, $NetworkTag)
-        }
-    }
-}
-
-# Fra due radici chiuse una relazione riassume quelle che passano dall'una all'altra, con i testi distinti.
-function Get-RootSummaries($Relationships, [hashtable]$Roots) {
-    $pairs = [ordered]@{}
-    foreach ($relationship in $Relationships) {
-        $source = $Roots[$relationship.Source]
-        $target = $Roots[$relationship.Target]
-        if (-not $source -or -not $target -or $source -eq $target -or ($source -eq $relationship.Source -and $target -eq $relationship.Target)) { continue }
-        if (-not $pairs.Contains("$source -> $target")) { $pairs["$source -> $target"] = [pscustomobject]@{ Source = $source; Target = $target; Texts = [System.Collections.Generic.List[string]]::new() } }
-        if (-not $pairs["$source -> $target"].Texts.Contains($relationship.Text)) { $pairs["$source -> $target"].Texts.Add($relationship.Text) }
-    }
-    foreach ($pair in $pairs.Values) {
-        [pscustomobject]@{ Source = $pair.Source; Target = $pair.Target; Text = (@($pair.Texts | Sort-Object) -join ', '); Tags = @($GeneratedTag, $NetworkTag, $SummaryTag) }
+        New-ApplicationAllocationView $Environment.name $key $container $instances
     }
 }
 
@@ -540,35 +688,36 @@ function Get-PartSlugs($Parts) {
     return $slugs
 }
 
-# La vista d'insieme della rete mostra chiuse le reti e i profili d'ingresso con le relazioni fra loro; ogni rete
-# con subnet ha la sua vista, con chiuse le radici con cui ha relazioni. Le relazioni fra le istanze non ci sono.
-function Format-NetworkViews($Network, [string]$Environment, $Relationships, [hashtable]$Roots) {
+# La vista d'insieme della rete mostra chiuse le reti e i profili d'ingresso; ogni rete con subnet ha la sua vista,
+# con chiuse le radici con cui ha relazioni. Il filtro sul tag della rete tiene fuori le chiamate fra le istanze.
+function Get-NetworkViews($Plan, [string]$Environment) {
+    $network = $Plan.Environment
     $key = "deployment_$(ConvertTo-Identifier $Environment)_$NetworkViewSuffix"
     $filters = @("relationship.tag==$NetworkTag")
-    $rootNodes = @(Get-DeploymentRoots $Network)
+    $rootNodes = @(Get-DeploymentRoots $network)
     $rootIds = @($rootNodes | ForEach-Object id)
-    $views = Format-DeploymentView $Network.name $key ($ViewTitles.Network -f $Environment) (Format-Description @($ViewPurposes.Network)) $(if ($rootIds) { $rootIds } else { @('*') }) $rootIds $filters
-    $parts = @($rootNodes | Where-Object { @($_.children | Where-Object { $_ -and $_.kind -ne 'infrastructureNode' -and (Test-DeploymentContent $_) }).Count })
+    New-DeploymentView $network.name $key ($ViewTitles.Network -f $Environment) $ViewPurposes.Network $(if ($rootIds) { $rootIds } else { @('*') }) $rootIds $filters
+    $parts = @($rootNodes | Where-Object { @($_.children | Where-Object { $_ -and $_.element -ne 'infrastructureNode' -and (Test-DeploymentContent $_) }).Count })
     $slugs = Get-PartSlugs $parts
     foreach ($part in $parts) {
-        $related = @($Relationships | ForEach-Object {
-                if ($Roots[$_.Source] -eq $part.id) { $Roots[$_.Target] } elseif ($Roots[$_.Target] -eq $part.id) { $Roots[$_.Source] }
+        $related = @($Plan.Relationships | ForEach-Object {
+                $source = Get-TreeRoot $_.Source $Plan.Tree
+                $target = Get-TreeRoot $_.Target $Plan.Tree
+                if ($source -eq $part.id) { $target } elseif ($target -eq $part.id) { $source }
             } | Where-Object { $_ -and $_ -ne $part.id } | Select-Object -Unique)
-        $views += Format-DeploymentView $Network.name "${key}_$($slugs[$part.id])" ($ViewTitles.NetworkPart -f $Environment, $part.name) (Format-Description @($ViewPurposes.NetworkPart)) (@($part.id) + $related) $related $filters
+        New-DeploymentView $network.name "${key}_$($slugs[$part.id])" ($ViewTitles.NetworkPart -f $Environment, $part.name) $ViewPurposes.NetworkPart (@($part.id) + $related) $related $filters
     }
-    return $views
 }
 
 function New-DeploymentPlan($Allocation, $Network) {
-    $plan = [pscustomobject]@{ Environments = @([pscustomobject]@{ Environment = $Allocation; Relationships = @() }); Views = @(Format-AllocationViews $Allocation $Network) }
-    if (-not $Network) { return $plan }
-    $roots = @{}
-    Get-DeploymentRoots $Network | ForEach-Object { Register-RootElements $_ $_.id $roots }
-    $relationships = @(Get-NetworkRelationships $Network)
-    $relationships += @(Get-RootSummaries $relationships $roots)
-    $plan.Environments += [pscustomobject]@{ Environment = $Network; Relationships = $relationships }
-    $plan.Views += Format-NetworkViews $Network $Allocation.name $relationships $roots
-    return $plan
+    $environments = @(New-PlanEnvironment $Allocation @())
+    $views = @(Get-AllocationViews $Allocation $Network)
+    if ($Network) {
+        $environments += New-PlanEnvironment $Network @(Get-NetworkRelationships $Network)
+        $views += @(Get-NetworkViews $environments[-1] $Allocation.name)
+    }
+    Set-ViewRelationships $views $environments
+    return [pscustomobject]@{ Environments = $environments; Views = @($views | ForEach-Object { Format-DeploymentView $_ }) }
 }
 
 # Ogni ambiente del modello ha l'ambiente dell'allocazione e, se il lettore lo scrive, quello della rete.
@@ -634,7 +783,10 @@ function Get-GenerationIssues {
     $name = $Repository.ToLowerInvariant()
     $outputs = [ordered]@{ "containers/$name.dsl" = Format-Model $fragments; "views/$name.dsl" = Format-Views $fragments $system; 'context.dsl' = Format-Context }
     $environments = Get-DeploymentEnvironments $fragments
+    $kindIssues = @(Get-NodeKindIssues $environments)
+    if ($kindIssues) { return $kindIssues }
     if ($environments) {
+        $script:NodeTexts = @{}
         $plans = @(Get-DeploymentPlans $environments)
         $outputs["deployment/$name.dsl"] = Format-Deployment $plans
         $outputs["deployment-views/$name.dsl"] = Format-DeploymentViews $plans

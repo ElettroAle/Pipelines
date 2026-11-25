@@ -62,6 +62,7 @@ lavora sulla piattaforma.
   ruolo dell'elemento nella piattaforma, cioe' che cosa fa per il sistema e per chi, in una o due frasi,
   senza ripetere il nome, senza nominare la tecnologia o il tipo di risorsa e senza parole che valgono per
   ogni elemento dello stesso tipo. Due elementi della parte non hanno la stessa descrizione.
+- Ogni testo vale per ogni ambiente in cui il sistema gira e non nomina l'ambiente.
 - relationships: una voce per ogni relazione della parte, con sorgente e destinazione date. description
   dice cio' che passa, al presente (ad esempio: "Invia i messaggi della conversazione"); technology dice
   il protocollo o il mezzo, vuoto se il codice non lo mostra.
@@ -70,9 +71,6 @@ lavora sulla piattaforma.
   underscore; technical vale true se interessa solo chi gestisce la piattaforma.
 - links: le relazioni fra una persona o un sistema esterno (del catalogo o nuovo) e un elemento della
   parte, in una delle due direzioni, con cio' che passa.
-- Una parte di tecnologia deployment elenca i nodi dell'infrastruttura di un modulo: la descrizione di un
-  nodo dice quali parti del sistema ospita o collega e perche', vale per ogni ambiente e non nomina
-  l'ambiente; la parte non ha relazioni, persone ne' sistemi esterni.
 
 I container del sistema e le applicazioni dei repository sorgente del sistema fanno parte del sistema:
 non sono mai persone ne' sistemi esterni.
@@ -322,41 +320,6 @@ function Get-Units($Fragments) {
         }
     }
     Set-ApplicationNames @($containers.Container)
-    Get-DeploymentUnits $Fragments
-}
-
-function Get-DeploymentNodes($Nodes) {
-    foreach ($node in @($Nodes | Where-Object { $_ })) {
-        $node
-        Get-DeploymentNodes $node.children
-    }
-}
-
-# I nodi di deployment di un modulo radice sono una parte: un testo per nodo, lo stesso in ogni ambiente.
-function Get-DeploymentUnits($Fragments) {
-    foreach ($fragment in $Fragments) {
-        $nodes = @($fragment.Content.deployment | Where-Object { $_ } | ForEach-Object { Get-DeploymentNodes $_.nodes })
-        foreach ($group in ($nodes | Group-Object module | Sort-Object Name)) {
-            $elements = @($group.Group | Group-Object text | Sort-Object Name | ForEach-Object {
-                    $node = $_.Group[0]
-                    [ordered]@{ id = $node.text; name = $node.name; technology = $node.technology; sources = @($node.sources) }
-                })
-            $container = [ordered]@{ id = ConvertTo-Identifier "$($fragment.Repository).deployment.$($group.Name)"; name = "Nodi di deployment di $($group.Name)"; technology = 'deployment'; components = $elements }
-            [pscustomobject]@{
-                Id            = $container.id
-                Repository    = $fragment.Repository
-                Container     = [pscustomobject]$container
-                ElementIds    = @($container.id) + @($elements | ForEach-Object { $_.id })
-                Relationships = @()
-                Basis         = Get-Basis ([ordered]@{ components = @($elements | ForEach-Object { [ordered]@{ id = $_.id; technology = $_.technology; sources = $_.sources } }) }) @()
-                Deployment    = $true
-            }
-        }
-    }
-}
-
-function Get-ContainerUnits($Units) {
-    return @($Units | Where-Object { -not $_.Deployment })
 }
 
 # Il nome di un'applicazione si cambia dopo la base del suo testo: il testo non dipende dal nome.
@@ -443,7 +406,7 @@ function Get-UserMessage($Unit, $Units, [hashtable]$Catalogue, $Previous, [strin
         "REPOSITORY: $($Unit.Repository)"
         "PARTE DA DESCRIVERE: $($Unit.Id)"
         "STRUTTURA DELLA PARTE (JSON):`n$(Get-UnitStructure $Unit)"
-        "ALTRI CONTAINER DEL SISTEMA:`n$(Format-Containers @(Get-ContainerUnits $Units | Where-Object Id -NE $Unit.Id))"
+        "ALTRI CONTAINER DEL SISTEMA:`n$(Format-Containers @($Units | Where-Object Id -NE $Unit.Id))"
         "REPOSITORY SORGENTE DEL SISTEMA:`n$(Format-List $SourceRepositories)"
         "CATALOGO DI PERSONE E SISTEMI ESTERNI:`n$(Format-Catalogue $Catalogue)"
         "TESTO ACCETTATO PRIMA CHE LA STRUTTURA CAMBIASSE:`n$previousText"
@@ -505,38 +468,17 @@ function ConvertTo-Draft($Answer) {
     return $draft
 }
 
-# Una voce che nomina la tecnologia del suo elemento, o che ripete la descrizione di un altro elemento della
-# parte, descrive il tipo di risorsa e non il ruolo: chi legge non distingue gli elementi.
-function Get-TechnologyNames([string]$Technology) {
-    return @(@($Technology.Trim(), ($Technology.Trim() -split '[/.]')[-1]) | Where-Object { $_ } | Select-Object -Unique)
-}
-
-function Test-NamesTechnology([string]$Description, [string]$Technology) {
-    foreach ($name in (Get-TechnologyNames $Technology)) {
-        if ($Description -match "(?i)(?<![\p{L}\p{N}_])$([regex]::Escape($name))(?![\p{L}\p{N}_])") { return $true }
-    }
-    return $false
-}
-
+# Una voce che ripete la descrizione di un altro elemento della parte descrive il tipo e non il ruolo: chi legge
+# non distingue gli elementi.
 function Get-DescriptionKey([string]$Description) {
     return (($Description -replace '\s+', ' ').Trim().TrimEnd('.', ';', ':', '!', '?', ',').Trim()).ToLowerInvariant()
 }
 
-# La parte dei nodi di deployment ha come tecnologia il suo tipo, non quella di una risorsa: una descrizione che
-# dice «deployment» non nomina una tecnologia.
-function Get-ElementTechnologies($Unit) {
-    $technologies = @{ "$($Unit.Container.id)" = $(if ($Unit.Deployment) { '' } else { "$($Unit.Container.technology)" }) }
-    @($Unit.Container.components) | Where-Object { $_ } | ForEach-Object { $technologies["$($_.id)"] = "$($_.technology)" }
-    return $technologies
-}
-
 function Get-DescriptionRejections($Unit, $Elements) {
-    $technologies = Get-ElementTechnologies $Unit
     $described = @{}
     foreach ($id in $Unit.ElementIds) {
         $description = "$(if ($Elements.Contains($id)) { $Elements[$id] })"
         if (-not $description.Trim()) { continue }
-        if (Test-NamesTechnology $description $technologies[$id]) { [pscustomobject]@{ Id = $id; Reason = "descrizione che nomina la tecnologia: $id" } }
         $key = Get-DescriptionKey $description
         if ($described.ContainsKey($key)) { [pscustomobject]@{ Id = $id; Reason = "descrizione uguale a quella di $($described[$key]): $id" } }
         else { $described[$key] = $id }
@@ -685,16 +627,17 @@ function Remove-TextActors($Text, [string[]]$Ids) {
     }
 }
 
+# Il modello va a capo dove vuole: un a capo salvato spezzerebbe la frase nel disegno.
 function ConvertTo-UnitText($Unit, $Draft, [string]$Basis) {
     $elements = [ordered]@{}
-    $Draft.Elements.Keys | Sort-Object | ForEach-Object { $elements[$_] = "$($Draft.Elements[$_])".Trim() }
+    $Draft.Elements.Keys | Sort-Object | ForEach-Object { $elements[$_] = Get-NormalText $Draft.Elements[$_] }
     $relationships = [ordered]@{}
     $Draft.Relationships.Keys | Sort-Object | ForEach-Object {
-        $relationships[$_] = [ordered]@{ description = "$($Draft.Relationships[$_].description)".Trim(); technology = "$($Draft.Relationships[$_].technology)".Trim() }
+        $relationships[$_] = [ordered]@{ description = Get-NormalText $Draft.Relationships[$_].description; technology = Get-NormalText $Draft.Relationships[$_].technology }
     }
     $links = @($Draft.Links.Keys | Sort-Object | ForEach-Object {
             $link = $Draft.Links[$_]
-            [ordered]@{ source = $link.source; target = $link.target; description = "$($link.description)".Trim(); technology = "$($link.technology)".Trim() }
+            [ordered]@{ source = $link.source; target = $link.target; description = Get-NormalText $link.description; technology = Get-NormalText $link.technology }
         })
     return [pscustomobject][ordered]@{ basis = $Basis; elements = $elements; relationships = $relationships; links = $links }
 }
@@ -703,7 +646,7 @@ function Add-Actors($Text, $Draft) {
     foreach ($pair in @(@('People', 'people'), @('ExternalSystems', 'externalSystems'))) {
         foreach ($actor in $Draft[$pair[0]].Values) {
             $Text.($pair[1]) | Add-Member -Force -NotePropertyName $actor.id -NotePropertyValue ([pscustomobject][ordered]@{
-                    name = "$($actor.name)".Trim(); description = "$($actor.description)".Trim(); technical = [bool]$actor.technical
+                    name = Get-NormalText $actor.name; description = Get-NormalText $actor.description; technical = [bool]$actor.technical
                 })
         }
     }
@@ -1122,8 +1065,7 @@ function Set-ReviewDecisions($State, $Units, $Text) {
     return [ordered]@{ externalSystems = $systems; links = $links; containers = $containers }
 }
 
-function Invoke-ModelReview($AllUnits, $Text, $Progress) {
-    $Units = Get-ContainerUnits $AllUnits
+function Invoke-ModelReview($Units, $Text, $Progress) {
     $evidenceFiles = @(Get-EvidenceFiles)
     $basis = Get-ReviewBasis $Units $evidenceFiles
     if ($Text.review.basis -eq $basis) { return }
@@ -1140,7 +1082,7 @@ function Invoke-ModelReview($AllUnits, $Text, $Progress) {
         Write-Host "Revisione $round del modello, voci da riscrivere: $(($rejections | ForEach-Object Reason) -join '; ')"
     }
     $decisions = Set-ReviewDecisions $state $Units $Text
-    Remove-StaleText $Text $AllUnits
+    Remove-StaleText $Text $Units
     $Text.review = [pscustomobject][ordered]@{ basis = $basis; externalSystems = [pscustomobject]$decisions.externalSystems; links = [pscustomobject]$decisions.links; containers = [pscustomobject]$decisions.containers }
     Save-Text $Text
     Publish-Progress $Progress 'review'
@@ -1163,7 +1105,7 @@ function Get-TextIssues {
     catch { return New-Issue $TextScope 'testo non scritto' $_.Exception.Message }
 
     $units = @(Get-Units @(Read-Fragments))
-    if (-not (Get-ContainerUnits $units)) { return New-Issue $TextScope 'nessun container da descrivere' $FragmentDirectory }
+    if (-not $units) { return New-Issue $TextScope 'nessun container da descrivere' $FragmentDirectory }
     $generatedIds = @($units | ForEach-Object { $_.ElementIds })
     $text = Read-ProgressText
     if (-not $text) { $text = Read-SavedText }
@@ -1180,7 +1122,7 @@ function Get-TextIssues {
             catch { return New-Issue $TextScope "testo di $($unit.Id) non scritto" $_.Exception.Message }
         }
         if (-not $text.catalogueReviewed) {
-            try { Invoke-CatalogueReview (Get-ContainerUnits $units) $text $progress }
+            try { Invoke-CatalogueReview $units $text $progress }
             catch { return New-Issue $TextScope 'catalogo di persone e sistemi esterni non controllato' $_.Exception.Message }
         }
         try { Invoke-ModelReview $units $text $progress }

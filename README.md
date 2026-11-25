@@ -329,6 +329,7 @@ template d'ingresso: lo step `document-directories.yaml` le mette in `DOCS_DIREC
 | Frasi dello scopo delle viste generate | `ViewPurposes` in `IT.psd1` | `ViewPurposes` in `EN.psd1` |
 | Ambiente e viste della rete, relazioni di rete e riassunte | `<ambiente> rete`, tag `Rete` e `Riassunto`, `Comunica con:` fra i livelli dei componenti | `<ambiente> network`, tag `Network` and `Summary`, `Communicates with:` between the component levels |
 | Colonne della tabella dei gruppi di risorse | `Gruppo di risorse`, `Contenuto`, `Modulo` | `Resource group`, `Content`, `Module` |
+| Frasi della descrizione dei nodi di deployment, per livello | `NodeDescriptions` in `IT.psd1` | `NodeDescriptions` in `EN.psd1` |
 | Parti della decisione con struttura e flusso nel codice | `Struttura nel codice`, `Flusso nel codice` | `Code structure`, `Code flow` |
 | Pagina della wiki (default di `wikiRoot`) | `Architettura` | `Architecture` |
 | Colonna dello stato nella wiki | `Stato` | `Status` |
@@ -400,7 +401,7 @@ Modello C4 (`c4-verify.yaml`, `CI/Scripts/C4/Test-C4Model.ps1`):
 - La parte generata dal codice (`c4-generate.yaml`) porta il tag `Generato` in italiano: ogni elemento
   generato ha una descrizione, ogni relazione generata dice cosa passa, e fra due elementi generati
   nessuna relazione viene da fuori del codice, nemmeno per ripeterne una generata. Fanno eccezione le relazioni
-  riassunte fra due nodi di deployment (tag `Riassunto` in italiano), che la generazione scrive da quelle fra i
+  derivate fra due elementi di deployment (tag `Riassunto` in italiano), che la generazione scrive da quelle fra i
   loro elementi. Un riferimento a un elemento che nessuna
   parte contiene rende il modello non valido, e l'errore nomina l'identificativo.
 - Ogni vista si disegna come nella wiki (`CI/Scripts/C4/ViewImages.ps1`): dall'alto in basso e da sinistra
@@ -452,7 +453,10 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   container del sistema, la guida di stile (`guide`), i documenti di contesto (`context`) e il catalogo
   delle persone e dei sistemi esterni già dichiarati. Una relazione appartiene al container da cui parte;
   se parte da un elemento che nessun container letto contiene, ad esempio da un'applicazione verso la
-  risorsa che l'infrastruttura le assegna, appartiene al container a cui arriva.
+  risorsa che l'infrastruttura le assegna, appartiene al container a cui arriva. I nodi di deployment non
+  vanno al modello: la loro descrizione la compone lo scrittore. Ogni testo vale per ogni ambiente in cui
+  il sistema gira e non nomina l'ambiente; al salvataggio gli a capo e le sequenze di spazi diventano uno
+  spazio, perche' un a capo spezzerebbe la frase nel disegno.
 - **Una stesura non ferma mai la pipeline.** Ciò che la struttura non contiene si toglie in modo
   deterministico: elementi e relazioni che il codice non dichiara, identificativi non validi o uguali a
   quelli di un elemento del codice, relazioni legate a un elemento assente dal container, persone e
@@ -576,7 +580,14 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   che l'origine nomina, anche attraverso un record DNS e un IP pubblico, e di backend dall'Application
   Gateway all'applicazione o al private endpoint del suo pool. Un collegamento che la dichiarazione non
   risolve, come un nome fuori dalla dichiarazione, da' un avviso e non ferma la lettura. Ogni elemento porta
-  il gruppo di risorse e il modulo radice che lo dichiara. Un container dei frammenti sta sulla risorsa con
+  il gruppo di risorse, il modulo radice che lo dichiara, il nome Azure della risorsa (un'istanza quello
+  della risorsa che la ospita; una regione nessuno) e il suo livello (`region`, `hostingPlan`,
+  `application`, `virtualNetwork`, `subnet`, `privateEndpoint`, `gateway`, `ingress`, `ingressEndpoint`).
+  La descrizione di un nodo la compone lo scrittore con le frasi del suo livello in `NodeDescriptions`
+  della lingua del documento, riempite con i nomi che il modello gia' contiene (cio' che il nodo ospita,
+  la parte che espone, la rete in cui sta, le relazioni che riceve o manda), senza tipo di risorsa e senza
+  a capo; una frase senza nomi non si scrive, e un livello senza frasi ferma l'esportazione nominandolo.
+  Un container dei frammenti sta sulla risorsa con
   il suo nome nel codice o su quella che un frammento dichiara in `hosts`. Una risorsa che ospita un
   container o che gira su un piano, di un tipo che le regole non riconoscono, ferma la lettura nominandola.
   Lo scrittore mette gli ambienti in `deployment/<repository>.dsl`, da includere nel modello dopo il
@@ -586,15 +597,19 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   applicazioni; per ogni applicazione ospitata la sua allocazione (`deployment_<ambiente>_app_<container>`),
   con il suo piano, i servizi e le applicazioni con cui ha relazioni e solo le sue relazioni; la rete
   (`deployment_<ambiente>_rete`), con le reti e i profili d'ingresso chiusi e fra loro le relazioni di rete,
-  riassunte con il tag `Riassunto` quando passano fra elementi interni; per ogni rete con subnet la sua
-  vista (`deployment_<ambiente>_rete_<rete>`), con chiuse le radici con cui ha relazioni. Le viste di rete
-  mostrano solo le relazioni con il tag `Rete`. Il titolo dice il tipo della vista, l'ambiente e la parte
+  per ogni rete con subnet la sua vista (`deployment_<ambiente>_rete_<rete>`), con chiuse le radici con
+  cui ha relazioni. In ogni vista una relazione si disegna fra gli elementi piu' vicini alle sue estremita'
+  che la vista mostra: quando un'estremita' sta dentro un nodo chiuso, la generazione scrive una volta
+  sola la relazione derivata fra i due elementi visibili, con un identificativo, i testi uniti e il tag
+  `Riassunto`, e ogni vista esclude le derivate delle altre viste di cui mostra entrambe le estremita'.
+  Un nodo e un'istanza di container, che Structurizr non collega, si collegano attraverso il nodo
+  dell'istanza. Le viste di rete mostrano solo le relazioni con il tag `Rete`. Il titolo dice il tipo della vista, l'ambiente e la parte
   (`Allocazione · prod · Bff.Web` in italiano) e la descrizione e' la frase fissa dello scopo del tipo.
   L'allocazione dichiara nella proprieta' `resourceGroups` gli ambienti di cui la pubblicazione elenca i
-  gruppi di risorse in una tabella sotto l'immagine. Due nodi fratelli con lo stesso nome, che Structurizr
+  gruppi di risorse in una tabella sotto l'immagine, con il nome Azure di ogni risorsa. Due nodi fratelli con lo stesso nome, che Structurizr
   rifiuta, aggiungono al nome i servizi esposti, il gruppo di risorse o il nome della risorsa, e la
   posizione se restano uguali. Il disegno riapre la grandezza del titolo su ogni riga della descrizione,
-  che l'esportatore C4-PlantUML chiude solo in fondo. Il testo di un nodo e' uno per tutti gli ambienti.
+  che l'esportatore C4-PlantUML chiude solo in fondo.
 - **Nomi.** Il nome nel codice senza il prefisso comune ai progetti del repository, a segmenti interi e
   più corto di ogni nome. L'identificativo si ricava dal nome completo, così un repository nomina gli
   elementi degli altri senza leggerli. Nel modello di tutto il sistema un'applicazione si chiama con il

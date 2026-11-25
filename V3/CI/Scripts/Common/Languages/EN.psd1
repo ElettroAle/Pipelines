@@ -27,6 +27,39 @@
     NetworkRelationships = @{ Peering = 'Connects the two networks with a peering'; Origin = 'Forwards the requests to the origin'; Backend = 'Forwards the requests to the backend' }
     NetworkViewSuffix = 'network'
     NetworkEnvironmentSuffix = 'network'
+    NodeDescriptions = @{
+        region = @(
+            @{ Text = 'Hosts {0}.'; Lists = @('Children') }
+        )
+        hostingPlan = @(
+            @{ Text = 'Compute plan of {0}.'; Lists = @('Children') }
+        )
+        application = @(
+            @{ Text = 'Hosts {0}.'; Lists = @('Children') }
+            @{ Text = 'Receives the requests from {0}.'; Lists = @('Incoming.Backend,Incoming.Origin') }
+            @{ Text = 'Sits in {0}.'; Lists = @('Parent') }
+        )
+        virtualNetwork = @(
+            @{ Text = 'Holds the subnets {0}.'; Lists = @('Children') }
+            @{ Text = 'Peered with {0}.'; Lists = @('Outgoing.Peering,Incoming.Peering') }
+        )
+        subnet = @(
+            @{ Text = 'Hosts {0}.'; Lists = @('Children') }
+            @{ Text = 'Sits in {0}.'; Lists = @('Parent') }
+        )
+        privateEndpoint = @(
+            @{ Text = 'Private access to {0}.'; Lists = @('Exposes') }
+        )
+        gateway = @(
+            @{ Text = 'Receives the requests from {0} and forwards them to {1}.'; Lists = @('Incoming.Origin', 'Outgoing.Backend') }
+        )
+        ingress = @(
+            @{ Text = 'Public entry to {0}.'; Lists = @('Outgoing.Origin') }
+        )
+        ingressEndpoint = @(
+            @{ Text = 'Receives the public traffic and forwards it to {0}.'; Lists = @('Outgoing.Origin') }
+        )
+    }
     ResourceGroupTable = @{ Group = 'Resource group'; Content = 'Content'; Module = 'Module' }
     TextLanguage   = 'English'
     AdrSections    = @('Context and Problem Statement', 'Considered Options', 'Decision Outcome')
