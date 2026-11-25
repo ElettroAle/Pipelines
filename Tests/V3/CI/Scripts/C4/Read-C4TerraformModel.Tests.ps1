@@ -217,7 +217,6 @@ Describe "Funzionalità: Viste di deployment che rispondono a una domanda" {
     BeforeAll {
         $generation = Invoke-DeploymentGeneration
         $export = Export-DeploymentWorkspace $generation
-        $purposes = (Import-PowerShellDataFile "$PSScriptRoot/../../../../../V3/CI/Scripts/Common/Languages/IT.psd1").ViewPurposes
     }
 
     Context "Scenario: la vista di allocazione mostra solo i piani di calcolo con le applicazioni che ospitano e le chiamate fra le applicazioni" {
@@ -301,15 +300,35 @@ Describe "Funzionalità: Viste di deployment che rispondono a una domanda" {
         }
     }
 
-    Context "Scenario: ogni tipo di vista porta una frase fissa che dice il suo scopo, nel disegno" {
-        It "Allora ogni vista di deployment comincia la sua descrizione con la frase del suo tipo" {
-            $kinds = [ordered]@{ '^deployment_prod$' = 'Allocation'; '^deployment_prod_app_' = 'ApplicationAllocation'; '^deployment_prod_rete$' = 'Network'; '^deployment_prod_rete_' = 'NetworkPart' }
-            $views = @($export.Workspace.views.deploymentViews | Where-Object key -Like 'deployment_prod*')
-            $views.Count | Should -Be 6
-            foreach ($view in $views) {
-                $kind = @($kinds.Keys | Where-Object { $view.key -match $_ } | ForEach-Object { $kinds[$_] }) | Select-Object -First 1
-                ($view.description -replace '\s+', ' ') | Should -BeLike "$($purposes[$kind])*" -Because $view.key
+    Context "Scenario: la descrizione di ogni vista nasce dal suo contenuto con le frasi della lingua, fuori dal disegno (ADR-2140)" {
+        It "Allora la descrizione di ogni vista di deployment nomina il soggetto, gli elementi che mostra e le relazioni con il loro testo" -ForEach @(
+            @{ Key = 'deployment_prod'; Expected = "Applicazioni dell'ambiente prod: Api, Worker. Piani di calcolo e risorse che le ospitano: asp-contoso-prod. Chiamate fra le applicazioni: Worker → Api." }
+            @{ Key = 'deployment_prod_app_contoso_shop_ai_api'; Expected = "Nell'ambiente prod, Api gira su asp-contoso-prod. Si rivolge a kv-contoso-prod. Riceve le richieste di Worker." }
+            @{ Key = 'deployment_prod_app_contoso_shop_ai_worker'; Expected = "Nell'ambiente prod, Worker gira su asp-contoso-prod. Si rivolge a Api." }
+            @{ Key = 'deployment_prod_rete'; Expected = "Reti virtuali dell'ambiente prod: vnet-contoso-prod, vnet-shared. Ingresso del traffico pubblico: afd-contoso-prod. Collegamenti fra le reti: afd-contoso-prod → vnet-contoso-prod (Inoltra le richieste all'origine), vnet-contoso-prod → vnet-shared (Collega le due reti con un peering), vnet-contoso-prod → vnet-shared (Inoltra le richieste al backend)." }
+            @{ Key = 'deployment_prod_rete_vnet_contoso_prod'; Expected = "Subnet della rete vnet-contoso-prod nell'ambiente prod: snet-engine, snet-gateway, snet-worker. Applicazioni integrate nella rete: Api, Worker. Riceve il traffico da afd-contoso-prod (Inoltra le richieste all'origine). Si collega a vnet-shared (Collega le due reti con un peering), vnet-shared (Inoltra le richieste al backend)." }
+            @{ Key = 'deployment_prod_rete_vnet_shared'; Expected = "Subnet della rete vnet-shared nell'ambiente prod: snet-endpoints. Risorse raggiunte in privato dalla rete: Api. Riceve il traffico da vnet-contoso-prod (Collega le due reti con un peering), vnet-contoso-prod (Inoltra le richieste al backend)." }
+        ) {
+            (Get-ExportedView $export $Key).properties.description | Should -Be $Expected
+        }
+
+        It "E la descrizione sta nella proprieta' della vista: il disegno mostra solo il titolo" {
+            $views = @($export.Workspace.views.deploymentViews)
+            $views.Count | Should -Be 17
+            @($views | Where-Object { $_.description }) | Should -BeNullOrEmpty
+            @($views | Where-Object { -not $_.properties.description }) | Should -BeNullOrEmpty
+        }
+
+        It "E ogni descrizione nomina almeno un elemento che la vista mostra" {
+            foreach ($view in $export.Workspace.views.deploymentViews) {
+                $description = $view.properties.description
+                @(Get-ShownNames $export $view.key | Where-Object { $description.Contains($_) }).Count | Should -BeGreaterThan 0 -Because "$($view.key): $description"
             }
+        }
+
+        It "E due viste diverse non hanno la stessa descrizione" {
+            $descriptions = @($export.Workspace.views.deploymentViews | ForEach-Object { $_.properties.description })
+            @($descriptions | Sort-Object -Unique).Count | Should -Be $descriptions.Count
         }
 
         It "E il titolo dice il tipo della vista, l'ambiente e la parte che mostra" {
@@ -859,6 +878,47 @@ Describe 'Export-C4CodeModel.ps1 sugli ambienti di deployment' {
         $aloneViews | Should -Not -Match 'rete'
     }
 
+    It "da' alle relazioni nominate nelle descrizioni delle viste il testo che il modello scrive per la relazione fra i container (ADR-2140)" {
+        $described = [ordered]@{ units = [ordered]@{ contoso_shop_ai_worker = [ordered]@{ elements = @{}; relationships = [ordered]@{ 'contoso_shop_ai_worker -> contoso_shop_ai_api' = @{ description = 'Chiede le risposte'; technology = 'HTTPS' } } } } }
+        $files = New-TerraformRepository
+        $files['docs/architecture/c4/generated/model.text.json'] = $described | ConvertTo-Json -Depth 10
+        $generation = Invoke-DeploymentGeneration $files
+        $generation.ExitCode | Should -Be 0 -Because $generation.Output
+        $generated = $generation.Generated['deployment-views/contoso.infrastructure.dsl'] -replace "`r`n", "`n"
+        Get-Block $generated 'deployment \* "prod" "deployment_prod_app_contoso_shop_ai_worker" ' | Should -Match ([regex]::Escape('"description" "Nell''ambiente prod, Worker gira su asp-contoso-prod. Si rivolge a Api (Chiede le risposte)."'))
+        Get-Block $generated 'deployment \* "prod" "deployment_prod" ' | Should -Match ([regex]::Escape('Chiamate fra le applicazioni: Worker → Api (Chiede le risposte).'))
+    }
+
+    It "ferma la generazione se due viste diverse avrebbero la stessa descrizione (ADR-2140)" {
+        $fragments = New-ContainerFragments
+        $network = {
+            param($Id)
+            $endpoint = [ordered]@{ id = "${Id}_pe"; name = 'pe'; exposedName = 'archivio'; technology = 'T'; element = 'infrastructureNode'; kind = 'privateEndpoint'; children = @(); instances = @() }
+            $subnet = [ordered]@{ id = "${Id}_snet"; name = 'snet'; technology = 'T'; element = 'deploymentNode'; kind = 'subnet'; children = @($endpoint); instances = @() }
+            [ordered]@{ id = $Id; name = 'vnet'; resourceGroup = "rg-$Id"; technology = 'T'; element = 'deploymentNode'; kind = 'virtualNetwork'; children = @($subnet); instances = @() }
+        }
+        $fragments['contoso.infrastructure.deployment.json'] = [ordered]@{ containers = @(); relationships = @(); deployment = @(
+                [ordered]@{ name = 'prod'; kind = 'allocation'; nodes = @() }
+                [ordered]@{ name = 'prod rete'; kind = 'network'; environment = 'prod'; nodes = @((& $network 'x_a'), (& $network 'x_b')); relationships = @() }
+            ) } | ConvertTo-Json -Depth 10
+        $twins = Invoke-C4Steps ([ordered]@{ 'source/README.md' = "# x`n" }) 'Contoso.Infrastructure' @('C4/Export-C4CodeModel.ps1') 'write' $fragments
+        $twins.ExitCode | Should -Not -Be 0
+        $twins.Output | Should -Match ([regex]::Escape("descrizione uguale per piu' viste (deployment_prod_rete_rg_x_a_vnet, deployment_prod_rete_rg_x_b_vnet)"))
+        $twins.Generated.Keys | Should -Not -Contain 'deployment-views/contoso.infrastructure.dsl'
+    }
+
+    It "ferma la generazione se la descrizione di una vista non nomina nessun elemento che la vista mostra (ADR-2140)" {
+        $fragments = New-ContainerFragments
+        $site = [ordered]@{ id = 'x_site'; name = 'site'; technology = 'T'; element = 'deploymentNode'; kind = 'application'; children = @(); instances = @('contoso_shop_ai_api') }
+        $fragments['contoso.infrastructure.deployment.json'] = [ordered]@{ containers = @(); relationships = @(); deployment = @(
+                [ordered]@{ name = 'prod'; kind = 'allocation'; nodes = @() }
+                [ordered]@{ name = 'prod rete'; kind = 'network'; environment = 'prod'; nodes = @($site); relationships = @() }
+            ) } | ConvertTo-Json -Depth 10
+        $silent = Invoke-C4Steps ([ordered]@{ 'source/README.md' = "# x`n" }) 'Contoso.Infrastructure' @('C4/Export-C4CodeModel.ps1') 'write' $fragments
+        $silent.ExitCode | Should -Not -Be 0
+        $silent.Output | Should -Match ([regex]::Escape('descrizione di una vista che non nomina nessun elemento che la vista mostra (deployment_prod_rete)'))
+    }
+
     It "da' i nomi della posizione a due nodi fratelli che restano uguali" {
         $fragments = New-ContainerFragments
         $twin = { param($Id) [ordered]@{ id = $Id; name = 'pe'; exposedName = 'archivio'; technology = 'T'; element = 'infrastructureNode'; kind = 'privateEndpoint'; children = @(); instances = @() } }
@@ -874,15 +934,14 @@ Describe 'Export-C4CodeModel.ps1 sugli ambienti di deployment' {
         $twins.Generated['deployment/contoso.infrastructure.dsl'] | Should -Match 'x_b = infrastructureNode "pe · 2"'
     }
 
-    It "in inglese da' alle viste i titoli e le frasi dello scopo della lingua" {
+    It "in inglese da' alle viste i titoli e le frasi delle descrizioni della lingua" {
         $english = Invoke-DeploymentGeneration (New-TerraformRepository) 'EN'
         $english.ExitCode | Should -Be 0 -Because $english.Output
-        $purposes = (Import-PowerShellDataFile "$PSScriptRoot/../../../../../V3/CI/Scripts/Common/Languages/EN.psd1").ViewPurposes
         $englishViews = $english.Generated['deployment-views/contoso.infrastructure.dsl'] -replace "`r`n", "`n"
         $englishViews | Should -Match 'title "Allocation · prod"'
         $englishViews | Should -Match '"deployment_prod_network" '
         $englishViews | Should -Match 'title "Network · prod · vnet-shared"'
-        ($englishViews -replace '\\n', ' ') | Should -Match ([regex]::Escape($purposes.Network))
+        Get-Block $englishViews 'deployment \* "prod network" "deployment_prod_network_vnet_shared" ' | Should -Match ([regex]::Escape('"description" "Subnets of the network vnet-shared in the prod environment: snet-endpoints.'))
         $english.Generated['deployment/contoso.infrastructure.dsl'] | Should -Match 'deploymentEnvironment "prod network"'
     }
 }

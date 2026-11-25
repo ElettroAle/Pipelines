@@ -12,16 +12,49 @@
         Allocation = 'Allocazione · {0}'; ApplicationAllocation = 'Allocazione · {0} · {1}'; Network = 'Rete · {0}'; NetworkPart = 'Rete · {0} · {1}'
         Containers = 'Container di {0}'; Logic = 'logica'; DataAccess = 'accesso ai dati'
     }
-    ViewPurposes   = @{
-        Allocation            = 'Dove gira ogni applicazione dell''ambiente: i piani di calcolo, le applicazioni che ospitano e le chiamate fra le applicazioni.'
-        ApplicationAllocation = 'Su che cosa si appoggia un''applicazione nell''ambiente: il suo piano di calcolo, i servizi gestiti e le altre applicazioni con cui comunica.'
-        Network               = 'Come si collegano le reti dell''ambiente: l''ingresso del traffico, le reti virtuali e i peering fra loro.'
-        NetworkPart           = 'Che cosa sta in una rete virtuale: le subnet, le applicazioni che vi si integrano, i private endpoint e il percorso del traffico in ingresso.'
-        Containers            = 'I container con cui un''applicazione comunica e che cosa passa fra loro.'
-        Logic                 = 'I componenti della logica di un container e come dipendono l''uno dall''altro.'
-        DataAccess            = 'I componenti di un container che leggono e scrivono i dati, e chi li usa.'
+    ViewDescriptions = @{
+        Allocation = @(
+            @{ Text = 'Applicazioni dell''ambiente {0}: {1}.'; Lists = @('Environment', 'Shown.containerInstance') }
+            @{ Text = 'Piani di calcolo e risorse che le ospitano: {0}.'; Lists = @('Shown.hostingPlan,Shown.application') }
+            @{ Text = 'Chiamate fra le applicazioni: {0}.'; Lists = @('Relationships') }
+        )
+        ApplicationAllocation = @(
+            @{ Text = 'Nell''ambiente {0}, {1} gira su {2}.'; Lists = @('Environment', 'Subject', 'Host') }
+            @{ Text = 'Si rivolge a {0}.'; Lists = @('Outgoing') }
+            @{ Text = 'Riceve le richieste di {0}.'; Lists = @('Incoming') }
+        )
+        Network = @(
+            @{ Text = 'Reti virtuali dell''ambiente {0}: {1}.'; Lists = @('Environment', 'Shown.virtualNetwork') }
+            @{ Text = 'Ingresso del traffico pubblico: {0}.'; Lists = @('Shown.ingress') }
+            @{ Text = 'Collegamenti fra le reti: {0}.'; Lists = @('Relationships') }
+        )
+        NetworkPart = @(
+            @{ Text = 'Subnet della rete {1} nell''ambiente {0}: {2}.'; Lists = @('Environment', 'Subject', 'Shown.subnet') }
+            @{ Text = 'Applicazioni integrate nella rete: {0}.'; Lists = @('Shown.containerInstance') }
+            @{ Text = 'Risorse raggiunte in privato dalla rete: {0}.'; Lists = @('Shown.privateEndpoint') }
+            @{ Text = 'Riceve il traffico da {0}.'; Lists = @('Incoming') }
+            @{ Text = 'Si collega a {0}.'; Lists = @('Outgoing') }
+        )
+        Containers = @(
+            @{ Text = 'Le relazioni di {0} con il resto del sistema.'; Lists = @('Subject') }
+            @{ Text = 'Si rivolge a {0}.'; Lists = @('Outgoing') }
+            @{ Text = 'Riceve le richieste di {0}.'; Lists = @('Incoming') }
+        )
+        Logic = @(
+            @{ Text = 'Componenti della logica di {0}: {1}.'; Lists = @('Subject', 'Shown.logic') }
+            @{ Text = 'Si rivolgono a {0}.'; Lists = @('Outgoing') }
+            @{ Text = 'Ricevono le richieste di {0}.'; Lists = @('Incoming') }
+        )
+        DataAccess = @(
+            @{ Text = 'Componenti dell''accesso ai dati di {0}: {1}.'; Lists = @('Subject', 'Shown.dataAccess') }
+            @{ Text = 'Si rivolgono a {0}.'; Lists = @('Outgoing') }
+            @{ Text = 'Usati da {0}.'; Lists = @('Incoming') }
+        )
     }
-    CommunicatesWith = 'Comunica con:'
+    ViewGroupIntroduction = @(
+        @{ Text = 'La vista {0} mostra l''insieme; le viste che seguono ne riprendono una alla volta le parti: {1}.'; Lists = @('First', 'Following') }
+    )
+    ViewNameFormat = '«{0}»'
     SummaryTag     = 'Riassunto'
     NetworkTag     = 'Rete'
     NetworkRelationships = @{ Peering = 'Collega le due reti con un peering'; Origin = 'Inoltra le richieste all''origine'; Backend = 'Inoltra le richieste al backend' }

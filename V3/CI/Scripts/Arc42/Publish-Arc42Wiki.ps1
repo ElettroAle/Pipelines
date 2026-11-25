@@ -222,9 +222,12 @@ function Get-WorkspaceView($Workspace, [string]$Key) {
     return @($Workspace.views.PSObject.Properties | Where-Object Name -Like '*Views' | ForEach-Object { @($_.Value) } | Where-Object { $_ -and $_.key -eq $Key }) | Select-Object -First 1
 }
 
+# Una vista generata porta la descrizione nella proprieta' description, che il disegno non mostra; una vista scritta a
+# mano la porta nella sua descrizione.
 function Get-ViewCaption($Workspace, [string]$Key) {
     $view = Get-WorkspaceView $Workspace $Key
-    $description = @("$($view.description)" -split '\r?\n' | ForEach-Object Trim | Where-Object { $_ }) -join ' '
+    $text = if ($view.properties.description) { $view.properties.description } else { $view.description }
+    $description = @("$text" -split '\r?\n' | ForEach-Object Trim | Where-Object { $_ }) -join ' '
     return [pscustomobject]@{ Title = "$($view.title)".Trim(); Description = $description }
 }
 
@@ -232,14 +235,21 @@ function ConvertTo-MarkdownLiteral([string]$Text) {
     return $Text -replace '([\\`*_\[\]<>])', '\$1'
 }
 
-# Il titolo e la descrizione di una vista, che comincia con la frase del suo scopo, accompagnano la sua immagine
-# anche fuori dal disegno, la descrizione su una riga sola; una vista senza titolo resta la sola immagine, con
-# la chiave.
-function Format-ViewImage([string]$Key, $Caption, $Document, $Views) {
+# Il titolo di una vista e' un titolo della pagina, di un livello sotto quello che la contiene, cosi' l'indice mostra le
+# viste; la descrizione, su una riga sola, precede l'immagine. Una vista senza titolo resta la sola immagine, con la chiave.
+function Format-ViewImage([string]$Key, $Caption, $Document, $Views, [int]$Level) {
     $target = if ($Document) { Get-DocumentViewFile $Key } else { "/$(Get-ViewImagePath $Key (Get-ViewImageFolder $Views $Key))" }
     if (-not $Caption.Title) { return , $(if ($Document) { "![]($target)" } else { "![$Key]($target)" }) }
     $title = ConvertTo-MarkdownLiteral $Caption.Title
-    return @("**$title**", '') + @(if ($Caption.Description) { (ConvertTo-MarkdownLiteral $Caption.Description), '' }) + "![$title]($target)"
+    return @("$('#' * $Level) $title", '') + @(if ($Caption.Description) { (ConvertTo-MarkdownLiteral $Caption.Description), '' }) + "![$title]($target)"
+}
+
+# Un marcatore che porta piu' viste si apre con le frasi della lingua composte dai nomi delle viste: la prima e quelle
+# che la seguono.
+function Format-ViewGroupIntroduction([object[]]$Captions) {
+    $names = @($Captions | ForEach-Object { $DocumentLanguage.ViewNameFormat -f $(if ($_.Title) { $_.Title } else { $_.Key }) })
+    $lists = @{ First = @($names[0]); Following = @($names | Select-Object -Skip 1) }
+    return ConvertTo-MarkdownLiteral (Format-LanguagePhrases $DocumentLanguage.ViewGroupIntroduction { param($Binding) $lists[$Binding] })
 }
 
 # Chi gestisce l'infrastruttura cerca le risorse con il loro nome in Azure, non con quello che hanno nelle viste.
@@ -275,6 +285,7 @@ function Convert-PageBody($Page, [hashtable]$PagesBySource, $Views, [hashtable]$
     $table = [Collections.Generic.List[string]]::new()
     $fence = $null
     $diagram = $null
+    $headingLevel = 1
     $convertLinks = if ($Document) { { param($Line) Convert-DocumentLinks $Line $Page $PagesBySource } } else { { param($Line) Convert-Links $Line $Page $PagesBySource } }
     $notice = Get-StatusNotice $Page $PagesBySource $Document
     if ($notice) { $output.Add($notice); $output.Add('') }
@@ -297,6 +308,7 @@ function Convert-PageBody($Page, [hashtable]$PagesBySource, $Views, [hashtable]$
         }
         if ($line -match $TablePattern) { $table.Add($line); continue }
         if ($table.Count) { & $flushTable }
+        if ($line -match $HeadingPattern) { $headingLevel = $Matches[1].Length }
         if ($line -match $FencePattern) {
             $fence = if ($Matches[1]) { $Matches[1] } else { 'text' }
             if ($fence -eq 'mermaid' -and $Document) { $diagram = [Collections.Generic.List[string]]::new() }
@@ -306,10 +318,13 @@ function Convert-PageBody($Page, [hashtable]$PagesBySource, $Views, [hashtable]$
             $marker = $Matches[1]
             $keys = @(Resolve-ViewMarker $marker $Views.Workspace)
             if (-not $keys.Count -or @($keys | Where-Object { -not $Views.Diagrams.ContainsKey($_) }).Count) { throw "$($Page.Source): la vista $marker non esiste nel modello C4" }
-            foreach ($key in $keys) {
+            $captions = @($keys | ForEach-Object { Get-ViewCaption $Views.Workspace $_ | Add-Member -NotePropertyName Key -NotePropertyValue $_ -PassThru })
+            if ($keys.Count -gt 1) { $output.Add((Format-ViewGroupIntroduction $captions)); $output.Add('') }
+            for ($index = 0; $index -lt $keys.Count; $index++) {
+                $key = $keys[$index]
                 $ShownViews[$key] = $Views.Diagrams[$key]
-                if ($key -ne $keys[0]) { $output.Add('') }
-                foreach ($line in (Format-ViewImage $key (Get-ViewCaption $Views.Workspace $key) $Document $Views)) { $output.Add($line) }
+                if ($index) { $output.Add('') }
+                foreach ($line in (Format-ViewImage $key $captions[$index] $Document $Views ([math]::Min(6, $headingLevel + 1)))) { $output.Add($line) }
                 foreach ($line in (Format-ResourceGroupTable $Views.Workspace $key)) { $output.Add($line) }
             }
         }
