@@ -19,6 +19,11 @@
 # aperta si unisce prima di registrare, cosi' numeri e Task restano unici. Il checkout deve portare tutta
 # la storia (fetchDepth: 0). L'identita' della build deve leggere i repository sorgente e i work item,
 # contribuire al repository, creare rami, contribuire alle PR e creare work item.
+# Con un targetBranch diverso da main il passo registra le decisioni nella bozza su quel ramo: le integrazioni
+# sono quelle nel ramo sourceBranch dei repository sorgente, su main per un repository che non lo ha, il ramo
+# della PR prende il nome del ramo di destinazione come suffisso (es. decisions/register/staging) e il work
+# item di una decisione che non entra lo nomina nel titolo. Dopo la promozione della bozza
+# (documentation-promote.yaml) il passo non gira.
 #
 # Riusato da:
 #   il consumer, nel job che segue l'integrazione nel ramo principale dei repository sorgente
@@ -31,9 +36,11 @@
 #   baselineFile       → file con l'istante dell'ultima registrazione (default: .decisions-baseline)
 #   language           → lingua del documento, per le sezioni e l'etichetta della sostituzione (default: IT)
 #   workItemType       → tipo del work item di una decisione che non entra (default: Bug)
-#   branch             → ramo della PR (default: decisions/register)
-#   title              → titolo della PR (default: docs(decisions): decisions of the work arrived in main)
-#   targetBranch       → ramo principale, dei repository sorgente e delle decisioni (default: main)
+#   branch             → ramo della PR, con il suffisso /<targetBranch> se targetBranch non e' main
+#                        (default: decisions/register)
+#   title              → titolo della PR (default: docs(decisions): decisions of the work arrived in <targetBranch>)
+#   targetBranch       → ramo del documento su cui si apre la PR: main o un ramo di bozza (default: main)
+#   sourceBranch       → ramo di integrazione dei repository sorgente (default: targetBranch)
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -64,11 +71,15 @@ parameters:
 
   - name: title
     type: string
-    default: 'docs(decisions): decisions of the work arrived in main'
+    default: ''
 
   - name: targetBranch
     type: string
     default: 'main'
+
+  - name: sourceBranch
+    type: string
+    default: ''
 
   - name: templatesDirectory
     type: string
@@ -79,6 +90,7 @@ parameters:
 steps:
   - task: PowerShell@2
     displayName: 'Decisions of the work arrived in ${{ parameters.targetBranch }}'
+    condition: and(succeeded(), ne(variables['documentationPromoted'], 'True'))
     inputs:
       filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Adr/Register-Decisions.ps1'
       workingDirectory: '$(Build.SourcesDirectory)'
@@ -87,11 +99,12 @@ steps:
       ADR_REGISTER_SOURCES: ${{ join(';', parameters.sources) }}
       DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}
       ADR_REGISTER_BASELINE: ${{ parameters.baselineFile }}
-      ADR_REGISTER_BRANCH: ${{ parameters.branch }}
+      ADR_REGISTER_BRANCH: ${{ iif(eq(parameters.targetBranch, 'main'), parameters.branch, format('{0}/{1}', parameters.branch, parameters.targetBranch)) }}
       ADR_REGISTER_WORK_ITEM_TYPE: ${{ parameters.workItemType }}
       ADR_REGISTER_DESCRIPTION_FILE: '$(Agent.TempDirectory)/decision-registration.md'
       DOCUMENT_LANGUAGE: ${{ parameters.language }}
       TARGET_BRANCH: ${{ parameters.targetBranch }}
+      SOURCE_BRANCH: ${{ parameters.sourceBranch }}
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
   - template: azureRepos-pull-request.yaml
@@ -99,8 +112,8 @@ steps:
       paths:
         - ${{ parameters.decisionsDirectory }}
         - ${{ parameters.baselineFile }}
-      branch: ${{ parameters.branch }}
-      title: ${{ parameters.title }}
+      branch: ${{ iif(eq(parameters.targetBranch, 'main'), parameters.branch, format('{0}/{1}', parameters.branch, parameters.targetBranch)) }}
+      title: "${{ coalesce(parameters.title, format('docs(decisions): decisions of the work arrived in {0}', parameters.targetBranch)) }}"
       descriptionFile: '$(Agent.TempDirectory)/decision-registration.md'
       targetBranch: ${{ parameters.targetBranch }}
       templatesDirectory: ${{ parameters.templatesDirectory }}

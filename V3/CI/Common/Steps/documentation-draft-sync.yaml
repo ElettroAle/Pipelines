@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# ── CI Step: Allineamento della bozza della documentazione ───────────────────
+#
+# Dopo ogni aggiornamento del ramo principale del documento, per promozione o per riscrittura, il ramo di bozza lo
+# riceve con una PR in auto-complete da targetBranch a draftBranch, con merge e senza cancellare il ramo
+# (V3/CI/Scripts/Documentation/Sync-DocumentationDraft.ps1): la bozza riparte dal documento ufficiale e le pagine
+# che non ne differiscono piu' spariscono alla pubblicazione successiva della wiki. Senza ramo di bozza, o con una
+# bozza che contiene gia' il ramo principale, nessuna PR. L'identita' della build deve leggere il repository del
+# documento e contribuire alle PR.
+#
+# Riusato da:
+#   il consumer, nella pipeline che parte dall'aggiornamento del ramo principale del documento
+#
+# Parametri
+# ─────────
+#   draftBranch        → ramo di bozza del documento (default: staging)
+#   targetBranch       → ramo principale del documento (default: main)
+#   workingDirectory   → checkout del repository del documento (default: $(Build.SourcesDirectory))
+#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+parameters:
+  - name: draftBranch
+    type: string
+    default: 'staging'
+
+  - name: targetBranch
+    type: string
+    default: 'main'
+
+  - name: workingDirectory
+    type: string
+    default: '$(Build.SourcesDirectory)'
+
+  - name: templatesDirectory
+    type: string
+    default: '$(Pipeline.Workspace)/pipeline-templates'
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+steps:
+  - task: PowerShell@2
+    displayName: 'Documentation ${{ parameters.draftBranch }} restarts from ${{ parameters.targetBranch }}'
+    inputs:
+      filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Documentation/Sync-DocumentationDraft.ps1'
+      workingDirectory: '${{ parameters.workingDirectory }}'
+      pwsh: true
+    env:
+      DRAFT_BRANCH: ${{ parameters.draftBranch }}
+      TARGET_BRANCH: ${{ parameters.targetBranch }}
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)

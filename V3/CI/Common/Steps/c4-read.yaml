@@ -23,7 +23,8 @@
 #   workingDirectory   → cartella in cui gira lo script (default: $(Build.SourcesDirectory))
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #   environment        → variabili d'ambiente proprie del lettore (default: nessuna)
-#   condition          → condizione del passo, es. per saltarlo quando manca un file (default: succeeded())
+#   condition          → condizione del passo, es. per saltarlo quando manca un file (default: succeeded(), e il passo non
+#                        gira dopo la promozione della bozza, documentation-promote.yaml)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -66,7 +67,7 @@ parameters:
 
   - name: condition
     type: string
-    default: 'succeeded()'
+    default: "and(succeeded(), ne(variables['documentationPromoted'], 'True'))"
 
 # ─────────────────────────────────────────────────────────────────────────────
 
