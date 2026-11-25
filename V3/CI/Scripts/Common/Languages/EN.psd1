@@ -22,6 +22,8 @@
             @{ Text = 'In the {0} environment, {1} runs on {2}.'; Lists = @('Environment', 'Subject', 'Host') }
             @{ Text = 'It turns to {0}.'; Lists = @('Outgoing') }
             @{ Text = 'It receives the requests of {0}.'; Lists = @('Incoming') }
+            @{ Text = 'It exchanges requests with {0}.'; Lists = @('Mutual') }
+            @{ Text = 'It has no relationships with other elements of the environment.'; Lists = @('Unrelated') }
         )
         Network = @(
             @{ Text = 'Virtual networks of the {0} environment: {1}.'; Lists = @('Environment', 'Shown.virtualNetwork') }
@@ -34,22 +36,46 @@
             @{ Text = 'Resources reached privately from the network: {0}.'; Lists = @('Shown.privateEndpoint') }
             @{ Text = 'It receives the traffic from {0}.'; Lists = @('Incoming') }
             @{ Text = 'It connects to {0}.'; Lists = @('Outgoing') }
+            @{ Text = 'It exchanges traffic with {0}.'; Lists = @('Mutual') }
+            @{ Text = 'It has no connections with other networks.'; Lists = @('Unrelated') }
         )
         Containers = @(
-            @{ Text = 'The relationships of {0} with the rest of the system.'; Lists = @('Subject') }
-            @{ Text = 'It turns to {0}.'; Lists = @('Outgoing') }
-            @{ Text = 'It receives the requests of {0}.'; Lists = @('Incoming') }
+            @{ Text = '{0} turns to {1}.'; Lists = @('Subject', 'Outgoing') }
+            @{ Text = '{0} receives the requests of {1}.'; Lists = @('Subject', 'Incoming') }
+            @{ Text = '{0} exchanges requests with {1}.'; Lists = @('Subject', 'Mutual') }
+            @{ Text = '{0} has no relationships with other systems.'; Lists = @('Unrelated') }
         )
         Logic = @(
             @{ Text = 'Logic components of {0}: {1}.'; Lists = @('Subject', 'Shown.logic') }
             @{ Text = 'They turn to {0}.'; Lists = @('Outgoing') }
             @{ Text = 'They receive the requests of {0}.'; Lists = @('Incoming') }
+            @{ Text = 'They exchange requests with {0}.'; Lists = @('Mutual') }
+            @{ Text = 'They neither turn to other elements nor receive requests from them.'; Lists = @('Unrelated') }
         )
         DataAccess = @(
             @{ Text = 'Data access components of {0}: {1}.'; Lists = @('Subject', 'Shown.dataAccess') }
             @{ Text = 'They turn to {0}.'; Lists = @('Outgoing') }
             @{ Text = 'Used by {0}.'; Lists = @('Incoming') }
+            @{ Text = 'They exchange requests with {0}.'; Lists = @('Mutual') }
+            @{ Text = 'They neither turn to other elements nor receive requests from them.'; Lists = @('Unrelated') }
         )
+    }
+    LevelSummaries = @{
+        person = @{ Count = '{0} people' }
+        softwareSystem = @{ Count = '{0} external systems' }
+        container = @{ Count = '{0} containers' }
+        logic = @{ Count = '{0} logic components'; InView = '{0} logic components described in the view {1}' }
+        dataAccess = @{ Count = '{0} data access components'; InView = '{0} data access components described in the view {1}' }
+        containerInstance = @{ Count = '{0} container instances' }
+        region = @{ Count = '{0} regions' }
+        hostingPlan = @{ Count = '{0} compute plans' }
+        application = @{ Count = '{0} resources hosting applications' }
+        virtualNetwork = @{ Count = '{0} virtual networks' }
+        subnet = @{ Count = '{0} subnets' }
+        privateEndpoint = @{ Count = '{0} private accesses' }
+        gateway = @{ Count = '{0} gateways' }
+        ingress = @{ Count = '{0} public entries' }
+        ingressEndpoint = @{ Count = '{0} public entry points' }
     }
     ViewGroupIntroduction = @(
         @{ Text = 'The view {0} shows the whole; the views that follow take up its parts one at a time: {1}.'; Lists = @('First', 'Following') }

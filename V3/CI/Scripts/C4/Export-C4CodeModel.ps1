@@ -21,6 +21,8 @@
 # Ogni vista generata ha un titolo della lingua e, nella proprieta' description, la descrizione composta dal suo
 # contenuto con le frasi della lingua (ViewDescriptions): la descrizione resta fuori dal disegno. Una descrizione
 # che non nomina nessun elemento della sua vista, o uguale a quella di un'altra vista, ferma la generazione.
+# Negli elenchi delle relazioni ogni elemento collegato compare una volta; oltre LinkedListLimit elementi l'elenco
+# si riassume per livello (LevelSummaries), perche' una frase con piu' nomi non si legge di seguito.
 # Le viste della parte stanno in GENERATED_DIRECTORY/views/<repository>.dsl. Ogni applicazione ha la vista
 # dei container container-<applicazione>, con gli elementi con cui ha relazioni, nel sistema che nel
 # workspace accanto a GENERATED_DIRECTORY include i container generati: una vista con tutte le applicazioni
@@ -52,6 +54,9 @@ $SummaryTag = $DocumentLanguage.SummaryTag
 $NetworkTag = $DocumentLanguage.NetworkTag
 $NetworkViewSuffix = $DocumentLanguage.NetworkViewSuffix
 $NodeDescriptions = $DocumentLanguage.NodeDescriptions
+$LevelSummaries = $DocumentLanguage.LevelSummaries
+$ViewNameFormat = $DocumentLanguage.ViewNameFormat
+$LinkedListLimit = 5
 $TitleSeparator = ' · '
 $DataAccessSegments = @("$(if ($env:C4_DATA_ACCESS_SEGMENTS) { $env:C4_DATA_ACCESS_SEGMENTS } else { 'DataAccess' })" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $WorkspaceFile = Join-Path (Split-Path -Parent $GeneratedDirectory) 'workspace.dsl'
@@ -287,10 +292,72 @@ function Format-RelationshipItem([string]$Name, [string]$Text) {
     return $Name
 }
 
+function New-LinkedEnd([string]$Name, [string]$Kind, [string]$Group) {
+    return [pscustomobject]@{ Name = $Name; Kind = $Kind; Group = $Group }
+}
+
+# Una voce di un elenco delle relazioni: il nome con cui compare, il testo e il senso della relazione che vi
+# porta, e gli elementi collegati con cui si riassume.
+function New-LinkedItem([string]$Name, [string]$Text, [string]$Direction, $Ends) {
+    return [pscustomobject]@{ Name = $Name; Text = $Text; Direction = $Direction; Ends = @($Ends) }
+}
+
+# Le relazioni del soggetto per elemento collegato: un elemento collegato nei due sensi sta solo in Mutual.
+function Get-SubjectLinks($Content) {
+    $outgoing = @($Content.Relationships | Where-Object { $Content.Inside -contains $_.Source -and $Content.Inside -notcontains $_.Target } |
+            ForEach-Object { New-LinkedItem $_.TargetName $_.Text 'Outgoing' (New-LinkedEnd $_.TargetName $_.TargetKind $_.TargetGroup) })
+    $incoming = @($Content.Relationships | Where-Object { $Content.Inside -contains $_.Target -and $Content.Inside -notcontains $_.Source } |
+            ForEach-Object { New-LinkedItem $_.SourceName $_.Text 'Incoming' (New-LinkedEnd $_.SourceName $_.SourceKind $_.SourceGroup) })
+    $mutual = @($outgoing | ForEach-Object Name | Where-Object { @($incoming.Name) -ccontains $_ })
+    return @{
+        Outgoing = @($outgoing | Where-Object { $mutual -cnotcontains $_.Name })
+        Incoming = @($incoming | Where-Object { $mutual -cnotcontains $_.Name })
+        Mutual   = @($outgoing + $incoming | Where-Object { $mutual -ccontains $_.Name })
+    }
+}
+
+function Get-ViewLinks($Content) {
+    return @($Content.Relationships | ForEach-Object {
+            New-LinkedItem "$($_.SourceName) → $($_.TargetName)" $_.Text '' @((New-LinkedEnd $_.SourceName $_.SourceKind $_.SourceGroup), (New-LinkedEnd $_.TargetName $_.TargetKind $_.TargetGroup))
+        })
+}
+
+# Ogni elemento collegato compare una volta, con il testo solo se vi porta una relazione sola: le relazioni fra le
+# stesse istanze in nodi diversi hanno lo stesso testo e contano come una.
+function Get-LinkedNames($Items, [string]$ViewKey) {
+    $linked = @($Items | Group-Object Name -CaseSensitive)
+    if ($linked.Count -gt $LinkedListLimit) { return Get-LevelSummaries @($Items | ForEach-Object Ends) $ViewKey }
+    foreach ($element in $linked) {
+        $relationships = @($element.Group | ForEach-Object { "$($_.Direction)|$($_.Text)" } | Sort-Object -Unique)
+        Format-RelationshipItem $element.Name $(if ($relationships.Count -eq 1) { $element.Group[0].Text })
+    }
+}
+
+# Per livello il numero degli elementi collegati, con la vista che li descrive se sono tutti dello stesso gruppo e
+# quel gruppo ha una vista del loro livello; un elemento solo del suo livello si nomina.
+function Get-LevelSummaries($Ends, [string]$ViewKey) {
+    foreach ($level in @($Ends | Sort-Object Name -Unique | Group-Object Kind)) {
+        $phrases = $LevelSummaries["$($level.Name)"]
+        if ($level.Count -eq 1 -or -not $phrases) { $level.Group | ForEach-Object Name; continue }
+        $view = Get-LevelView $level.Group $level.Name $ViewKey
+        if ($view -and $phrases.InView) { $phrases.InView -f $level.Count, ($ViewNameFormat -f $view) } else { $phrases.Count -f $level.Count }
+    }
+}
+
+function Get-LevelView($Ends, [string]$Kind, [string]$ViewKey) {
+    $groups = @($Ends | ForEach-Object Group | Sort-Object -Unique)
+    if ($groups.Count -ne 1 -or -not $groups[0]) { return $null }
+    $view = $script:LevelViews["$($groups[0])|$Kind"]
+    if ($view -and $view.Key -ne $ViewKey) { return $view.Title }
+    return $null
+}
+
 # I nomi di un elenco del contenuto della vista, in ordine di nome: Subject, Environment, Host (cio' che ospita il
-# soggetto), Shown.<livello> (gli elementi mostrati di quel livello, senza il soggetto), Outgoing e Incoming (le
-# relazioni del soggetto con il loro testo), Relationships (tutte le relazioni della vista).
-function Get-ViewListNames($Content, [string]$Binding) {
+# soggetto), Shown.<livello> (gli elementi mostrati di quel livello, senza il soggetto), Outgoing, Incoming e
+# Mutual (gli elementi collegati al soggetto in un senso o nei due), Unrelated (il soggetto, se non ha relazioni),
+# Relationships (tutte le relazioni della vista).
+function Get-ViewListNames($Content, [string]$Binding, [string]$ViewKey) {
+    $links = Get-SubjectLinks $Content
     $names = foreach ($source in ($Binding -split ',' | ForEach-Object Trim)) {
         $list, $kind = $source -split '\.', 2
         switch ($list) {
@@ -298,15 +365,9 @@ function Get-ViewListNames($Content, [string]$Binding) {
             'Environment' { $Content.Environment }
             'Host' { $Content.Elements | Where-Object { $Content.SubjectIds -contains $_.Id } | ForEach-Object Host }
             'Shown' { $Content.Elements | Where-Object { $Content.SubjectIds -notcontains $_.Id -and (-not $kind -or $_.Kind -eq $kind) } | ForEach-Object Name }
-            'Outgoing' {
-                $Content.Relationships | Where-Object { $Content.Inside -contains $_.Source -and $Content.Inside -notcontains $_.Target } |
-                    ForEach-Object { Format-RelationshipItem $_.TargetName $_.Text }
-            }
-            'Incoming' {
-                $Content.Relationships | Where-Object { $Content.Inside -contains $_.Target -and $Content.Inside -notcontains $_.Source } |
-                    ForEach-Object { Format-RelationshipItem $_.SourceName $_.Text }
-            }
-            'Relationships' { $Content.Relationships | ForEach-Object { Format-RelationshipItem "$($_.SourceName) → $($_.TargetName)" $_.Text } }
+            { $links.ContainsKey($_) } { Get-LinkedNames $links[$list] $ViewKey }
+            'Unrelated' { if (-not @($links.Values | ForEach-Object { $_ }).Count) { $Content.Subject } }
+            'Relationships' { Get-LinkedNames (Get-ViewLinks $Content) $ViewKey }
         }
     }
     return @($names | Where-Object { $_ } | Sort-Object -Unique)
@@ -314,7 +375,7 @@ function Get-ViewListNames($Content, [string]$Binding) {
 
 # La descrizione si registra con i nomi degli elementi della vista, per le regole che la generazione verifica.
 function Register-ViewDescription([string]$Key, $Content) {
-    $description = Format-LanguagePhrases $ViewDescriptions[$Content.Kind] { param($Binding) Get-ViewListNames $Content $Binding }
+    $description = Format-LanguagePhrases $ViewDescriptions[$Content.Kind] { param($Binding) Get-ViewListNames $Content $Binding $Key }
     $script:ViewDescriptionsWritten.Add([pscustomobject]@{ Key = $Key; Description = $description; Names = @($Content.Elements | ForEach-Object Name | Where-Object { $_ }) })
     return $description
 }
@@ -348,12 +409,14 @@ function Get-ElementName([string]$Id) {
 function Register-SystemElements {
     $script:ElementNames = @{}
     $script:ElementKinds = @{}
+    $script:ElementGroups = @{}
     foreach ($container in $script:SystemContainers.Values) {
         $script:ElementNames["$($container.id)"] = Get-ContainerName $container
         $script:ElementKinds["$($container.id)"] = 'container'
         foreach ($component in @($container.components | Where-Object { $_ })) {
             $script:ElementNames["$($component.id)"] = $component.name
             $script:ElementKinds["$($component.id)"] = if (Test-DataAccess $component) { 'dataAccess' } else { 'logic' }
+            $script:ElementGroups["$($component.id)"] = "$($container.id)"
         }
     }
     $script:ModelText.People.PSObject.Properties | Where-Object { $_ } | ForEach-Object { $script:ElementNames[$_.Name] = $_.Value.name; $script:ElementKinds[$_.Name] = 'person' }
@@ -363,7 +426,10 @@ function Register-SystemElements {
 function New-CodeViewContent([string]$Kind, [string]$Subject, [string[]]$SubjectIds, [string[]]$Inside, [string[]]$Elements) {
     $shown = @($Elements | ForEach-Object { [pscustomobject]@{ Id = $_; Name = Get-ElementName $_; Kind = $script:ElementKinds[$_]; Host = $null } })
     $relationships = @($script:PartRelationships | ForEach-Object {
-            [pscustomobject]@{ Source = $_.Source; Target = $_.Target; SourceName = Get-ElementName $_.Source; TargetName = Get-ElementName $_.Target; Text = $_.Text }
+            [pscustomobject]@{
+                Source = $_.Source; Target = $_.Target; SourceName = Get-ElementName $_.Source; TargetName = Get-ElementName $_.Target; Text = $_.Text
+                SourceKind = $script:ElementKinds[$_.Source]; TargetKind = $script:ElementKinds[$_.Target]; SourceGroup = $script:ElementGroups[$_.Source]; TargetGroup = $script:ElementGroups[$_.Target]
+            }
         })
     return New-ViewContent $Kind $Subject '' $shown $relationships $SubjectIds $Inside
 }
@@ -374,32 +440,40 @@ function Format-View([string]$Kind, [string]$Scope, [string]$Key, [string]$Title
         @(Format-ViewProperties ([ordered]@{ description = $description })) + "    autoLayout $Layout" + '}'
 }
 
-function Format-ComponentViews($Container) {
-    $components = @($Container.components | Where-Object { $_ })
-    $ids = @($components | ForEach-Object id)
-    $dataAccessIds = @($components | Where-Object { Test-DataAccess $_ } | ForEach-Object id)
-    $logicIds = @($components | Where-Object { -not (Test-DataAccess $_) } | ForEach-Object id)
+function New-ComponentView([string]$Kind, [string]$Level, $Container, [string]$Key, [string[]]$Ids, [bool]$WithUsed) {
     $name = Get-ContainerName $Container
-    if ($logicIds.Count) {
-        $elements = Get-ViewElements $logicIds $ids $false
-        Format-View 'component' $Container.id $Container.id "$name$TitleSeparator$($ViewTitles.Logic)" (New-CodeViewContent 'Logic' $name @() $logicIds $elements) $elements 'tb'
+    return [pscustomobject]@{
+        Kind = $Kind; Level = $Level; Container = "$($Container.id)"; Name = $name; Key = $Key; Title = "$name$TitleSeparator$($ViewTitles[$Kind])"
+        Ids = @($Ids); ContainerIds = @($Container.components | Where-Object { $_ } | ForEach-Object id); WithUsed = $WithUsed
     }
-    if ($dataAccessIds.Count) {
-        $elements = Get-ViewElements $dataAccessIds $ids $true
-        Format-View 'component' $Container.id "$($Container.id)-$DataAccessViewSuffix" "$name$TitleSeparator$($ViewTitles.DataAccess)" (New-CodeViewContent 'DataAccess' $name @() $dataAccessIds $elements) $elements 'tb'
-    }
+}
+
+# Le viste dei componenti di un container, una per livello con componenti: la logica e l'accesso ai dati.
+function Get-ComponentViews($Container) {
+    $components = @($Container.components | Where-Object { $_ })
+    $logicIds = @($components | Where-Object { -not (Test-DataAccess $_) } | ForEach-Object id)
+    $dataAccessIds = @($components | Where-Object { Test-DataAccess $_ } | ForEach-Object id)
+    if ($logicIds.Count) { New-ComponentView 'Logic' 'logic' $Container $Container.id $logicIds $false }
+    if ($dataAccessIds.Count) { New-ComponentView 'DataAccess' 'dataAccess' $Container "$($Container.id)-$DataAccessViewSuffix" $dataAccessIds $true }
+}
+
+function Format-ComponentView($View) {
+    $elements = Get-ViewElements $View.Ids $View.ContainerIds $View.WithUsed
+    Format-View 'component' $View.Container $View.Key $View.Title (New-CodeViewContent $View.Kind $View.Name @() $View.Ids $elements) $elements 'tb'
 }
 
 function Format-Views($Fragments, [string]$System) {
     $lines = @("// Viste generate da $Repository con Export-C4CodeModel.ps1: non si modificano a mano.")
+    $componentViews = @($Fragments.Content.containers | Where-Object { $_ -and @($_.components | Where-Object { $_ }).Count } | ForEach-Object { Get-ComponentViews $_ })
+    $componentViews | ForEach-Object { $script:LevelViews["$($_.Container)|$($_.Level)"] = $_ }
     foreach ($application in Get-Applications $Fragments) {
         $id = $application.id
         $name = Get-ContainerName $application
         $content = New-CodeViewContent 'Containers' $name @($id) @($id) (Get-ViewElements @($id) @($id) $true)
         $lines += Format-View 'container' $System "container-$id" ($ViewTitles.Containers -f $name) $content @("->$id->") 'lr'
     }
-    foreach ($container in @($Fragments.Content.containers | Where-Object { @($_.components | Where-Object { $_ }).Count })) {
-        $lines += Format-ComponentViews $container
+    foreach ($view in $componentViews) {
+        $lines += Format-ComponentView $view
     }
     return ($lines -join "`n") + "`n"
 }
@@ -420,7 +494,7 @@ function Get-TreeNodes($Nodes) {
 # Un livello di nodo nuovo si descrive aggiungendo le sue frasi alla lingua, mai con codice.
 function Get-NodeKindIssues($Environments) {
     $kinds = @($Environments | ForEach-Object { Get-TreeNodes $_.nodes } | ForEach-Object { "$($_.kind)" } | Sort-Object -Unique)
-    $kinds | Where-Object { -not $_ -or -not $NodeDescriptions.ContainsKey($_) } |
+    $kinds | Where-Object { -not $_ -or -not $NodeDescriptions.ContainsKey($_) -or -not $LevelSummaries.ContainsKey($_) } |
         ForEach-Object { New-Issue $Repository 'livello di nodo senza frasi nella lingua' $(if ($_) { $_ } else { '(nessuno)' }) }
 }
 
@@ -735,7 +809,10 @@ function Get-ViewRelationships($View, $Plan) {
         $source = Get-ShownAncestor $relationship.Source $View.Visible $Plan.Tree
         $target = Get-ShownAncestor $relationship.Target $View.Visible $Plan.Tree
         if (-not $source -or -not $target -or $source -eq $target) { continue }
-        [pscustomobject]@{ Source = $relationship.Source; Target = $relationship.Target; SourceName = $Plan.Tree.Names[$source]; TargetName = $Plan.Tree.Names[$target]; Text = $relationship.Text }
+        [pscustomobject]@{
+            Source = $relationship.Source; Target = $relationship.Target; SourceName = $Plan.Tree.Names[$source]; TargetName = $Plan.Tree.Names[$target]; Text = $relationship.Text
+            SourceKind = $Plan.Tree.Kinds[$source]; TargetKind = $Plan.Tree.Kinds[$target]; SourceGroup = ''; TargetGroup = ''
+        }
     }
 }
 
@@ -907,6 +984,7 @@ function Get-GenerationIssues {
     Register-SystemElements
     $script:RelationshipTexts = Get-RelationshipTexts
     $script:ViewDescriptionsWritten = [System.Collections.Generic.List[object]]::new()
+    $script:LevelViews = @{}
     $name = $Repository.ToLowerInvariant()
     $outputs = [ordered]@{ "containers/$name.dsl" = Format-Model $fragments; "views/$name.dsl" = Format-Views $fragments $system; 'context.dsl' = Format-Context }
     $environments = Get-DeploymentEnvironments $fragments

@@ -132,6 +132,14 @@ Describe "Funzionalità: Viste di deployment generate dall'infrastruttura" {
             @($nodes | Where-Object { -not $levels.ContainsKey("$($_.kind)") }) | Should -BeNullOrEmpty
         }
 
+        It "E ogni livello di nodo generato ha in ogni lingua il nome con cui le descrizioni delle viste lo riassumono (ADR-2148)" {
+            $kinds = @($result.Fragment.deployment | ForEach-Object { Get-AllNodes $_.nodes } | ForEach-Object { "$($_.kind)" } | Sort-Object -Unique)
+            foreach ($language in 'IT', 'EN') {
+                $summaries = (Import-PowerShellDataFile "$PSScriptRoot/../../../../../V3/CI/Scripts/Common/Languages/$language.psd1").LevelSummaries
+                @($kinds + 'containerInstance' | Where-Object { -not $summaries -or -not $summaries.ContainsKey($_) }) | Should -BeNullOrEmpty -Because $language
+            }
+        }
+
         It "E nessuna parte delle viste di deployment è scritta a mano" {
             @($result.Fragment.manifests) | Should -Contain 'App/main.tf'
             @($result.Fragment.containers) | Should -BeNullOrEmpty
@@ -300,14 +308,14 @@ Describe "Funzionalità: Viste di deployment che rispondono a una domanda" {
         }
     }
 
-    Context "Scenario: la descrizione di ogni vista nasce dal suo contenuto con le frasi della lingua, fuori dal disegno (ADR-2140)" {
+    Context "Scenario: la descrizione di ogni vista nasce dal suo contenuto con le frasi della lingua, fuori dal disegno, e nomina una volta ogni elemento collegato (ADR-2140, ADR-2148)" {
         It "Allora la descrizione di ogni vista di deployment nomina il soggetto, gli elementi che mostra e le relazioni con il loro testo" -ForEach @(
             @{ Key = 'deployment_prod'; Expected = "Applicazioni dell'ambiente prod: Api, Worker. Piani di calcolo e risorse che le ospitano: asp-contoso-prod. Chiamate fra le applicazioni: Worker → Api." }
             @{ Key = 'deployment_prod_app_contoso_shop_ai_api'; Expected = "Nell'ambiente prod, Api gira su asp-contoso-prod. Si rivolge a kv-contoso-prod. Riceve le richieste di Worker." }
             @{ Key = 'deployment_prod_app_contoso_shop_ai_worker'; Expected = "Nell'ambiente prod, Worker gira su asp-contoso-prod. Si rivolge a Api." }
-            @{ Key = 'deployment_prod_rete'; Expected = "Reti virtuali dell'ambiente prod: vnet-contoso-prod, vnet-shared. Ingresso del traffico pubblico: afd-contoso-prod. Collegamenti fra le reti: afd-contoso-prod → vnet-contoso-prod (Inoltra le richieste all'origine), vnet-contoso-prod → vnet-shared (Collega le due reti con un peering), vnet-contoso-prod → vnet-shared (Inoltra le richieste al backend)." }
-            @{ Key = 'deployment_prod_rete_vnet_contoso_prod'; Expected = "Subnet della rete vnet-contoso-prod nell'ambiente prod: snet-engine, snet-gateway, snet-worker. Applicazioni integrate nella rete: Api, Worker. Riceve il traffico da afd-contoso-prod (Inoltra le richieste all'origine). Si collega a vnet-shared (Collega le due reti con un peering), vnet-shared (Inoltra le richieste al backend)." }
-            @{ Key = 'deployment_prod_rete_vnet_shared'; Expected = "Subnet della rete vnet-shared nell'ambiente prod: snet-endpoints. Risorse raggiunte in privato dalla rete: Api. Riceve il traffico da vnet-contoso-prod (Collega le due reti con un peering), vnet-contoso-prod (Inoltra le richieste al backend)." }
+            @{ Key = 'deployment_prod_rete'; Expected = "Reti virtuali dell'ambiente prod: vnet-contoso-prod, vnet-shared. Ingresso del traffico pubblico: afd-contoso-prod. Collegamenti fra le reti: afd-contoso-prod → vnet-contoso-prod (Inoltra le richieste all'origine), vnet-contoso-prod → vnet-shared." }
+            @{ Key = 'deployment_prod_rete_vnet_contoso_prod'; Expected = "Subnet della rete vnet-contoso-prod nell'ambiente prod: snet-engine, snet-gateway, snet-worker. Applicazioni integrate nella rete: Api, Worker. Riceve il traffico da afd-contoso-prod (Inoltra le richieste all'origine). Si collega a vnet-shared." }
+            @{ Key = 'deployment_prod_rete_vnet_shared'; Expected = "Subnet della rete vnet-shared nell'ambiente prod: snet-endpoints. Risorse raggiunte in privato dalla rete: Api. Riceve il traffico da vnet-contoso-prod." }
         ) {
             (Get-ExportedView $export $Key).properties.description | Should -Be $Expected
         }

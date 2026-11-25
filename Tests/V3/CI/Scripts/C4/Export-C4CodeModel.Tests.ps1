@@ -133,12 +133,12 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
 
         It "Allora la vista dei container di un'applicazione nomina l'applicazione" {
             $res.ExitCode | Should -Be 0 -Because ($res.Output)
-            Get-ViewDescription $views 'container sistema' 'container-contoso_shop_ai_api' | Should -Be 'Le relazioni di Api con il resto del sistema.'
+            Get-ViewDescription $views 'container sistema' 'container-contoso_shop_ai_api' | Should -Be 'Api non ha relazioni con altri sistemi.'
         }
 
         It "E la vista della logica nomina i suoi componenti e, con il loro testo, le relazioni che ne escono e vi entrano" {
             Get-ViewDescription $views 'component contoso_shop_ai_api' 'contoso_shop_ai_api' |
-                Should -Be 'Componenti della logica di Api: Api, UseCase.WrittenConversations, Utils. Si rivolgono a DataAccess.AzureServiceBus, DataAccess.AzureStorageAccount. Ricevono le richieste di DataAccess.AzureServiceBus.'
+                Should -Be 'Componenti della logica di Api: Api, UseCase.WrittenConversations, Utils. Si rivolgono a DataAccess.AzureStorageAccount. Si scambiano richieste con DataAccess.AzureServiceBus.'
         }
 
         It "E la vista dell'accesso ai dati nomina i suoi componenti e chi li usa" {
@@ -147,7 +147,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         }
 
         It "E una frase con un elenco vuoto non si scrive" {
-            Get-ViewDescription $views 'component contoso_shop_ai_worker' 'contoso_shop_ai_worker' | Should -Be 'Componenti della logica di Worker: UseCase.WrittenConversations, Worker.'
+            Get-ViewDescription $views 'component contoso_shop_ai_worker' 'contoso_shop_ai_worker' | Should -Be 'Componenti della logica di Worker: UseCase.WrittenConversations, Worker. Non si rivolgono ad altri elementi e non ne ricevono richieste.'
         }
 
         It "E la descrizione sta nella proprieta' della vista e non nella vista, che il disegno mostra sotto il titolo" {
@@ -159,6 +159,90 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
             $descriptions = @([regex]::Matches($views, '"description" "([^"]*)"') | ForEach-Object { $_.Groups[1].Value })
             $descriptions.Count | Should -Be 5
             @($descriptions | Sort-Object -Unique).Count | Should -Be $descriptions.Count
+        }
+    }
+
+    Context "Scenario: le descrizioni delle viste nominano una volta ogni elemento collegato e riassumono per livello gli elenchi lunghi (ADR-2148)" {
+        BeforeAll {
+            function Get-ComponentId([string]$Container, [string]$Project) {
+                return "contoso_shop_ai_$($Container)__contoso_shop_ai_$($Project.ToLowerInvariant() -replace '\.', '_')"
+            }
+
+            # Api chiama anche i componenti di accesso ai dati in Extra, ognuno un progetto del suo container.
+            function New-EngineWithDataAccess([string[]]$Extra) {
+                $files = New-EngineRepository
+                $references = @('Contoso.Shop.AI.UseCase.WrittenConversations', 'Contoso.Shop.AI.Utils', 'Contoso.Shop.AI.DataAccess.AzureServiceBus', 'Contoso.Shop.AI.DataAccess.AzureStorageAccount') +
+                    @($Extra | ForEach-Object { "Contoso.Shop.AI.DataAccess.$_" })
+                Add-Project $files 'Contoso.Shop.AI.Api' (New-Project 'Microsoft.NET.Sdk.Web' $references)
+                $Extra | ForEach-Object { Add-Project $files "Contoso.Shop.AI.DataAccess.$_" (New-Project) }
+                return $files
+            }
+
+            $relationships = [ordered]@{
+                "$(Get-ComponentId 'api' 'Api') -> $(Get-ComponentId 'api' 'DataAccess.AzureServiceBus')"                         = @{ description = 'Accoda il lavoro'; technology = '' }
+                "$(Get-ComponentId 'api' 'Api') -> $(Get-ComponentId 'api' 'DataAccess.AzureStorageAccount')"                     = @{ description = 'Legge i file'; technology = '' }
+                "$(Get-ComponentId 'api' 'DataAccess.AzureServiceBus') -> $(Get-ComponentId 'api' 'UseCase.WrittenConversations')" = @{ description = 'Notifica i messaggi'; technology = '' }
+            }
+            $text = [ordered]@{ units = [ordered]@{ contoso_shop_ai_api = [ordered]@{ basis = ''; elements = @{}; relationships = $relationships; links = @() } } }
+            $files = New-EngineRepository
+            $files['docs/architecture/c4/generated/model.text.json'] = $text | ConvertTo-Json -Depth 10
+            $described = Invoke-Generation $files 'Contoso.Shop.AI'
+            $views = $described.Generated['views/contoso.shop.ai.dsl']
+
+            $long = Invoke-Generation (New-EngineWithDataAccess @('AzureAISearch', 'AzureOpenAI', 'CosmosDB', 'KeyVault', 'Twilio')) 'Contoso.Shop.AI'
+            $longViews = $long.Generated['views/contoso.shop.ai.dsl']
+            $five = Invoke-Generation (New-EngineWithDataAccess @('AzureAISearch', 'AzureOpenAI', 'CosmosDB', 'KeyVault')) 'Contoso.Shop.AI'
+            $fiveViews = $five.Generated['views/contoso.shop.ai.dsl']
+
+            $people = [ordered]@{}
+            1..6 | ForEach-Object { $people["cliente$_"] = @{ name = "Cliente $_"; description = 'Scrive al negozio.'; technical = $false } }
+            $links = @(1..6 | ForEach-Object { @{ source = "cliente$_"; target = 'contoso_shop_bff_web'; description = 'Apre la chat'; technology = 'HTTPS' } })
+            $crowd = [ordered]@{ units = [ordered]@{ contoso_shop_bff_web = [ordered]@{ basis = ''; elements = @{}; relationships = @{}; links = $links } }; people = $people; externalSystems = @{} }
+            $bffFiles = New-BffRepository
+            $bffFiles['docs/architecture/c4/generated/model.text.json'] = $crowd | ConvertTo-Json -Depth 10
+            $crowded = Invoke-Generation $bffFiles 'Contoso.Shop.Bff.Web'
+        }
+
+        It "Allora un elemento collegato con piu' relazioni nello stesso senso compare una volta, senza il testo delle relazioni" {
+            $described.ExitCode | Should -Be 0 -Because $described.Output
+            Get-ViewDescription $views 'component contoso_shop_ai_api' 'contoso_shop_ai_api-accesso-dati' |
+                Should -Be "Componenti dell'accesso ai dati di Api: DataAccess.AzureServiceBus, DataAccess.AzureStorageAccount. Si rivolgono a UseCase.WrittenConversations (Notifica i messaggi). Usati da Api."
+        }
+
+        It "E un elemento collegato con una sola relazione in quel senso porta il testo della relazione" {
+            Get-ViewDescription $views 'component contoso_shop_ai_api' 'contoso_shop_ai_api' | Should -Match ([regex]::Escape('Si rivolgono a DataAccess.AzureStorageAccount (Legge i file).'))
+        }
+
+        It "E un elemento collegato nei due sensi compare solo nella frase dei due sensi" {
+            Get-ViewDescription $views 'component contoso_shop_ai_api' 'contoso_shop_ai_api' |
+                Should -Be 'Componenti della logica di Api: Api, UseCase.WrittenConversations, Utils. Si rivolgono a DataAccess.AzureStorageAccount (Legge i file). Si scambiano richieste con DataAccess.AzureServiceBus.'
+        }
+
+        It "E un elenco di relazioni con piu' di 5 elementi si riassume per livello, con la vista dello stesso gruppo che li descrive" {
+            $long.ExitCode | Should -Be 0 -Because $long.Output
+            Get-ViewDescription $longViews 'component contoso_shop_ai_api' 'contoso_shop_ai_api' |
+                Should -Be "Componenti della logica di Api: Api, UseCase.WrittenConversations, Utils. Si rivolgono a 6 componenti dell'accesso ai dati descritti nella vista «Api · accesso ai dati». Si scambiano richieste con DataAccess.AzureServiceBus."
+        }
+
+        It "E un elenco di relazioni con 5 elementi resta per nome" {
+            $five.ExitCode | Should -Be 0 -Because $five.Output
+            Get-ViewDescription $fiveViews 'component contoso_shop_ai_api' 'contoso_shop_ai_api' |
+                Should -Match ([regex]::Escape('Si rivolgono a DataAccess.AzureAISearch, DataAccess.AzureOpenAI, DataAccess.AzureStorageAccount, DataAccess.CosmosDB, DataAccess.KeyVault.'))
+        }
+
+        It "E un livello senza una vista dello stesso gruppo si riassume con il numero e il nome del livello" {
+            $crowded.ExitCode | Should -Be 0 -Because $crowded.Output
+            Get-ViewDescription $crowded.Generated['views/contoso.shop.bff.web.dsl'] 'container sistema' 'container-contoso_shop_bff_web' | Should -Be 'Web riceve le richieste di 6 persone.'
+        }
+
+        It "E gli elenchi degli elementi mostrati restano completi" {
+            Get-ViewDescription $longViews 'component contoso_shop_ai_api' 'contoso_shop_ai_api-accesso-dati' |
+                Should -Match ([regex]::Escape("Componenti dell'accesso ai dati di Api: DataAccess.AzureAISearch, DataAccess.AzureOpenAI, DataAccess.AzureServiceBus, DataAccess.AzureStorageAccount, DataAccess.CosmosDB, DataAccess.KeyVault, DataAccess.Twilio."))
+        }
+
+        It "E una vista con soggetto e senza relazioni lo dice con la frase della lingua" {
+            Get-ViewDescription $views 'container sistema' 'container-contoso_shop_ai_worker' | Should -Be 'Worker non ha relazioni con altri sistemi.'
+            $views | Should -Not -Match 'con il resto del sistema'
         }
     }
 
@@ -183,8 +267,8 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         It "E in inglese titoli e frasi delle descrizioni vengono dalla lingua del documento" {
             $english = (Invoke-C4Generation (New-EngineRepository) 'Contoso.Shop.AI' @('dotnet10') -Environment @{ DOCUMENT_LANGUAGE = 'EN' }).Generated['views/contoso.shop.ai.dsl']
             Get-ViewDescription $english 'component contoso_shop_ai_api' 'contoso_shop_ai_api' |
-                Should -Be 'Logic components of Api: Api, UseCase.WrittenConversations, Utils. They turn to DataAccess.AzureServiceBus, DataAccess.AzureStorageAccount. They receive the requests of DataAccess.AzureServiceBus.'
-            Get-ViewDescription $english 'container sistema' 'container-contoso_shop_ai_api' | Should -Be 'The relationships of Api with the rest of the system.'
+                Should -Be 'Logic components of Api: Api, UseCase.WrittenConversations, Utils. They turn to DataAccess.AzureStorageAccount. They exchange requests with DataAccess.AzureServiceBus.'
+            Get-ViewDescription $english 'container sistema' 'container-contoso_shop_ai_api' | Should -Be 'Api has no relationships with other systems.'
             $english | Should -Match ([regex]::Escape('title "Containers of Api"'))
             $english | Should -Match ([regex]::Escape('title "Api · logic"'))
         }
@@ -422,7 +506,7 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
 
         It "E la descrizione della vista dei container nomina chi chiama l'applicazione, con il testo della relazione (ADR-2140)" {
             Get-ViewDescription $res.Generated['views/contoso.shop.bff.web.dsl'] 'container sistema' 'container-contoso_shop_bff_web' |
-                Should -Be 'Le relazioni di Web con il resto del sistema. Riceve le richieste di Cliente (Apre la chat).'
+                Should -Be 'Web riceve le richieste di Cliente (Apre la chat).'
         }
     }
 
