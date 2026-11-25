@@ -30,16 +30,16 @@ BeforeAll {
         return Add-DevProxy (New-ClientRepository) @{ '/api' = 'https://localhost:5001/'; '/hubs' = 'https://LOCALHOST:5001' }
     }
 
-    # La descrizione della vista: la frase dello scopo e, se c'e', la riga dei componenti dell'altro livello.
     function Get-ComponentViewOpening([string]$Scope, [string]$Key, [string]$Kind = 'component') {
-        return "$Kind $Scope `"$Key`"( `"[^`"]*`")? \{"
+        return "(?m)^$Kind $Scope `"$Key`" \{"
     }
 
-    # La descrizione di una vista su una riga, senza gli a capo che il disegno vuole.
+    # La descrizione di una vista: la proprieta' description del suo blocco, che il disegno non mostra.
     function Get-ViewDescription([string]$Views, [string]$Declaration, [string]$Key) {
-        $match = [regex]::Match($Views, "$([regex]::Escape($Declaration)) `"$([regex]::Escape($Key))`" `"([^`"]*)`" \{")
+        $block = Get-Block $Views "^$([regex]::Escape($Declaration)) `"$([regex]::Escape($Key))`" \{"
+        $match = [regex]::Match($block, '(?m)^\s*"description" "([^"]*)"\s*$')
         if (-not $match.Success) { return $null }
-        return $match.Groups[1].Value -replace '\\n', ' '
+        return $match.Groups[1].Value
     }
 }
 
@@ -125,33 +125,40 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         }
     }
 
-    Context "Scenario: ogni tipo di vista porta una frase fissa che dice il suo scopo, anche nelle viste dei container e dei componenti" {
+    Context "Scenario: la descrizione di ogni vista dei container e dei componenti nasce dal suo contenuto con le frasi della lingua (ADR-2140)" {
         BeforeAll {
             $res = Invoke-Generation (New-EngineRepository) 'Contoso.Shop.AI'
             $views = $res.Generated['views/contoso.shop.ai.dsl']
-            $purposes = (Import-PowerShellDataFile "$PSScriptRoot/../../../../../V3/CI/Scripts/Common/Languages/IT.psd1").ViewPurposes
         }
 
-        It "Allora la vista dei container di un'applicazione ha come descrizione la frase del suo scopo" {
+        It "Allora la vista dei container di un'applicazione nomina l'applicazione" {
             $res.ExitCode | Should -Be 0 -Because ($res.Output)
-            Get-ViewDescription $views 'container sistema' 'container-contoso_shop_ai_api' | Should -Be $purposes.Containers
+            Get-ViewDescription $views 'container sistema' 'container-contoso_shop_ai_api' | Should -Be 'Le relazioni di Api con il resto del sistema.'
         }
 
-        It "E la vista della logica comincia con la frase del suo scopo e poi nomina la vista dell'accesso ai dati e i componenti con cui comunica" {
-            Get-ViewDescription $views 'component contoso_shop_ai_api' 'contoso_shop_ai_api' | Should -Be "$($purposes.Logic) Comunica con: Api · accesso ai dati (DataAccess.AzureServiceBus, DataAccess.AzureStorageAccount)"
+        It "E la vista della logica nomina i suoi componenti e, con il loro testo, le relazioni che ne escono e vi entrano" {
+            Get-ViewDescription $views 'component contoso_shop_ai_api' 'contoso_shop_ai_api' |
+                Should -Be 'Componenti della logica di Api: Api, UseCase.WrittenConversations, Utils. Si rivolgono a DataAccess.AzureServiceBus, DataAccess.AzureStorageAccount. Ricevono le richieste di DataAccess.AzureServiceBus.'
         }
 
-        It "E la vista dell'accesso ai dati comincia con la frase del suo scopo e poi nomina la vista della logica e i componenti con cui comunica" {
-            Get-ViewDescription $views 'component contoso_shop_ai_api' 'contoso_shop_ai_api-accesso-dati' | Should -Be "$($purposes.DataAccess) Comunica con: Api · logica (Api, UseCase.WrittenConversations)"
+        It "E la vista dell'accesso ai dati nomina i suoi componenti e chi li usa" {
+            Get-ViewDescription $views 'component contoso_shop_ai_api' 'contoso_shop_ai_api-accesso-dati' |
+                Should -Be "Componenti dell'accesso ai dati di Api: DataAccess.AzureServiceBus, DataAccess.AzureStorageAccount. Si rivolgono a UseCase.WrittenConversations. Usati da Api."
         }
 
-        It "E la vista della logica di ""Worker"", senza l'altro livello, ha solo la frase del suo scopo" {
-            Get-ViewDescription $views 'component contoso_shop_ai_worker' 'contoso_shop_ai_worker' | Should -Be $purposes.Logic
+        It "E una frase con un elenco vuoto non si scrive" {
+            Get-ViewDescription $views 'component contoso_shop_ai_worker' 'contoso_shop_ai_worker' | Should -Be 'Componenti della logica di Worker: UseCase.WrittenConversations, Worker.'
         }
 
-        It "E la descrizione va a capo fra due parole, senza righe oltre la larghezza del disegno" {
-            $description = [regex]::Match($views, 'component contoso_shop_ai_api "contoso_shop_ai_api" "([^"]*)" \{').Groups[1].Value
-            @($description -split '\\n' | Where-Object { $_.Length -gt 100 }) | Should -BeNullOrEmpty -Because $description
+        It "E la descrizione sta nella proprieta' della vista e non nella vista, che il disegno mostra sotto il titolo" {
+            $views | Should -Not -Match '(?m)^(container|component) \S+ "[^"]+" "'
+            $views | Should -Not -Match '\\n'
+        }
+
+        It "E viste diverse hanno descrizioni diverse" {
+            $descriptions = @([regex]::Matches($views, '"description" "([^"]*)"') | ForEach-Object { $_.Groups[1].Value })
+            $descriptions.Count | Should -Be 5
+            @($descriptions | Sort-Object -Unique).Count | Should -Be $descriptions.Count
         }
     }
 
@@ -173,11 +180,11 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
             Get-Block $views (Get-ComponentViewOpening 'contoso_shop_ai_api' 'contoso_shop_ai_api-accesso-dati') | Should -Match '\n    title "Api · accesso ai dati"\n'
         }
 
-        It "E in inglese titoli, frasi dello scopo e riga vengono dalla lingua del documento" {
+        It "E in inglese titoli e frasi delle descrizioni vengono dalla lingua del documento" {
             $english = (Invoke-C4Generation (New-EngineRepository) 'Contoso.Shop.AI' @('dotnet10') -Environment @{ DOCUMENT_LANGUAGE = 'EN' }).Generated['views/contoso.shop.ai.dsl']
-            $purposes = (Import-PowerShellDataFile "$PSScriptRoot/../../../../../V3/CI/Scripts/Common/Languages/EN.psd1").ViewPurposes
-            Get-ViewDescription $english 'component contoso_shop_ai_api' 'contoso_shop_ai_api' | Should -Be "$($purposes.Logic) Communicates with: Api · data access (DataAccess.AzureServiceBus, DataAccess.AzureStorageAccount)"
-            Get-ViewDescription $english 'container sistema' 'container-contoso_shop_ai_api' | Should -Be $purposes.Containers
+            Get-ViewDescription $english 'component contoso_shop_ai_api' 'contoso_shop_ai_api' |
+                Should -Be 'Logic components of Api: Api, UseCase.WrittenConversations, Utils. They turn to DataAccess.AzureServiceBus, DataAccess.AzureStorageAccount. They receive the requests of DataAccess.AzureServiceBus.'
+            Get-ViewDescription $english 'container sistema' 'container-contoso_shop_ai_api' | Should -Be 'The relationships of Api with the rest of the system.'
             $english | Should -Match ([regex]::Escape('title "Containers of Api"'))
             $english | Should -Match ([regex]::Escape('title "Api · logic"'))
         }
@@ -412,6 +419,11 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
             $res.Generated['containers/contoso.shop.bff.web.dsl'] | Should -Match 'cliente -> contoso_shop_bff_web "Apre la chat" "HTTPS"'
             $res.Generated['containers/contoso.shop.bff.web.dsl'] | Should -Not -Match 'contoso_shop_ai_api -> entra'
         }
+
+        It "E la descrizione della vista dei container nomina chi chiama l'applicazione, con il testo della relazione (ADR-2140)" {
+            Get-ViewDescription $res.Generated['views/contoso.shop.bff.web.dsl'] 'container sistema' 'container-contoso_shop_bff_web' |
+                Should -Be 'Le relazioni di Web con il resto del sistema. Riceve le richieste di Cliente (Apre la chat).'
+        }
     }
 
     Context "Schema dello scenario: caso non riconosciuto — <elemento>" -ForEach @(
@@ -517,11 +529,11 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
             @($export.Workspace.views.componentViews | ForEach-Object key) | Should -Contain 'contoso_shop_ai_api-accesso-dati'
         }
 
-        It "E le viste generate portano il loro titolo, la frase del loro scopo e la riga dell'altro livello" {
-            $purposes = (Import-PowerShellDataFile "$PSScriptRoot/../../../../../V3/CI/Scripts/Common/Languages/IT.psd1").ViewPurposes
+        It "E le viste generate portano il loro titolo e, nella proprieta' che il disegno non mostra, la descrizione (ADR-2140)" {
             $view = $export.Workspace.views.componentViews | Where-Object key -EQ 'contoso_shop_ai_api-accesso-dati'
             $view.title | Should -Be 'Api · accesso ai dati'
-            ($view.description -replace '\s+', ' ') | Should -Be "$($purposes.DataAccess) Comunica con: Api · logica (Api, UseCase.WrittenConversations)"
+            $view.description | Should -BeNullOrEmpty
+            $view.properties.description | Should -BeLike "Componenti dell'accesso ai dati di Api: *"
             ($export.Workspace.views.containerViews | Where-Object key -EQ 'container-contoso_shop_ai_api').title | Should -Be 'Container di Api'
         }
 

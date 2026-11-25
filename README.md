@@ -339,8 +339,9 @@ template d'ingresso: lo step `document-directories.yaml` le mette in `DOCS_DIREC
 | Marcatore di vista | `<!-- vista: <chiave> -->`, `<!-- vista: <tipo>* -->`, `<!-- vista: <prefisso>* -->` | `<!-- view: <chiave> -->`, `<!-- view: <tipo>* -->`, `<!-- view: <prefisso>* -->` |
 | Tag dei container con vista dei componenti | `Applicazione` | `Application` |
 | Titoli delle viste generate | `Allocazione · <ambiente>`, `Allocazione · <ambiente> · <applicazione>`, `Rete · <ambiente>`, `Rete · <ambiente> · <rete>`, `Container di <applicazione>`, `<container> · logica`, `<container> · accesso ai dati` | `Allocation · <ambiente>`, `Allocation · <ambiente> · <applicazione>`, `Network · <ambiente>`, `Network · <ambiente> · <rete>`, `Containers of <applicazione>`, `<container> · logic`, `<container> · data access` |
-| Frasi dello scopo delle viste generate | `ViewPurposes` in `IT.psd1` | `ViewPurposes` in `EN.psd1` |
-| Ambiente e viste della rete, relazioni di rete e riassunte | `<ambiente> rete`, tag `Rete` e `Riassunto`, `Comunica con:` fra i livelli dei componenti | `<ambiente> network`, tag `Network` and `Summary`, `Communicates with:` between the component levels |
+| Frasi della descrizione delle viste generate, per tipo di vista | `ViewDescriptions` in `IT.psd1` | `ViewDescriptions` in `EN.psd1` |
+| Introduzione di un marcatore con piu' viste, e nome di una vista nel testo | `ViewGroupIntroduction`, `«<titolo>»` | `ViewGroupIntroduction`, `“<titolo>”` |
+| Ambiente e viste della rete, relazioni di rete e riassunte | `<ambiente> rete`, tag `Rete` e `Riassunto` | `<ambiente> network`, tag `Network` and `Summary` |
 | Colonne della tabella dei gruppi di risorse | `Gruppo di risorse`, `Contenuto`, `Modulo` | `Resource group`, `Content`, `Module` |
 | Frasi della descrizione dei nodi di deployment, per livello | `NodeDescriptions` in `IT.psd1` | `NodeDescriptions` in `EN.psd1` |
 | Parti della decisione con struttura e flusso nel codice | `Struttura nel codice`, `Flusso nel codice` | `Code structure`, `Code flow` |
@@ -526,7 +527,12 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   (`!include generated/views`). Ogni applicazione ha una vista dei container con chiave
   `container-<applicazione>`: l'applicazione e gli elementi con cui ha relazioni, in entrambe le direzioni.
   Ogni vista generata ha un titolo suo, fatto dai nomi delle parti che mostra (`Container di <applicazione>`
-  in italiano), e come descrizione la frase fissa che dice il suo scopo (`ViewPurposes` della lingua).
+  in italiano), e nella proprieta' `description`, che il disegno non mostra, la descrizione composta dal suo
+  contenuto con le frasi del suo tipo in `ViewDescriptions` della lingua: ogni frase lega elenchi della vista
+  (il soggetto, l'ambiente, cio' che ospita il soggetto, gli elementi mostrati di un livello, le relazioni del
+  soggetto in uscita e in ingresso con il loro testo, tutte le relazioni della vista), e una frase con un elenco
+  vuoto non si scrive. Una descrizione che non nomina nessun elemento della sua vista, o uguale a quella di
+  un'altra vista, ferma la generazione nominando le viste.
   Una vista con tutte le applicazioni di un repository sommerebbe i loro vicini e non si leggerebbe alla
   scala minima. La vista appartiene al sistema che in `workspace.dsl`, accanto alla cartella delle parti generate,
   include la cartella `containers`; se il workspace non lo dichiara la generazione si ferma. Un container
@@ -535,9 +541,8 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   La vista della logica mostra i componenti che non sono di accesso ai dati e gli elementi fuori dal
   container in relazione con loro. Quella dell'accesso ai dati mostra i suoi componenti, ciò che ognuno usa
   e gli elementi fuori dal container che li chiamano. Il titolo di ognuna è il nome del container con il
-  livello (`<container> · logica`, `<container> · accesso ai dati`); se i suoi componenti hanno relazioni con
-  quelli dell'altro livello, la descrizione della vista li nomina, dopo la frase dello scopo, con il titolo
-  dell'altra vista (`Comunica con: <titolo> (<componenti>)`). Un componente è di accesso ai dati se un segmento del
+  livello (`<container> · logica`, `<container> · accesso ai dati`); la descrizione nomina i suoi componenti e
+  quelli con cui comunicano, anche dell'altro livello. Un componente è di accesso ai dati se un segmento del
   suo nome, separato da punti, è fra `dataAccessSegments` (default `DataAccess`). Scrive
   infine `context.dsl`, da includere nel modello prima del sistema: le persone e i sistemi esterni del
   catalogo, i sistemi con il tag `Esterno` e, se tecnici, `Tecnico`. Si committa con le parti generate.
@@ -617,7 +622,8 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   `Riassunto`, e ogni vista esclude le derivate delle altre viste di cui mostra entrambe le estremita'.
   Un nodo e un'istanza di container, che Structurizr non collega, si collegano attraverso il nodo
   dell'istanza. Le viste di rete mostrano solo le relazioni con il tag `Rete`. Il titolo dice il tipo della vista, l'ambiente e la parte
-  (`Allocazione · prod · Bff.Web` in italiano) e la descrizione e' la frase fissa dello scopo del tipo.
+  (`Allocazione · prod · Bff.Web` in italiano) e la descrizione e' composta dal contenuto della vista con le
+  frasi del suo tipo, come per le viste dei container.
   L'allocazione dichiara nella proprieta' `resourceGroups` gli ambienti di cui la pubblicazione elenca i
   gruppi di risorse in una tabella sotto l'immagine, con il nome Azure di ogni risorsa. Due nodi fratelli con lo stesso nome, che Structurizr
   rifiuta, aggiungono al nome i servizi esposti, il gruppo di risorse o il nome della risorsa, e la
@@ -819,8 +825,11 @@ pubblicazione:
   C4-PlantUML e PlantUML (versione fissata, SHA-256 verificato) le disegna con le librerie C4 interne e il
   layout smetana, senza Graphviz e senza rete, nella disposizione che si legge meglio, come nella verifica
   del modello. Le immagini stanno in `.attachments/<wikiRoot>/<vista>.png`. Prima dell'immagine di una
-  vista con un titolo stanno il titolo, in grassetto, e la descrizione della vista, che ne è anche il testo
-  alternativo; una vista senza titolo ha la chiave come testo alternativo. Lo stesso vale nel documento unico.
+  vista con un titolo stanno il titolo, come titolo della pagina un livello sotto quello che contiene il
+  marcatore, così l'indice mostra le viste, e la descrizione della vista: la proprieta' `description` di una
+  vista generata, la descrizione di una vista scritta a mano. Il titolo è anche il testo alternativo; una vista
+  senza titolo ha la chiave. Un marcatore che porta più viste si apre con l'introduzione `ViewGroupIntroduction`
+  della lingua, composta dai nomi della prima vista e di quelle che la seguono. Lo stesso vale nel documento unico.
   Con la proprieta' `c4plantuml.tags` delle viste, colori e forme vengono dagli stili del modello, che
   allora dichiara anche quelli di `Person`, `Software System`, `Container` e `Component`.
 - I blocchi ` ```mermaid ` diventano la sintassi della wiki `::: mermaid`. I link alle sezioni e alle

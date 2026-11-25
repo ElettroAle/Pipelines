@@ -110,9 +110,9 @@ BeforeAll {
         Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' 'deployment sistema produzione "deployment-produzione" {' "deployment sistema produzione `"deployment-produzione`" `"Comunica con:\nAzure (inoltra)`" {`n            title `"Produzione, nodo Azure`""
     }
 
-    # Una vista di allocazione come la scrive Export-C4CodeModel.ps1: la frase dello scopo, la proprieta' con
-    # gli ambienti di cui elencare i gruppi di risorse e gli elementi con il gruppo, il modulo che li dichiara e il
-    # nome Azure. Il private endpoint si chiama nella vista con la parte che raggiunge.
+    # Una vista di allocazione come la scrive Export-C4CodeModel.ps1: la descrizione e gli ambienti di cui elencare i
+    # gruppi di risorse nelle proprieta', e gli elementi con il gruppo, il modulo che li dichiara e il nome Azure. Il
+    # private endpoint si chiama nella vista con la parte che raggiunge.
     function Add-ResourceGroupView([System.Collections.IDictionary]$Docs) {
         $placement = {
             param($Group, $Module, $AzureName)
@@ -125,7 +125,7 @@ BeforeAll {
                 "infrastructureNode `"kv-a|b`" {`n$(& $placement 'rg-dati' 'Platform' 'kv-a|b')`n}"
                 "infrastructureNode `"Senza nome Azure`" {`n$(& $placement 'rg-vuoto' 'Platform' '')`n}"
             ) -join "`n")
-        Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' 'deployment sistema produzione "deployment-produzione" {' "deployment sistema produzione `"deployment-produzione`" `"Dove gira ogni applicazione dell'ambiente.`" {`n            title `"Allocazione · Produzione`"`n            properties {`n                `"resourceGroups`" `"Produzione`"`n            }"
+        Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' 'deployment sistema produzione "deployment-produzione" {' "deployment sistema produzione `"deployment-produzione`" {`n            title `"Allocazione · Produzione`"`n            properties {`n                `"description`" `"Applicazioni dell'ambiente Produzione: Client.`"`n                `"resourceGroups`" `"Produzione`"`n            }"
     }
 }
 
@@ -231,6 +231,30 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
         }
     }
 
+    Context "Scenario: un marcatore con piu' viste si apre con un'introduzione e ogni vista ha un titolo della pagina (ADR-2140)" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-ValidDocs
+            Edit-Docs $docs 'docs/architecture/05_building_block_view.md' "<!-- vista: componenti-client -->`n<!-- vista: componenti-bff -->`n<!-- vista: componenti-motore -->`n<!-- vista: componenti-worker -->" '<!-- vista: component* -->'
+            foreach ($part in 'client', 'bff', 'motore', 'worker') {
+                Edit-Docs $docs 'docs/architecture/c4/workspace.dsl' "component $part `"componenti-$part`" {" "component $part `"componenti-$part`" {`n            title `"Componenti di $part`"`n            properties {`n                `"description`" `"Le parti di $part.`"`n            }"
+            }
+            $res = Invoke-WikiPublish $docs $wiki
+            $page = Get-WikiPage $wiki 'Architettura/5.-Building-Block-View.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora il marcatore si apre con l'introduzione composta dai nomi della prima vista e di quelle che la seguono" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $page | Should -Match ([regex]::Escape("## Componenti`n`nLa vista «Componenti di bff» mostra l'insieme; le viste che seguono ne riprendono una alla volta le parti: «Componenti di client», «Componenti di motore», «Componenti di worker».`n`n### Componenti di bff`n`nLe parti di bff.`n`n![Componenti di bff]"))
+        }
+
+        It "E ogni vista ha un titolo un livello sotto il titolo che contiene il marcatore, nell'ordine delle viste" {
+            @([regex]::Matches($page, '(?m)^### (.+)$') | ForEach-Object { $_.Groups[1].Value }) | Should -Be @('Componenti di bff', 'Componenti di client', 'Componenti di motore', 'Componenti di worker')
+            $page | Should -Not -Match '\*\*Componenti di'
+        }
+    }
+
     Context "Scenario: ogni vista ha un titolo suo, fatto dai nomi delle parti che mostra, e una riga che nomina le parti con cui comunica; nel documento titolo e riga accompagnano l'immagine" {
         BeforeAll {
             $wiki = New-Wiki
@@ -241,15 +265,19 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
         }
         AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
 
-        It "Allora nella pagina il titolo della vista, in grassetto, e la riga dei vicini precedono l'immagine (ADR-2113)" {
+        It "Allora nella pagina il titolo della vista, un livello sotto il titolo che la contiene, e la descrizione scritta a mano precedono l'immagine (ADR-2140)" {
             $res.ExitCode | Should -Be 0 -Because $res.Output
-            $page | Should -Match ([regex]::Escape("**Produzione, nodo Azure**`n`nComunica con: Azure (inoltra)`n`n![Produzione, nodo Azure](/.attachments/Architettura/deployment-produzione.png)"))
+            $page | Should -Match ([regex]::Escape("## In breve`n`n### Produzione, nodo Azure`n`nComunica con: Azure (inoltra)`n`n![Produzione, nodo Azure](/.attachments/Architettura/deployment-produzione.png)"))
         }
 
         It "E una vista senza titolo resta l'immagine con la chiave come testo alternativo (ADR-2113)" {
             $building = Get-WikiPage $wiki 'Architettura/5.-Building-Block-View.md'
             $building | Should -Match ([regex]::Escape('![contenitori](/.attachments/Architettura/contenitori.png)'))
-            $building | Should -Not -Match '\*\*\n\n!\[contenitori\]'
+            $building | Should -Not -Match '#\n\n!\[contenitori\]'
+        }
+
+        It "E un marcatore con una vista sola non ha l'introduzione delle viste (ADR-2140)" {
+            $page | Should -Not -Match 'le viste che seguono'
         }
     }
 
@@ -272,8 +300,8 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
                         ) -join "`n")))
         }
 
-        It "E la frase dello scopo della vista precede l'immagine" {
-            $page | Should -Match ([regex]::Escape("**Allocazione · Produzione**`n`nDove gira ogni applicazione dell'ambiente.`n`n![Allocazione"))
+        It "E la descrizione che la vista porta nella proprieta' description precede l'immagine (ADR-2140)" {
+            $page | Should -Match ([regex]::Escape("### Allocazione · Produzione`n`nApplicazioni dell'ambiente Produzione: Client.`n`n![Allocazione"))
         }
 
         It "E una vista senza la proprieta' dei gruppi di risorse non ha la tabella" {

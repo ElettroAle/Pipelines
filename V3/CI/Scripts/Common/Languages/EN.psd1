@@ -12,16 +12,49 @@
         Allocation = 'Allocation · {0}'; ApplicationAllocation = 'Allocation · {0} · {1}'; Network = 'Network · {0}'; NetworkPart = 'Network · {0} · {1}'
         Containers = 'Containers of {0}'; Logic = 'logic'; DataAccess = 'data access'
     }
-    ViewPurposes   = @{
-        Allocation            = 'Where each application of the environment runs: the compute plans, the applications they host and the calls between the applications.'
-        ApplicationAllocation = 'What an application relies on in the environment: its compute plan, the managed services and the other applications it communicates with.'
-        Network               = 'How the networks of the environment connect: the incoming traffic, the virtual networks and the peerings between them.'
-        NetworkPart           = 'What a virtual network holds: the subnets, the applications integrated in them, the private endpoints and the path of the incoming traffic.'
-        Containers            = 'The containers an application communicates with and what passes between them.'
-        Logic                 = 'The logic components of a container and how they depend on each other.'
-        DataAccess            = 'The components of a container that read and write the data, and who uses them.'
+    ViewDescriptions = @{
+        Allocation = @(
+            @{ Text = 'Applications of the {0} environment: {1}.'; Lists = @('Environment', 'Shown.containerInstance') }
+            @{ Text = 'Compute plans and resources hosting them: {0}.'; Lists = @('Shown.hostingPlan,Shown.application') }
+            @{ Text = 'Calls between the applications: {0}.'; Lists = @('Relationships') }
+        )
+        ApplicationAllocation = @(
+            @{ Text = 'In the {0} environment, {1} runs on {2}.'; Lists = @('Environment', 'Subject', 'Host') }
+            @{ Text = 'It turns to {0}.'; Lists = @('Outgoing') }
+            @{ Text = 'It receives the requests of {0}.'; Lists = @('Incoming') }
+        )
+        Network = @(
+            @{ Text = 'Virtual networks of the {0} environment: {1}.'; Lists = @('Environment', 'Shown.virtualNetwork') }
+            @{ Text = 'Entry of the public traffic: {0}.'; Lists = @('Shown.ingress') }
+            @{ Text = 'Connections between the networks: {0}.'; Lists = @('Relationships') }
+        )
+        NetworkPart = @(
+            @{ Text = 'Subnets of the network {1} in the {0} environment: {2}.'; Lists = @('Environment', 'Subject', 'Shown.subnet') }
+            @{ Text = 'Applications integrated in the network: {0}.'; Lists = @('Shown.containerInstance') }
+            @{ Text = 'Resources reached privately from the network: {0}.'; Lists = @('Shown.privateEndpoint') }
+            @{ Text = 'It receives the traffic from {0}.'; Lists = @('Incoming') }
+            @{ Text = 'It connects to {0}.'; Lists = @('Outgoing') }
+        )
+        Containers = @(
+            @{ Text = 'The relationships of {0} with the rest of the system.'; Lists = @('Subject') }
+            @{ Text = 'It turns to {0}.'; Lists = @('Outgoing') }
+            @{ Text = 'It receives the requests of {0}.'; Lists = @('Incoming') }
+        )
+        Logic = @(
+            @{ Text = 'Logic components of {0}: {1}.'; Lists = @('Subject', 'Shown.logic') }
+            @{ Text = 'They turn to {0}.'; Lists = @('Outgoing') }
+            @{ Text = 'They receive the requests of {0}.'; Lists = @('Incoming') }
+        )
+        DataAccess = @(
+            @{ Text = 'Data access components of {0}: {1}.'; Lists = @('Subject', 'Shown.dataAccess') }
+            @{ Text = 'They turn to {0}.'; Lists = @('Outgoing') }
+            @{ Text = 'Used by {0}.'; Lists = @('Incoming') }
+        )
     }
-    CommunicatesWith = 'Communicates with:'
+    ViewGroupIntroduction = @(
+        @{ Text = 'The view {0} shows the whole; the views that follow take up its parts one at a time: {1}.'; Lists = @('First', 'Following') }
+    )
+    ViewNameFormat = '“{0}”'
     SummaryTag     = 'Summary'
     NetworkTag     = 'Network'
     NetworkRelationships = @{ Peering = 'Connects the two networks with a peering'; Origin = 'Forwards the requests to the origin'; Backend = 'Forwards the requests to the backend' }
