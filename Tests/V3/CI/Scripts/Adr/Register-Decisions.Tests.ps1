@@ -239,10 +239,46 @@ Describe 'Register-Decisions' {
         $bug.Count | Should -Be 1
         $bug[0].Path | Should -Be "/$Project/_apis/wit/workitems/`$Bug"
         $operations = $bug[0].Body | ConvertFrom-Json
-        ($operations | Where-Object path -EQ '/fields/System.Title').value | Should -BeLike "Decisione del Task 1606 non registrata: *$motivo*"
+        ($operations | Where-Object path -EQ '/fields/System.Title').value | Should -BeLike "Decisione del Task 1606 non registrata in main: *$motivo*"
         ($operations | Where-Object path -EQ '/fields/Microsoft.VSTS.TCM.ReproSteps').value | Should -Match 'PR 1306 di Negozio.Infra'
         ($operations | Where-Object path -EQ '/relations/-').value.url | Should -Be "$($Stub.Endpoint)/_apis/wit/workItems/1606"
         (Get-Text '.decisions-baseline').Trim() | Should -Not -Be $Baseline
+    }
+
+    It 'con il ramo sorgente della bozza prende le integrazioni in quel ramo e, per il repository che non lo ha, quelle in main (ADR-2125)' {
+        $script:Repository = New-DecisionsRepository
+        Set-RegistrationEnvironment
+        $routes = New-AzureDevOpsRoutes $Project @((Promotion 1400 @(@{ Id = 1300; WorkItems = @(1600) })), (Direct 1306 @(1606))) @{
+            1600 = @{ Description = New-TaskAdr 'Notifiche in staging' }
+            1606 = @{ Description = '' }
+        }
+        $routes["GET /$Project/_apis/git/repositories/Negozio.Api/refs"] = @{ status = 200; body = @{ value = @(@{ name = 'refs/heads/staging-vecchio' }, @{ name = 'refs/heads/staging' }) } }
+        $routes["GET /$Project/_apis/git/repositories/Negozio.Infra/refs"] = @{ status = 200; body = @{ value = @(@{ name = 'refs/heads/staging-vecchio' }) } }
+        Set-AzureDevOpsRoutes $Stub $routes
+        $env:SOURCE_BRANCH = 'staging'
+        $env:TARGET_BRANCH = 'staging'
+        try { $outcome = Invoke-Registration }
+        finally { Remove-Item env:SOURCE_BRANCH, env:TARGET_BRANCH -ErrorAction SilentlyContinue }
+
+        $lists = @(Get-AzureDevOpsRequests $Stub | Where-Object { $_.Method -eq 'GET' -and $_.Path -like '*/pullrequests' })
+        ($lists | Where-Object Path -Like '*/Negozio.Api/*').Query | Should -Match 'targetRefName=refs/heads/staging&'
+        ($lists | Where-Object Path -Like '*/Negozio.Infra/*').Query | Should -Match 'targetRefName=refs/heads/main&'
+        @(Get-NewDecisions).Name | Should -Be @('0004-notifiche-in-staging.md')
+        $outcome.WorkItems | Should -Be @(9001)
+        $operations = (Get-BugRequests)[0].Body | ConvertFrom-Json
+        ($operations | Where-Object path -EQ '/fields/System.Title').value | Should -BeLike 'Decisione del Task 1606 non registrata in staging: *'
+        ($operations | Where-Object path -EQ '/fields/Microsoft.VSTS.TCM.ReproSteps').value | Should -Match 'arrivato nel ramo main con la PR 1306 di Negozio.Infra'
+    }
+
+    It 'senza ramo sorgente legge le integrazioni nel ramo di destinazione, senza chiedere i rami dei repository' {
+        $script:Repository = New-DecisionsRepository
+        Set-RegistrationEnvironment
+        Set-Board @(Direct 1300 @(1600)) @{ 1600 = @{ Description = New-TaskAdr 'Scelta in main' } } | Out-Null
+
+        Invoke-Registration | Out-Null
+
+        @(Get-AzureDevOpsRequests $Stub | Where-Object Path -Like '*/refs') | Should -BeNullOrEmpty
+        @(Get-AzureDevOpsRequests $Stub | Where-Object { $_.Path -like '*/Negozio.Infra/pullrequests' }).Query | Should -Match 'targetRefName=refs/heads/main&'
     }
 
     It 'registra nonostante i rilievi che il corpus aveva gia''' {

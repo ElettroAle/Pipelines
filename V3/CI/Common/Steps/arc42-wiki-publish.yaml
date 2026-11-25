@@ -10,6 +10,9 @@
 # Con documentFormats lo stesso commit allega il documento unico in PDF e Word, che la pagina wikiRoot
 # nomina (V3/CI/Scripts/Arc42/Arc42Document.ps1): pandoc si scarica alla prima esecuzione, Chrome
 # headless richiede Node.js e, su Linux, le sue librerie di sistema.
+# Con draftDocsDirectory ogni pagina che il documento in bozza cambia, o che esiste solo nella bozza, ha una
+# pagina sorella con il suffisso della lingua (es. « (bozza)»), l'avviso della bozza in testa e le immagini sotto
+# .attachments/<wikiRoot>/draft; la pagina ufficiale rimanda alla sua bozza. PDF e Word restano quelli ufficiali.
 #
 # Riusato da:
 #   CI/Agnostic/publish-arc42-wiki.yaml
@@ -30,6 +33,9 @@
 #   referenceRoot      → radice della reference nella wiki (reference-publish.yaml): la prima menzione di
 #                        ogni sua voce nelle pagine diventa un link, il documento unico resta senza
 #                        (default: nessuna)
+#   draftDocsDirectory      → cartella delle sezioni del documento in bozza (default: nessuna bozza)
+#   draftDecisionsDirectory → cartella degli ADR del documento in bozza (default: nessuna)
+#   draftBranch             → ramo della bozza, nominato nell'avviso delle pagine (default: staging)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -76,6 +82,18 @@ parameters:
     type: string
     default: ''
 
+  - name: draftDocsDirectory
+    type: string
+    default: ''
+
+  - name: draftDecisionsDirectory
+    type: string
+    default: ''
+
+  - name: draftBranch
+    type: string
+    default: 'staging'
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 steps:
@@ -106,4 +124,7 @@ steps:
       WIKI_BRANCH: ${{ parameters.wikiBranch }}
       DOCUMENT_FORMATS: ${{ join(',', parameters.documentFormats) }}
       REFERENCE_ROOT: ${{ parameters.referenceRoot }}
+      DRAFT_DOCS_DIRECTORY: ${{ parameters.draftDocsDirectory }}
+      DRAFT_DECISIONS_DIRECTORY: ${{ parameters.draftDecisionsDirectory }}
+      DRAFT_BRANCH: ${{ parameters.draftBranch }}
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)

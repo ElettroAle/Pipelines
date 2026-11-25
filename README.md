@@ -302,6 +302,19 @@ parametri di formato e senza condizioni sul formato.
 | `documentation-style.yaml` | `Test-DocumentationStyle.ps1` | giudizio dello stile con la guida del repository | nessun formato |
 | `documentation-update.yaml` | `Update-Documentation.ps1`, poi `Publish-PullRequest.ps1` | dopo un cambiamento nel ramo principale un modello linguistico riscrive i documenti toccati, le verifiche indicate giudicano ogni stesura, e una PR in auto-complete la porta nel ramo principale; respinta a ogni stesura apre un work item, con il modello non disponibile si riprende alla run successiva | nessun formato |
 | `adr-register.yaml` | `Register-Decisions.ps1`, poi `Publish-PullRequest.ps1` | dopo un'integrazione nel ramo principale dei repository sorgente l'ADR in Markdown di ogni Task arrivato nel ramo principale entra nel corpus, accettato e senza modifiche al testo, con una PR in auto-complete; un Task senza ADR, un ADR non in Markdown o una decisione respinta dalla verifica del corpus aprono un work item; una run fallita si recupera con la successiva | MADR |
+| `documentation-draft-sources.yaml` | `Write-DraftSources.ps1` | sulla run che scrive la bozza del documento (`targetBranch` diverso da `main`), il ramo letto, il commit e l'albero git di ogni repository sorgente nel file `.draft-sources` del documento | nessun formato |
+| `documentation-promote.yaml` | `Promote-Documentation.ps1` | all'inizio della documentazione del ramo principale, se ogni repository sorgente arriva con l'albero registrato dalla bozza, una PR in auto-complete porta la bozza nel documento ufficiale e i passi del modello, delle decisioni e del testo non girano | nessun formato |
+| `documentation-draft-sync.yaml` | `Sync-DocumentationDraft.ps1` | dopo un aggiornamento del ramo principale del documento, una PR in auto-complete lo porta nel ramo di bozza | nessun formato |
+
+Con `targetBranch` diverso da `main` `documentation-update.yaml` e `adr-register.yaml` scrivono la bozza del
+documento su quel ramo: il ramo della PR prende il suo nome come suffisso (es. `documentation/update/staging`),
+le integrazioni delle decisioni sono quelle nel ramo `sourceBranch` dei repository sorgente (`main` per un
+repository che non lo ha) e il work item di un rifiuto nomina il ramo nel titolo. `documentation-draft-sources.yaml`
+registra da quali alberi dei repository sorgente viene la bozza; quando la documentazione del ramo principale trova
+gli stessi alberi, `documentation-promote.yaml` porta la bozza, gia' verificata, nel documento ufficiale senza una
+nuova stesura (la variabile `documentationPromoted` salta `c4-read*.yaml`, `c4-describe.yaml`, `c4-generate.yaml`,
+`adr-register.yaml` e `documentation-update.yaml`), altrimenti la documentazione si riscrive come senza bozza.
+`documentation-draft-sync.yaml` riporta poi il ramo principale nella bozza.
 
 Due ingressi:
 
@@ -810,6 +823,13 @@ pubblicazione:
   verificato) scrive il Word e l'HTML che Chrome headless stampa in PDF A4; lo step installa Node.js e, su
   Linux, le librerie di Chrome con `ensure-chrome-libraries.yaml`. La stessa fonte da' gli stessi file: le
   date nel documento sono quelle del commit, e una pubblicazione senza modifiche non crea commit.
+- Con `draftRepository`, l'alias di una repository resource sul ramo di bozza del documento (`draftBranch`,
+  default `staging`), la stessa pubblicazione legge anche la bozza: ogni pagina il cui Markdown, o il disegno di
+  una vista mostrata, differisce da quello ufficiale, e ogni pagina che esiste solo nella bozza, diventa una
+  pagina sorella con il suffisso della lingua (`<titolo> (bozza)` o `<title> (draft)`) subito dopo la pagina
+  ufficiale, con in testa l'avviso della bozza in un colore suo e le immagini in
+  `.attachments/<wikiRoot>/draft/`. La pagina ufficiale che ha una bozza vi rimanda in testa. PDF e Word restano
+  quelli del documento ufficiale, e le bozze che non differiscono piu' spariscono alla run successiva.
 
 ```yaml
 resources:
@@ -913,7 +933,7 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/C4/Export-C4CodeModel.ps1` | Parte del modello C4 generata dai frammenti di un repository sorgente e dal testo del sistema (`c4-generate.yaml`), con il contesto delle persone e dei sistemi esterni: errore sui file di progetto che nessun lettore legge, confronto in modalità `check` |
 | `CI/Scripts/AzureBoards/Test-PullRequestSources.ps1`, `PullRequestSources.ps1` | Fonti di una PR (`azureBoards-sources-verify.yaml`): almeno un Task collegato, ADR del Task con le sezioni MADR della lingua in Markdown o HTML, padre requisito con i criteri di accettazione o Bug con i passi di riproduzione; ogni rilievo nomina il work item e la parte mancante |
 | `CI/Scripts/AzureRepos/Publish-PullRequest.ps1` | Porta su un ramo le cartelle che la pipeline ha scritto e apre una PR Azure Repos (`azureRepos-pull-request.yaml`), con completamento automatico, cancellazione del ramo e bozza a scelta: riparte dai commit già sul ramo, nessuna PR senza differenze, una PR attiva si aggiorna, descrizione completata da un file |
-| `CI/Scripts/Arc42/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine |
+| `CI/Scripts/Arc42/Publish-Arc42Wiki.ps1` | Pubblica un documento arc42 nella wiki di progetto (`publish-arc42-wiki.yaml`): una pagina per sezione, le decisioni sotto la sezione 9 con lo stato, le viste C4 come immagini C4-PlantUML, un commit solo che non tocca le altre pagine; con la cartella della bozza, le pagine sorelle in bozza di quelle che la bozza cambia |
 | `CI/Scripts/Mermaid/Test-MermaidDiagrams.ps1` | Diagrammi Mermaid delle sezioni e delle decisioni (`mermaid-verify.yaml`): errore con sezione, file e riga |
 | `CI/Scripts/Mermaid/Test-DiagramFlows.ps1` | Flussi coerenti con la struttura (`flows-verify.yaml`): partecipanti e chiamate dei diagrammi di sequenza contro il modello C4, per identificativo, flusso delle decisioni contro le classi della loro struttura |
 | `CI/Scripts/Mermaid/DiagramFlows.ps1` | Controlli dei flussi condivisi da `Test-DiagramFlows.ps1` e `Repair-DiagramFlows.ps1`: ogni rilievo porta il file della sezione che lo contiene |
@@ -922,6 +942,7 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/Mermaid/DiagramModel.ps1` | Elementi del modello C4 per identificativo del DSL, partecipanti e riquadri dei diagrammi di sequenza riconosciuti e riscritti con i nomi del modello |
 | `CI/Scripts/Documentation/Test-Documentation.ps1` | Controlli comuni a ogni documento (`documentation-verify.yaml`): rimandi esistenti, soglie numeriche di leggibilità |
 | `CI/Scripts/Documentation/Update-Documentation.ps1`, `DocumentationUpdate.ps1` | Aggiornamento della documentazione (`documentation-update.yaml`) con il modello linguistico (`DOCS_UPDATE_PROVIDER`): cambiamento dai commit dopo il punto di partenza registrato nel repository, esclusi quelli degli aggiornamenti precedenti; stesure giudicate dalle verifiche indicate, scartate solo per rilievi nuovi e rimandate con i motivi; versione nuova delle decisioni cambiate con la voce che nomina l'origine; work item per un aggiornamento respinto a ogni stesura; con il modello non disponibile nulla cambia e il punto di partenza resta |
+| `CI/Scripts/Documentation/Write-DraftSources.ps1`, `Promote-Documentation.ps1`, `Sync-DocumentationDraft.ps1`, `DocumentationDraft.ps1` | Ramo di bozza del documento (`documentation-draft-sources.yaml`, `documentation-promote.yaml`, `documentation-draft-sync.yaml`): ramo letto, commit e albero git dei repository sorgente nel file delle sorgenti della bozza; promozione con una PR dal ramo di bozza quando ogni repository arriva nel ramo principale con lo stesso albero, con la variabile `documentationPromoted`; allineamento della bozza al ramo principale con una PR |
 | `CI/Scripts/Documentation/Test-DocumentationStyle.ps1` | Giudizio dello stile di un documento (`documentation-style.yaml`) con il modello linguistico (`STYLE_JUDGE_PROVIDER`) che riceve la guida di stile del repository come istruzioni |
 | `CI/Scripts/LanguageModel/LanguageModel.ps1` | Contratto del modello linguistico dei passi di documentazione: `New-LanguageModel` crea il client del fornitore scelto (`foundry`, il default, o `anthropic`), `Invoke-LanguageModel` restituisce la risposta letta secondo lo schema e i token usati. Ogni altro file della cartella è il modulo di un fornitore |
 | `CI/Scripts/LanguageModel/Foundry.ps1` | Fornitore Foundry: chat completions Azure OpenAI con token Entra ID della Azure CLI, risposta in JSON schema stretto, livello di ragionamento, seme tolto se il deployment lo rifiuta |

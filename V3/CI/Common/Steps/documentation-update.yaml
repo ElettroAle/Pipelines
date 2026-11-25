@@ -22,6 +22,9 @@
 # Il checkout deve portare tutta la storia (fetchDepth: 0). L'identita' della build deve contribuire al
 # repository, creare rami, contribuire alle PR e creare work item. La lingua delle voci delle versioni
 # segue DOCUMENT_LANGUAGE (document-language.yaml). Le verifiche dei diagrammi richiedono Java 17 e Node.js.
+# Con un targetBranch diverso da main il passo scrive la bozza su quel ramo: il ramo della PR prende il suo nome
+# come suffisso (es. documentation/update/staging) e il work item di un rifiuto lo nomina nel titolo. Dopo la
+# promozione della bozza (documentation-promote.yaml) il passo non gira.
 #
 # Riusato da:
 #   il consumer, nel job che segue l'integrazione nel ramo principale
@@ -53,9 +56,10 @@
 #   originDirectory    → checkout del repository che ha causato il cambiamento (default: il repository
 #                        della documentazione)
 #   workItemType       → tipo del work item di un aggiornamento respinto (default: Bug)
-#   branch             → ramo della PR (default: documentation/update)
+#   branch             → ramo della PR, con il suffisso /<targetBranch> se targetBranch non e' main
+#                        (default: documentation/update)
 #   title              → titolo della PR (default: docs: documentation updated after the integration)
-#   targetBranch       → ramo principale (default: main)
+#   targetBranch       → ramo del documento su cui si apre la PR: main o un ramo di bozza (default: main)
 #   nodeVersion        → versione di Node.js per il parser Mermaid (default: 22.x)
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #
@@ -183,6 +187,7 @@ steps:
 
     - task: AzureCLI@2
       displayName: 'Documentation updated with the change'
+      condition: and(succeeded(), ne(variables['documentationPromoted'], 'True'))
       inputs:
         azureSubscription: ${{ parameters.serviceConnection }}
         scriptType: pscore
@@ -215,6 +220,7 @@ steps:
   - ${{ if eq(parameters.provider, 'anthropic') }}:
     - task: PowerShell@2
       displayName: 'Documentation updated with the change'
+      condition: and(succeeded(), ne(variables['documentationPromoted'], 'True'))
       inputs:
         filePath: '${{ parameters.templatesDirectory }}/V3/CI/Scripts/Documentation/Update-Documentation.ps1'
         workingDirectory: '$(Build.SourcesDirectory)'
@@ -247,10 +253,10 @@ steps:
     parameters:
       paths:
         - '$(documentationUpdatePaths)'
-      branch: ${{ parameters.branch }}
       title: ${{ parameters.title }}
       descriptionFile: '$(Agent.TempDirectory)/documentation-update.md'
       originDirectory: ${{ parameters.originDirectory }}
       targetBranch: ${{ parameters.targetBranch }}
+      branch: ${{ iif(eq(parameters.targetBranch, 'main'), parameters.branch, format('{0}/{1}', parameters.branch, parameters.targetBranch)) }}
       templatesDirectory: ${{ parameters.templatesDirectory }}
       condition: and(succeeded(), eq(variables['documentationUpdateChanged'], 'True'))
