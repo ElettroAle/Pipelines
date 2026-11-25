@@ -111,12 +111,19 @@ BeforeAll {
     }
 
     # Una vista di allocazione come la scrive Export-C4CodeModel.ps1: la frase dello scopo, la proprieta' con
-    # gli ambienti di cui elencare i gruppi di risorse e gli elementi con il gruppo e il modulo che li dichiarano.
+    # gli ambienti di cui elencare i gruppi di risorse e gli elementi con il gruppo, il modulo che li dichiara e il
+    # nome Azure. Il private endpoint si chiama nella vista con la parte che raggiunge.
     function Add-ResourceGroupView([System.Collections.IDictionary]$Docs) {
-        $placement = "properties {`n`"resourceGroup`" `"rg-web`"`n`"module`" `"Client`"`n}"
+        $placement = {
+            param($Group, $Module, $AzureName)
+            $lines = @('properties {', "`"resourceGroup`" `"$Group`"", "`"module`" `"$Module`"") + @(if ($AzureName) { "`"azureName`" `"$AzureName`"" })
+            ($lines + '}') -join "`n"
+        }
         Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' 'containerInstance client' (@(
-                'deploymentNode "asp-web" {', $placement, "containerInstance client {`n$placement`n}", '}'
-                "infrastructureNode `"kv-a|b`" {`nproperties {`n`"resourceGroup`" `"rg-dati`"`n`"module`" `"Platform`"`n}`n}"
+                'deploymentNode "Piano del client" {', (& $placement 'rg-web' 'Client' 'asp-web-prod'), "containerInstance client {`n$(& $placement 'rg-web' 'Client' 'app-client-prod')`n}", '}'
+                "infrastructureNode `"Client`" {`n$(& $placement 'rg-hub' 'Hub' 'pe-client-prod')`n}"
+                "infrastructureNode `"kv-a|b`" {`n$(& $placement 'rg-dati' 'Platform' 'kv-a|b')`n}"
+                "infrastructureNode `"Senza nome Azure`" {`n$(& $placement 'rg-vuoto' 'Platform' '')`n}"
             ) -join "`n")
         Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' 'deployment sistema produzione "deployment-produzione" {' "deployment sistema produzione `"deployment-produzione`" `"Dove gira ogni applicazione dell'ambiente.`" {`n            title `"Allocazione · Produzione`"`n            properties {`n                `"resourceGroups`" `"Produzione`"`n            }"
     }
@@ -261,7 +268,7 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
             $page | Should -Match ([regex]::Escape((@(
                             '![Allocazione · Produzione](/.attachments/Architettura/deployment-produzione.png)', ''
                             '| Gruppo di risorse | Contenuto | Modulo |', '| --- | --- | --- |'
-                            '| rg-dati | kv-a\|b | Platform |', '| rg-web | asp-web, Client | Client |'
+                            '| rg-dati | kv-a\|b | Platform |', '| rg-hub | pe-client-prod | Hub |', '| rg-web | app-client-prod, asp-web-prod | Client |'
                         ) -join "`n")))
         }
 
@@ -271,6 +278,30 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
 
         It "E una vista senza la proprieta' dei gruppi di risorse non ha la tabella" {
             Get-WikiPage $wiki 'Architettura/5.-Building-Block-View.md' | Should -Not -Match 'Gruppo di risorse'
+        }
+    }
+
+    Context "Scenario: la tabella elenca le risorse con il loro nome Azure, per gruppo di risorse e modulo" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-ValidDocs
+            Add-ResourceGroupView $docs
+            $res = Invoke-WikiPublish $docs $wiki
+            $rows = @((Get-WikiPage $wiki 'Architettura/7.-Deployment-View.md') -split "`n" | Where-Object { $_ -match '^\| rg-' })
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora il gruppo dell'Hub elenca il private endpoint con il suo nome Azure, non con la parte che raggiunge" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $rows | Should -Contain '| rg-hub | pe-client-prod | Hub |'
+        }
+
+        It "E un'istanza compare con il nome Azure della risorsa che la ospita, non con il nome dell'applicazione" {
+            $rows | Should -Contain '| rg-web | app-client-prod, asp-web-prod | Client |'
+        }
+
+        It "E un nodo senza nome Azure non entra nella tabella" {
+            @($rows | Where-Object { $_ -match 'rg-vuoto' }) | Should -BeNullOrEmpty
         }
     }
 

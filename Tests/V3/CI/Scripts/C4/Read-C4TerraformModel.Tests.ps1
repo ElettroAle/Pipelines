@@ -125,10 +125,11 @@ Describe "Funzionalità: Viste di deployment generate dall'infrastruttura" {
             Test-HasInstance $result.Fragment 'prod' 'contoso_shop_ai_worker' | Should -BeTrue
         }
 
-        It "E ogni nodo generato ha una descrizione" {
+        It "E ogni nodo generato ha il livello da cui nasce la sua descrizione" {
             $nodes = @($result.Fragment.deployment | ForEach-Object { Get-AllNodes $_.nodes })
             $nodes.Count | Should -BeGreaterThan 0
-            @($nodes | Where-Object { -not $_.text }) | Should -BeNullOrEmpty
+            $levels = (Import-PowerShellDataFile "$PSScriptRoot/../../../../../V3/CI/Scripts/Common/Languages/IT.psd1").NodeDescriptions
+            @($nodes | Where-Object { -not $levels.ContainsKey("$($_.kind)") }) | Should -BeNullOrEmpty
         }
 
         It "E nessuna parte delle viste di deployment è scritta a mano" {
@@ -366,6 +367,171 @@ resource "azurerm_service_plan" "edge" {
     }
 }
 
+Describe "Funzionalità: Relazioni, testi dei nodi e tabella dei gruppi di risorse da una regola sul modello" {
+    BeforeAll {
+        $generation = Invoke-DeploymentGeneration
+        $export = Export-DeploymentWorkspace $generation
+        $deployment = $generation.Generated['deployment/contoso.infrastructure.dsl'] -replace "`r`n", "`n"
+
+        function Get-NodeText([string]$Dsl, [string]$Environment, [string]$Name) {
+            $block = Get-Block $Dsl "^deploymentEnvironment `"$([regex]::Escape($Environment))`" \{"
+            $match = [regex]::Match($block, "= (?:deploymentNode|infrastructureNode) `"$([regex]::Escape($Name))`" `"(?<text>[^`"]*)`"")
+            if (-not $match.Success) { throw "nodo $Name assente da $Environment" }
+            return $match.Groups['text'].Value
+        }
+
+        function Get-ExportedNodes($Nodes) {
+            foreach ($node in @($Nodes | Where-Object { $_ })) {
+                $node
+                @($node.infrastructureNodes) | Where-Object { $_ }
+                Get-ExportedNodes $node.children
+            }
+        }
+    }
+
+    Context "Scenario: in ogni vista una relazione si disegna fra gli elementi più vicini alle sue estremità che la vista mostra" {
+        It "Allora nella vista della rete che mostra l'Application Gateway la freccia del Front Door arriva al gateway" {
+            $generation.ExitCode | Should -Be 0 -Because $generation.Output
+            $export.Error | Should -BeNullOrEmpty
+            Get-ShownRelationships $export 'deployment_prod_rete_vnet_contoso_prod' | Should -Contain "afd-contoso-prod -> agw-contoso-prod: Inoltra le richieste all'origine"
+        }
+
+        It "E «Inoltra le richieste al backend» parte dal gateway e arriva alla rete chiusa che contiene il private endpoint" {
+            Get-ShownRelationships $export 'deployment_prod_rete_vnet_contoso_prod' | Should -Contain 'agw-contoso-prod -> vnet-shared: Inoltra le richieste al backend'
+        }
+
+        It "E la vista non mostra le frecce fra reti che appartengono alla vista d'insieme" {
+            $shown = Get-ShownRelationships $export 'deployment_prod_rete_vnet_contoso_prod'
+            $shown | Should -Not -Contain "afd-contoso-prod -> vnet-contoso-prod: Inoltra le richieste all'origine"
+            $shown | Should -Not -Contain 'vnet-contoso-prod -> vnet-shared: Inoltra le richieste al backend'
+        }
+
+        It "E nella vista d'insieme, con le reti chiuse, la freccia arriva alla rete" {
+            Get-ShownRelationships $export 'deployment_prod_rete' | Should -Contain "afd-contoso-prod -> vnet-contoso-prod: Inoltra le richieste all'origine"
+        }
+
+        It "E nella vista della rete condivisa la freccia parte dalla rete chiusa e arriva al private endpoint che la vista mostra" {
+            Get-ShownRelationships $export 'deployment_prod_rete_vnet_shared' | Should -Be @('vnet-contoso-prod -> Api · sites: Inoltra le richieste al backend', 'vnet-contoso-prod -> vnet-shared: Collega le due reti con un peering')
+        }
+    }
+
+    Context "Scenario: la descrizione di un nodo di deployment nasce dal modello con una frase della lingua per livello" {
+        It "Allora la descrizione dice che cosa il nodo ospita o collega" {
+            Get-NodeText $deployment 'prod rete' 'vnet-contoso-prod' | Should -Be 'Contiene le subnet snet-engine, snet-gateway, snet-worker. Collegata in peering a vnet-shared.'
+            Get-NodeText $deployment 'prod rete' 'snet-engine' | Should -Be 'Ospita Api. Si trova in vnet-contoso-prod.'
+            Get-NodeText $deployment 'prod rete' 'agw-contoso-prod' | Should -Be 'Riceve le richieste da fde-contoso-prod e le inoltra a Api.'
+            Get-NodeText $deployment 'prod rete' 'Api · sites' | Should -Be 'Accesso privato a Api.'
+            Get-NodeText $deployment 'prod rete' 'afd-contoso-prod' | Should -Be 'Ingresso pubblico verso agw-contoso-prod.'
+            Get-NodeText $deployment 'prod' 'asp-contoso-prod' | Should -Be 'Piano di calcolo di Api, Worker.'
+        }
+
+        It "E vale per ogni ambiente: cambiano solo i nomi delle risorse di ciascuno" {
+            foreach ($environment in 'dev', 'sta') {
+                foreach ($name in 'vnet-contoso', 'snet-engine') {
+                    $own = $(if ($name -eq 'vnet-contoso') { "$name-$environment" } else { $name })
+                    $expected = Get-NodeText $deployment 'prod rete' $(if ($name -eq 'vnet-contoso') { "$name-prod" } else { $name })
+                    (Get-NodeText $deployment "$environment rete" $own).Replace("-$environment", '-prod') | Should -Be $expected
+                }
+            }
+        }
+
+        It "E non nomina il tipo della risorsa" {
+            $nodes = @(Get-ExportedNodes $export.Workspace.model.deploymentNodes)
+            $nodes.Count | Should -BeGreaterThan 0
+            foreach ($node in $nodes) {
+                $type = @("$($node.technology)" -split '[/ ]')[-1]
+                "$($node.description)" | Should -Not -Match "(?i)\b$([regex]::Escape($type))\b" -Because "$($node.name): $($node.description)"
+            }
+        }
+
+        It "E non va a capo" {
+            foreach ($node in @(Get-ExportedNodes $export.Workspace.model.deploymentNodes)) {
+                "$($node.description)" | Should -Not -Match '\n' -Because $node.name
+                "$($node.description)" | Should -Not -BeNullOrEmpty -Because $node.name
+            }
+        }
+
+        It "E in inglese le frasi sono quelle della lingua del documento" {
+            $english = Invoke-DeploymentGeneration (New-TerraformRepository) 'EN'
+            $english.ExitCode | Should -Be 0 -Because $english.Output
+            Get-NodeText ($english.Generated['deployment/contoso.infrastructure.dsl'] -replace "`r`n", "`n") 'prod network' 'snet-engine' | Should -Be 'Hosts Api. Sits in vnet-contoso-prod.'
+        }
+
+        It "E un livello senza frasi nella lingua ferma l'esportazione nominando il livello" {
+            $fragments = New-ContainerFragments
+            $firewall = [ordered]@{ id = 'x_fw'; name = 'fw'; technology = 'T'; element = 'infrastructureNode'; kind = 'firewall'; children = @(); instances = @() }
+            $vnet = [ordered]@{ id = 'x_vnet'; name = 'vnet'; technology = 'T'; element = 'deploymentNode'; kind = 'virtualNetwork'; children = @($firewall); instances = @() }
+            $fragments['contoso.infrastructure.deployment.json'] = [ordered]@{ containers = @(); relationships = @(); deployment = @(
+                    [ordered]@{ name = 'prod'; kind = 'allocation'; nodes = @() }
+                    [ordered]@{ name = 'prod rete'; kind = 'network'; environment = 'prod'; nodes = @($vnet); relationships = @() }
+                ) } | ConvertTo-Json -Depth 10
+            $stopped = Invoke-C4Steps ([ordered]@{ 'source/README.md' = "# x`n" }) 'Contoso.Infrastructure' @('C4/Export-C4CodeModel.ps1') 'write' $fragments @{ GATE_MODE = 'enforce' }
+            $stopped.ExitCode | Should -Not -Be 0
+            $stopped.Output | Should -Match 'livello di nodo senza frasi nella lingua \(firewall\)'
+            $stopped.Generated.Keys | Should -Not -Contain 'deployment/contoso.infrastructure.dsl'
+        }
+    }
+
+    Context "Scenario: ogni nodo porta il nome Azure della risorsa per la tabella dei gruppi di risorse" {
+        It "Allora il private endpoint, che nella vista si chiama con la parte che raggiunge, porta il suo nome Azure" {
+            Get-Block (Get-Block $deployment '^deploymentEnvironment "prod rete" \{') 'infrastructureNode "Api · sites"' | Should -Match '"azureName" "pe-contoso-prod-api"'
+        }
+
+        It "E un'istanza porta il nome Azure della risorsa che la ospita" {
+            Get-Block (Get-Block $deployment '^deploymentEnvironment "prod" \{') 'containerInstance contoso_shop_ai_api' | Should -Match '"azureName" "app-contoso-prod-api"'
+        }
+
+        It "E una regione non ha un nome Azure" {
+            $region = Get-Block (Get-Block $deployment '^deploymentEnvironment "prod" \{') 'deploymentNode "westeurope"'
+            [regex]::Match($region, '(?s)^.*?properties \{(?<own>.*?)\}').Groups['own'].Value | Should -Not -Match 'azureName'
+        }
+    }
+
+    Context "Scenario: una risorsa o un modulo nuovi non chiedono codice nuovo" {
+        BeforeAll {
+            $files = New-TerraformRepository
+            $files['source/App/edge.tf'] = @'
+resource "azurerm_resource_group" "edge" {
+  name     = "rg-edge-${var.environment}"
+  location = "Italy North"
+}
+
+resource "azurerm_virtual_network" "edge" {
+  name                = "vnet-edge-${var.environment}"
+  resource_group_name = azurerm_resource_group.edge.name
+  location            = azurerm_resource_group.edge.location
+}
+
+resource "azurerm_subnet" "jobs" {
+  name                 = "snet-jobs"
+  resource_group_name  = azurerm_resource_group.edge.name
+  virtual_network_name = azurerm_virtual_network.edge.name
+}
+
+resource "azurerm_service_plan" "edge" {
+  name                = "asp-edge-${var.environment}"
+  resource_group_name = azurerm_resource_group.edge.name
+  location            = azurerm_resource_group.edge.location
+}
+'@
+            Set-FileText $files 'source/App/main.tf' "  service_plan_id     = azurerm_service_plan.backend.id`n  subnet_id           = azurerm_subnet.worker.id" "  service_plan_id     = azurerm_service_plan.edge.id`n  subnet_id           = azurerm_subnet.jobs.id"
+            $grown = Invoke-DeploymentGeneration $files
+            $grownDeployment = $grown.Generated['deployment/contoso.infrastructure.dsl'] -replace "`r`n", "`n"
+        }
+
+        It "Allora i nodi nuovi hanno la descrizione delle frasi del loro livello" {
+            $grown.ExitCode | Should -Be 0 -Because $grown.Output
+            Get-NodeText $grownDeployment 'prod rete' 'vnet-edge-prod' | Should -Be 'Contiene le subnet snet-jobs.'
+            Get-NodeText $grownDeployment 'prod rete' 'snet-jobs' | Should -Be 'Ospita Worker. Si trova in vnet-edge-prod.'
+            Get-NodeText $grownDeployment 'prod' 'asp-edge-prod' | Should -Be 'Piano di calcolo di Worker.'
+        }
+
+        It "E portano il nome Azure e il gruppo di risorse per la tabella" {
+            Get-Block (Get-Block $grownDeployment '^deploymentEnvironment "prod" \{') 'deploymentNode "asp-edge-prod"' | Should -Match '"resourceGroup" "rg-edge-prod"\s+"module" "App"\s+"azureName" "asp-edge-prod"'
+        }
+    }
+}
+
 Describe 'Read-C4TerraformModel.ps1' {
     Context 'sulla dichiarazione completa' {
         BeforeAll {
@@ -398,7 +564,10 @@ Describe 'Read-C4TerraformModel.ps1' {
 
         It 'mette un private endpoint nella subnet di un altro modulo letta dal remote state, con la risorsa e i servizi che espone' {
             $endpoint = Get-AllNodes (Get-DeploymentEnvironment $result.Fragment 'prod rete').nodes | Where-Object { $_.exposes -eq 'contoso_shop_ai_api' -and $_.subresources -eq 'sites' }
-            $endpoint.kind | Should -Be 'infrastructureNode'
+            $endpoint.element | Should -Be 'infrastructureNode'
+            $endpoint.kind | Should -Be 'privateEndpoint'
+            $endpoint.azureName | Should -Be 'pe-contoso-prod-api'
+            $endpoint.exposedName | Should -Be 'Api'
             (Get-NodePath (Get-DeploymentEnvironment $result.Fragment 'prod rete').nodes { param($node) $node.subresources -eq 'scm' }) | Should -Be @('vnet-shared', 'snet-endpoints', 'Api')
         }
 
@@ -429,6 +598,23 @@ Describe 'Read-C4TerraformModel.ps1' {
             $backend = @($network.relationships | Where-Object kind -EQ 'Backend')
             @($backend | Where-Object targetContainer -EQ 'contoso_shop_ai_api').Count | Should -Be 1
             @($backend | Where-Object { $_.target -match 'privateendpoints_pe_contoso_prod_api$' }).Count | Should -Be 1
+        }
+
+        It "scrive su ogni nodo il nome Azure della risorsa, e su ogni istanza quello della risorsa che la ospita" {
+            (Find-Node $result.Fragment 'prod' 'asp-contoso-prod').azureName | Should -Be 'asp-contoso-prod'
+            (Find-Node $result.Fragment 'prod' 'westeurope').azureName | Should -BeNullOrEmpty
+            $instance = (Find-Node $result.Fragment 'prod' 'asp-contoso-prod').instances | Where-Object container -EQ 'contoso_shop_ai_api'
+            $instance.azureName | Should -Be 'app-contoso-prod-api'
+        }
+
+        It "scrive su ogni nodo il suo livello" {
+            (Find-Node $result.Fragment 'prod' 'westeurope').kind | Should -Be 'region'
+            (Find-Node $result.Fragment 'prod' 'asp-contoso-prod').kind | Should -Be 'hostingPlan'
+            (Find-Node $result.Fragment 'prod rete' 'vnet-contoso-prod').kind | Should -Be 'virtualNetwork'
+            (Find-Node $result.Fragment 'prod rete' 'snet-gateway').kind | Should -Be 'subnet'
+            (Find-Node $result.Fragment 'prod rete' 'agw-contoso-prod').kind | Should -Be 'gateway'
+            (Find-Node $result.Fragment 'prod rete' 'afd-contoso-prod').kind | Should -Be 'ingress'
+            (Find-Node $result.Fragment 'prod rete' 'fde-contoso-prod').kind | Should -Be 'ingressEndpoint'
         }
 
         It "non scrive nell'allocazione un servizio che non ospita container" {
@@ -625,9 +811,10 @@ Describe 'Export-C4CodeModel.ps1 sugli ambienti di deployment' {
         $result.Generated['containers/contoso.infrastructure.dsl'] | Should -Not -Match 'deploymentEnvironment'
     }
 
-    It 'annida i nodi con tecnologia, tag dei generati e descrizione dal testo del modello' {
-        $deployment | Should -Match 'deploymentNode "snet-engine" "La subnet delle API" "Microsoft.Network/virtualNetworks/subnets" "Generato" \{'
-        $deployment | Should -Match 'infrastructureNode "agw-contoso-prod" "" "Microsoft.Network/applicationGateways" "Generato"'
+    It 'annida i nodi con tecnologia, tag dei generati e descrizione composta dal modello, senza il testo salvato' {
+        $deployment | Should -Match 'deploymentNode "snet-engine" "Ospita Api\. Si trova in vnet-contoso-prod\." "Microsoft.Network/virtualNetworks/subnets" "Generato" \{'
+        $deployment | Should -Match 'infrastructureNode "agw-contoso-prod" "Riceve le richieste da fde-contoso-prod e le inoltra a Api\." "Microsoft.Network/applicationGateways" "Generato"'
+        $deployment | Should -Not -Match 'La subnet delle API'
     }
 
     It "distingue con i servizi esposti due private endpoint della stessa risorsa nella stessa subnet" {
@@ -635,10 +822,11 @@ Describe 'Export-C4CodeModel.ps1 sugli ambienti di deployment' {
         $deployment | Should -Match 'infrastructureNode "Api · scm"'
     }
 
-    It "scrive nell'ambiente della rete le relazioni con il tag della rete e i riassunti fra le radici con il tag dei riassunti" {
+    It "scrive nell'ambiente della rete le relazioni con il tag della rete e, una volta sola, le derivate con il tag dei riassunti e un identificativo" {
         $network = Get-Block $deployment 'deploymentEnvironment "prod rete"'
-        $network | Should -Match '_vnet_contoso_prod -> \w+_vnet_shared "Collega le due reti con un peering" "" "Generato,Rete"'
-        $network | Should -Match '_afd_contoso_prod -> \w+_vnet_contoso_prod "Inoltra le richieste all''origine" "" "Generato,Rete,Riassunto"'
+        $network | Should -Match '(?m)^    \w+_vnet_contoso_prod -> \w+_vnet_shared "Collega le due reti con un peering" "" "Generato,Rete"$'
+        $network | Should -Match '(?m)^    (?<id>\w+_afd_contoso_prod__to__\w+_vnet_contoso_prod) = \w+_afd_contoso_prod -> \w+_vnet_contoso_prod "Inoltra le richieste all''origine" "" "Generato,Rete,Riassunto"$'
+        @([regex]::Matches($network, '_afd_contoso_prod -> \w+_applicationgateways_agw_contoso_prod "')).Count | Should -Be 1
     }
 
     It "la vista d'insieme della rete esclude le relazioni fra le istanze e include solo quelle della rete" {
@@ -661,7 +849,7 @@ Describe 'Export-C4CodeModel.ps1 sugli ambienti di deployment' {
 
     It "scrive l'allocazione di un lettore che non scrive la rete, con tutti i nodi se non ha piani" {
         $fragments = New-ContainerFragments
-        $region = [ordered]@{ id = 'x_region'; name = 'westeurope'; technology = 'Azure region'; kind = 'deploymentNode'; text = 'x'; children = @(); instances = @('contoso_shop_ai_api') }
+        $region = [ordered]@{ id = 'x_region'; name = 'westeurope'; technology = 'Azure region'; element = 'deploymentNode'; kind = 'region'; children = @(); instances = @('contoso_shop_ai_api') }
         $fragments['contoso.infrastructure.deployment.json'] = [ordered]@{ containers = @(); relationships = @(); deployment = @([ordered]@{ name = 'prod'; nodes = @($region) }) } | ConvertTo-Json -Depth 10
         $alone = Invoke-C4Steps ([ordered]@{ 'source/README.md' = "# x`n" }) 'Contoso.Infrastructure' @('C4/Export-C4CodeModel.ps1') 'write' $fragments
         $alone.ExitCode | Should -Be 0 -Because $alone.Output
@@ -673,9 +861,9 @@ Describe 'Export-C4CodeModel.ps1 sugli ambienti di deployment' {
 
     It "da' i nomi della posizione a due nodi fratelli che restano uguali" {
         $fragments = New-ContainerFragments
-        $twin = { param($Id) [ordered]@{ id = $Id; name = 'pe'; technology = 'T'; kind = 'infrastructureNode'; text = 'x'; children = @(); instances = @() } }
-        $subnet = [ordered]@{ id = 'x_snet'; name = 'snet'; technology = 'T'; kind = 'deploymentNode'; text = 'x'; children = @((& $twin 'x_a'), (& $twin 'x_b')); instances = @() }
-        $network = [ordered]@{ id = 'x_vnet'; name = 'vnet'; technology = 'T'; kind = 'deploymentNode'; text = 'x'; children = @($subnet); instances = @() }
+        $twin = { param($Id) [ordered]@{ id = $Id; name = 'pe'; exposedName = 'archivio'; technology = 'T'; element = 'infrastructureNode'; kind = 'privateEndpoint'; children = @(); instances = @() } }
+        $subnet = [ordered]@{ id = 'x_snet'; name = 'snet'; technology = 'T'; element = 'deploymentNode'; kind = 'subnet'; children = @((& $twin 'x_a'), (& $twin 'x_b')); instances = @() }
+        $network = [ordered]@{ id = 'x_vnet'; name = 'vnet'; technology = 'T'; element = 'deploymentNode'; kind = 'virtualNetwork'; children = @($subnet); instances = @() }
         $fragments['contoso.infrastructure.deployment.json'] = [ordered]@{ containers = @(); relationships = @(); deployment = @(
                 [ordered]@{ name = 'prod'; kind = 'allocation'; nodes = @() }
                 [ordered]@{ name = 'prod rete'; kind = 'network'; environment = 'prod'; nodes = @($network); relationships = @() }

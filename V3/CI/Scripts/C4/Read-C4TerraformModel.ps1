@@ -257,7 +257,7 @@ function Get-Resources($Environment, [string[]]$HostPatterns) {
                 [pscustomobject]@{
                     Resource = $resource; Type = $type; Level = $level; Root = $Environment.Root
                     Key = "$($Environment.Root)/$address"; Pattern = "$($Environment.Root)/$($address -replace '\[[^\]]*\]', '')"
-                    Code = $module.CodeDirectory; Environment = $Environment
+                    Environment = $Environment
                 }
             }
         }
@@ -317,11 +317,11 @@ function Get-ContainerHosts($Model, $Items) {
 
 # ── Nodi ─────────────────────────────────────────────────────────────────────
 
-function New-Node([string]$Environment, [string]$Path, [string]$Name, [string]$Technology, [string]$Kind, [string]$TextKey, [string]$Module, [string[]]$Sources, [string]$ResourceGroup) {
+# element e' l'elemento di Structurizr, kind il livello del nodo, da cui l'esportazione compone la sua descrizione.
+function New-Node([string]$Environment, [string]$Path, [string]$Name, [string]$Technology, [string]$Element, [string]$Kind, [string]$Module, [string]$ResourceGroup, [string]$AzureName) {
     return [ordered]@{
-        id = ConvertTo-Identifier "$Repository.$Environment.$Path"; name = $Name; technology = $Technology; kind = $Kind
-        text = ConvertTo-Identifier "$Repository.$TextKey"; module = $Module; sources = @($Sources | Where-Object { $_ } | Sort-Object -Unique)
-        resourceGroup = $ResourceGroup
+        id = ConvertTo-Identifier "$Repository.$Environment.$Path"; name = $Name; azureName = $AzureName; technology = $Technology; element = $Element; kind = $Kind
+        module = $Module; resourceGroup = $ResourceGroup
         children = [System.Collections.Generic.List[object]]::new(); instances = [System.Collections.Generic.List[object]]::new()
     }
 }
@@ -358,8 +358,8 @@ function Get-ItemResourceGroup($Item) {
     return Get-Value $Item.Resource 'resource_group_name'
 }
 
-function New-ItemNode($State, $Item, [string]$Kind, [string]$Path, [string]$Name = (Get-ItemName $Item)) {
-    return New-Node $State.Environment $Path $Name (Get-TechnologyOf $Item) $Kind $Item.Pattern $Item.Root @($Item.Code) (Get-ItemResourceGroup $Item)
+function New-ItemNode($State, $Item, [string]$Element, [string]$Path, [string]$Name = (Get-ItemName $Item)) {
+    return New-Node $State.Environment $Path $Name (Get-TechnologyOf $Item) $Element $Item.Level $Item.Root (Get-ItemResourceGroup $Item) (Get-ItemName $Item)
 }
 
 function Add-Root($State, [string]$Path, $Node) {
@@ -371,7 +371,7 @@ function Add-Root($State, [string]$Path, $Node) {
 function Add-Instances($Parent, $Item, [string[]]$Containers) {
     foreach ($container in $Containers) {
         if (@($Parent.instances | Where-Object container -EQ $container).Count) { continue }
-        $Parent.instances.Add([ordered]@{ container = $container; resourceGroup = Get-ItemResourceGroup $Item; module = $Item.Root })
+        $Parent.instances.Add([ordered]@{ container = $container; azureName = Get-ItemName $Item; resourceGroup = Get-ItemResourceGroup $Item; module = $Item.Root })
     }
 }
 
@@ -457,7 +457,7 @@ function Get-ItemRegion($State, $Item) {
 function Get-RegionNode($State, [string]$Region) {
     $path = "region/$Region"
     if ($State.Nodes.ContainsKey($path)) { return $State.Nodes[$path] }
-    return Add-Root $State $path (New-Node $State.Environment $path $Region $RegionTechnology 'deploymentNode' "region.$Region" 'azure' @() '')
+    return Add-Root $State $path (New-Node $State.Environment $path $Region $RegionTechnology 'deploymentNode' 'region' 'azure' '' '')
 }
 
 # Un piano che il codice non dichiara sta nella regione della sua applicazione.
@@ -468,7 +468,7 @@ function Get-PlanNode($State, [string]$PlanId, $Application) {
     $path = "$region/$(Get-NormalId $PlanId)"
     $parts = Split-AzureId $PlanId
     $node = if ($declared) { New-ItemNode $State $declared 'deploymentNode' $path }
-    else { New-Node $State.Environment $path (Get-IdName $PlanId) $parts.Type 'deploymentNode' "hostingPlan.$(Get-IdName $PlanId)" 'azure' @() $parts.ResourceGroup }
+    else { New-Node $State.Environment $path (Get-IdName $PlanId) $parts.Type 'deploymentNode' 'hostingPlan' 'azure' $parts.ResourceGroup (Get-IdName $PlanId) }
     return Add-Child $parent $node
 }
 
@@ -603,7 +603,7 @@ function Get-NetworkIdNode($State, [string]$Id) {
     if (-not $parts -or $parts.Type -notmatch '^Microsoft\.Network/virtualNetworks(/subnets)?$') { return $null }
     $declared = $State.ById[$normal]
     $node = if ($declared) { New-ItemNode $State $declared 'deploymentNode' $normal }
-    else { New-Node $State.Environment $normal (Get-IdName $Id) $parts.Type 'deploymentNode' "$(Get-IdLevel $Id).$(Get-IdName $Id)" 'azure' @() $parts.ResourceGroup }
+    else { New-Node $State.Environment $normal (Get-IdName $Id) $parts.Type 'deploymentNode' (Get-IdLevel $Id) 'azure' $parts.ResourceGroup (Get-IdName $Id) }
     if ($parts.Names.Count -lt 2) { return Add-Root $State $normal $node }
     $network = Get-NetworkIdNode $State (Get-AncestorIds $Id)[-2]
     $State.Nodes[$normal] = Add-Child $network $node
@@ -615,7 +615,7 @@ function Get-ProfileNode($State, [string]$Id) {
     if ($State.Nodes.ContainsKey($normal)) { return $State.Nodes[$normal] }
     $declared = $State.ById[$normal]
     $node = if ($declared) { New-ItemNode $State $declared 'deploymentNode' $normal }
-    else { New-Node $State.Environment $normal (Get-IdName $Id) 'Microsoft.Cdn/profiles' 'deploymentNode' "ingress.$(Get-IdName $Id)" 'azure' @() (Split-AzureId $Id).ResourceGroup }
+    else { New-Node $State.Environment $normal (Get-IdName $Id) 'Microsoft.Cdn/profiles' 'deploymentNode' 'ingress' 'azure' (Split-AzureId $Id).ResourceGroup (Get-IdName $Id) }
     return Add-Root $State $normal $node
 }
 
@@ -633,8 +633,9 @@ function Add-PrivateEndpoint($State, $Item) {
     $keys = Expand-Keys $State @(Get-ValueKeys $connection)
     $exposed = @($keys | Where-Object { $State.ByKey.ContainsKey($_) } | ForEach-Object { $State.ByKey[$_] }) | Select-Object -First 1
     $container = if ($exposed) { @($State.Hosted[$exposed.Key]) | Select-Object -First 1 }
-    $name = if ($container) { $State.ContainerNames[$container] } elseif ($exposed) { Get-ItemName $exposed } elseif ("$connection".StartsWith('/subscriptions/')) { Get-IdName "$connection" } else { Get-ItemName $Item }
-    $node = Add-NetworkElement $State $Item $subnet $name
+    $exposedName = if ($container) { $State.ContainerNames[$container] } elseif ($exposed) { Get-ItemName $exposed } elseif ("$connection".StartsWith('/subscriptions/')) { Get-IdName "$connection" }
+    $node = Add-NetworkElement $State $Item $subnet $(if ($exposedName) { $exposedName } else { Get-ItemName $Item })
+    if ($exposedName) { $node.exposedName = $exposedName }
     if ($container) { $node.exposes = $container }
     $subresources = @(Get-NestedValues $Item 'private_service_connection' 'subresource_names') | Select-Object -First 1
     $node.subresources = @(Get-TfItems $subresources | ForEach-Object { Format-TfValue $_ }) -join ', '

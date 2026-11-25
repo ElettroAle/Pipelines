@@ -242,14 +242,13 @@ function Format-ViewImage([string]$Key, $Caption, $Document, $Views) {
     return @("**$title**", '') + @(if ($Caption.Description) { (ConvertTo-MarkdownLiteral $Caption.Description), '' }) + "![$title]($target)"
 }
 
-function Get-DeploymentEntries($Nodes, [string[]]$Environments, [hashtable]$ContainerNames) {
+# Chi gestisce l'infrastruttura cerca le risorse con il loro nome in Azure, non con quello che hanno nelle viste.
+function Get-DeploymentEntries($Nodes, [string[]]$Environments) {
     foreach ($node in @($Nodes | Where-Object { $_ })) {
         if ($Environments -contains $node.environment) {
-            [pscustomobject]@{ Properties = $node.properties; Name = $node.name }
-            @($node.infrastructureNodes) | Where-Object { $_ } | ForEach-Object { [pscustomobject]@{ Properties = $_.properties; Name = $_.name } }
-            @($node.containerInstances) | Where-Object { $_ } | ForEach-Object { [pscustomobject]@{ Properties = $_.properties; Name = $ContainerNames["$($_.containerId)"] } }
+            @($node) + @($node.infrastructureNodes) + @($node.containerInstances) | Where-Object { $_ } | ForEach-Object { [pscustomobject]@{ Properties = $_.properties; Name = $_.properties.azureName } }
         }
-        Get-DeploymentEntries $node.children $Environments $ContainerNames
+        Get-DeploymentEntries $node.children $Environments
     }
 }
 
@@ -262,9 +261,7 @@ function ConvertTo-TableCell([string[]]$Values) {
 function Format-ResourceGroupTable($Workspace, [string]$Key) {
     $environments = @("$((Get-WorkspaceView $Workspace $Key).properties.resourceGroups)" -split ';' | Where-Object { $_ })
     if (-not $environments) { return @() }
-    $containerNames = @{}
-    @($Workspace.model.softwareSystems | Where-Object { $_ } | ForEach-Object { @($_.containers) }) | Where-Object { $_ } | ForEach-Object { $containerNames["$($_.id)"] = $_.name }
-    $groups = @(Get-DeploymentEntries $Workspace.model.deploymentNodes $environments $containerNames | Where-Object { $_.Properties.resourceGroup } | Group-Object { $_.Properties.resourceGroup } | Sort-Object Name)
+    $groups = @(Get-DeploymentEntries $Workspace.model.deploymentNodes $environments | Where-Object { $_.Name -and $_.Properties.resourceGroup } | Group-Object { $_.Properties.resourceGroup } | Sort-Object Name)
     if (-not $groups) { return @() }
     $columns = $DocumentLanguage.ResourceGroupTable
     $rows = @($groups | ForEach-Object { "| $(ConvertTo-TableCell @($_.Name)) | $(ConvertTo-TableCell @($_.Group.Name)) | $(ConvertTo-TableCell @($_.Group | ForEach-Object { $_.Properties.module })) |" })
