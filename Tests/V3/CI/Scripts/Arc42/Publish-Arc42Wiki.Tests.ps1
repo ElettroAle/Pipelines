@@ -265,14 +265,8 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
                     'container sistema "contenitori-client" {', 'title "Container di Client"', 'include client', 'properties {', '"subject" "client"', '}', '}'
                     'container sistema "contenitori" {', 'title "Container"'
                 ) -join "`n")
-            Edit-Docs $docs 'docs/architecture/07_deployment_view.md' '<!-- vista: deployment-produzione -->' '<!-- vista: deployment-produzione* -->'
-            Edit-Docs $docs 'docs/architecture/c4/workspace.dsl' 'deployment sistema produzione "deployment-produzione" {' (@(
-                    'deployment sistema produzione "deployment-produzione-client" {', 'title "Allocazione di Client"', 'include *', 'properties {', '"subject" "client"', '}', '}'
-                    'deployment sistema produzione "deployment-produzione" {'
-                ) -join "`n")
             $res = Invoke-WikiPublish $docs $wiki
             $page = Get-WikiPage $wiki 'Architettura/5.-Building-Block-View.md'
-            $deployment = Get-WikiPage $wiki 'Architettura/7.-Deployment-View.md'
         }
         AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
 
@@ -284,9 +278,41 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
         It "E non usa la frase delle viste alla pari" {
             $page | Should -Not -Match 'Le sezioni che seguono mostrano'
         }
+    }
 
-        It "E una vista di deployment che mostra un'istanza del soggetto di ogni vista che segue e' la vista d'insieme del suo gruppo" {
-            $deployment | Should -Match ([regex]::Escape("## In breve`n`nLa vista «deployment-produzione» mostra l'insieme; le viste che seguono ne riprendono una alla volta le parti: «Allocazione di Client».`n`n![deployment-produzione]"))
+    Context "Scenario: un gruppo con due viste d'insieme, ciascuna seguita dalle sue parti come nella Deployment View, ha una frase per tratto (ADR-2165)" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-ValidDocs
+            $workspace = 'docs/architecture/c4/workspace.dsl'
+            Edit-Docs $docs 'docs/architecture/07_deployment_view.md' '<!-- vista: deployment-produzione -->' '<!-- vista: deployment-produzione* -->'
+            Edit-Docs $docs $workspace "                coda = component `"Coda`"`n            }" "                coda = component `"Coda`"`n            }`n            notifier = container `"Notifier`""
+            Edit-Docs $docs $workspace 'containerInstance client' "containerInstance client`n                containerInstance notifier"
+            Edit-Docs $docs $workspace 'produzione = deploymentEnvironment "Produzione" {' (@(
+                    'produzione = deploymentEnvironment "Produzione" {', 'rete = deploymentNode "Rete" {', 'vnet = deploymentNode "vnet-hub" {', 'infrastructureNode "agw"', '}', '}'
+                ) -join "`n")
+            Edit-Docs $docs $workspace 'deployment sistema produzione "deployment-produzione" {' (@(
+                    'deployment sistema produzione "deployment-produzione-client" {', 'title "Allocazione di Client"', 'include *', 'properties {', '"subject" "client"', '}', '}'
+                    'deployment sistema produzione "deployment-produzione-notifier" {', 'title "Allocazione di Notifier"', 'include *', 'properties {', '"subject" "notifier"', '}', '}'
+                    'deployment sistema produzione "deployment-produzione-rete" {', 'title "Rete"', 'include rete vnet', '}'
+                    'deployment sistema produzione "deployment-produzione-rete-vnet" {', 'title "Rete · vnet-hub"', 'include vnet', 'properties {', '"subject" "vnet"', '}', '}'
+                    'deployment sistema produzione "deployment-produzione" {', 'title "Allocazione"'
+                ) -join "`n")
+            $res = Invoke-WikiPublish $docs $wiki
+            $page = Get-WikiPage $wiki 'Architettura/7.-Deployment-View.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora il marcatore si apre con la frase della vista d'insieme di ogni tratto, nell'ordine dei tratti" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $page | Should -Match ([regex]::Escape((@(
+                            "## In breve`n`nLa vista «Allocazione» mostra l'insieme; le viste che seguono ne riprendono una alla volta le parti: «Allocazione di Client», «Allocazione di Notifier»."
+                            "La vista «Rete» mostra l'insieme; le viste che seguono ne riprendono una alla volta le parti: «Rete · vnet-hub».`n`n### Allocazione`n"
+                        ) -join ' ')))
+        }
+
+        It "E la vista d'insieme dell'ambiente mostra le applicazioni delle viste che seguono attraverso le loro istanze" {
+            $page | Should -Not -Match 'Le sezioni che seguono mostrano'
         }
     }
 

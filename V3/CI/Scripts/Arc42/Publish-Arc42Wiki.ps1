@@ -268,16 +268,35 @@ function Get-ShownIdentifiers($View, [hashtable]$Index) {
     foreach ($shown in @($View.elements | Where-Object { $_ })) {
         $element = $Index["$($shown.id)"]
         Get-DslIdentifier $element
-        $instanced = @($element.containerId, $element.softwareSystemId) | Where-Object { $_ }
-        if ($instanced) { Get-DslIdentifier $Index["$($instanced[0])"] }
+        $instanced = @($element.containerId, $element.softwareSystemId) | Where-Object { $_ } | Select-Object -First 1
+        if ($instanced) { Get-DslIdentifier $Index["$instanced"] }
     }
 }
 
-# Il gruppo ha una vista d'insieme se la prima vista mostra il soggetto di ognuna delle viste che la seguono.
-function Test-OverviewGroup([object[]]$Views, [hashtable]$Index) {
-    $shown = @(Get-ShownIdentifiers $Views[0] $Index | Where-Object { $_ })
-    $subjects = @($Views | Select-Object -Skip 1 | ForEach-Object { "$($_.properties.subject)" })
-    return -not @($subjects | Where-Object { $shown -notcontains $_ }).Count
+# Le parti di una vista d'insieme sono le viste che la seguono, fino alla prima il cui soggetto la vista non mostra.
+function Get-OverviewPartCount([object[]]$Views, [int]$Start, [hashtable]$Index) {
+    $shown = @(Get-ShownIdentifiers $Views[$Start] $Index | Where-Object { $_ })
+    $count = 0
+    while ($Start + $count + 1 -lt $Views.Count -and $shown -contains "$($Views[$Start + $count + 1].properties.subject)") { $count++ }
+    return $count
+}
+
+function New-ViewSegment([bool]$Overview, [int[]]$Positions) {
+    return [pscustomobject]@{ Overview = $Overview; Positions = @($Positions) }
+}
+
+# Il gruppo si divide in tratti consecutivi: una vista d'insieme con le sue parti, oppure viste alla pari.
+function Get-ViewSegments([object[]]$Views, [hashtable]$Index) {
+    $peers = [Collections.Generic.List[int]]::new()
+    $position = 0
+    while ($position -lt $Views.Count) {
+        $parts = Get-OverviewPartCount $Views $position $Index
+        if (-not $parts) { $peers.Add($position); $position++; continue }
+        if ($peers.Count) { New-ViewSegment $false $peers.ToArray(); $peers.Clear() }
+        New-ViewSegment $true ($position..($position + $parts))
+        $position += $parts + 1
+    }
+    if ($peers.Count) { New-ViewSegment $false $peers.ToArray() }
 }
 
 function Get-OverviewGroupLists([object[]]$Captions) {
@@ -304,13 +323,16 @@ function Get-PeerGroupLists([object[]]$Views, [hashtable]$Index) {
     return @{ Subjects = $subjects; Levels = $levels; UnleveledSubjects = @(if (-not $levels) { $subjects }) }
 }
 
-# Un marcatore che porta piu' viste si apre con le frasi della lingua che dicono come il gruppo e' fatto: una vista
-# d'insieme e le sue parti, con i nomi delle viste, oppure viste alla pari, con i loro soggetti e livelli.
+# Un marcatore che porta piu' viste si apre con le frasi della lingua che dicono come il gruppo e' fatto, una per
+# tratto: una vista d'insieme e le sue parti, con i nomi delle viste, oppure viste alla pari, con i loro soggetti e livelli.
 function Format-ViewGroupIntroduction($Workspace, [string[]]$Keys, [object[]]$Captions) {
     $views = @($Keys | ForEach-Object { Get-WorkspaceView $Workspace $_ })
     $index = Get-ElementIndex $Workspace
-    if (Test-OverviewGroup $views $index) { return Format-GroupPhrases $DocumentLanguage.ViewGroupIntroduction (Get-OverviewGroupLists $Captions) }
-    return Format-GroupPhrases $DocumentLanguage.ViewGroupPeers (Get-PeerGroupLists $views $index)
+    $sentences = foreach ($segment in @(Get-ViewSegments $views $index)) {
+        if ($segment.Overview) { Format-GroupPhrases $DocumentLanguage.ViewGroupIntroduction (Get-OverviewGroupLists @($Captions[$segment.Positions])) }
+        else { Format-GroupPhrases $DocumentLanguage.ViewGroupPeers (Get-PeerGroupLists @($views[$segment.Positions]) $index) }
+    }
+    return @($sentences | Where-Object { $_ }) -join ' '
 }
 
 function Format-GroupPhrases($Phrases, [hashtable]$GroupLists) {
