@@ -21,6 +21,8 @@
 # Ogni vista generata ha un titolo della lingua e, nella proprieta' description, la descrizione composta dal suo
 # contenuto con le frasi della lingua (ViewDescriptions): la descrizione resta fuori dal disegno. Una descrizione
 # che non nomina nessun elemento della sua vista, o uguale a quella di un'altra vista, ferma la generazione.
+# Nelle proprieta' subject e level una vista porta l'identificativo dell'elemento che e' il suo soggetto e il suo
+# livello, quando li ha: la pubblicazione ne ricava come e' fatto un gruppo di viste.
 # Negli elenchi delle relazioni ogni elemento collegato compare una volta; oltre LinkedListLimit elementi l'elenco
 # si riassume per livello (LevelSummaries), perche' una frase con piu' nomi non si legge di seguito.
 # Le viste della parte stanno in GENERATED_DIRECTORY/views/<repository>.dsl. Ogni applicazione ha la vista
@@ -434,10 +436,10 @@ function New-CodeViewContent([string]$Kind, [string]$Subject, [string[]]$Subject
     return New-ViewContent $Kind $Subject '' $shown $relationships $SubjectIds $Inside
 }
 
-function Format-View([string]$Kind, [string]$Scope, [string]$Key, [string]$Title, $Content, [string[]]$Elements, [string]$Layout) {
+function Format-View([string]$Kind, [string]$Scope, [string]$Key, [string]$Title, $Content, [string[]]$Elements, [string]$Layout, [string]$Subject, [string]$Level = '') {
     $description = Register-ViewDescription $Key $Content
     return @("$Kind $Scope $(Format-Text $Key) {", "    title $(Format-Text $Title)", "    include $($Elements -join ' ')") +
-        @(Format-ViewProperties ([ordered]@{ description = $description })) + "    autoLayout $Layout" + '}'
+        @(Format-ViewProperties ([ordered]@{ description = $description; subject = $Subject; level = $Level })) + "    autoLayout $Layout" + '}'
 }
 
 function New-ComponentView([string]$Kind, [string]$Level, $Container, [string]$Key, [string[]]$Ids, [bool]$WithUsed) {
@@ -459,7 +461,7 @@ function Get-ComponentViews($Container) {
 
 function Format-ComponentView($View) {
     $elements = Get-ViewElements $View.Ids $View.ContainerIds $View.WithUsed
-    Format-View 'component' $View.Container $View.Key $View.Title (New-CodeViewContent $View.Kind $View.Name @() $View.Ids $elements) $elements 'tb'
+    Format-View 'component' $View.Container $View.Key $View.Title (New-CodeViewContent $View.Kind $View.Name @() $View.Ids $elements) $elements 'tb' $View.Container $View.Level
 }
 
 function Format-Views($Fragments, [string]$System) {
@@ -470,7 +472,7 @@ function Format-Views($Fragments, [string]$System) {
         $id = $application.id
         $name = Get-ContainerName $application
         $content = New-CodeViewContent 'Containers' $name @($id) @($id) (Get-ViewElements @($id) @($id) $true)
-        $lines += Format-View 'container' $System "container-$id" ($ViewTitles.Containers -f $name) $content @("->$id->") 'lr'
+        $lines += Format-View 'container' $System "container-$id" ($ViewTitles.Containers -f $name) $content @("->$id->") 'lr' $id
     }
     foreach ($view in $componentViews) {
         $lines += Format-ComponentView $view
@@ -864,7 +866,7 @@ function New-ApplicationAllocationView([string]$Environment, [string]$Key, [stri
     $related = Get-RelatedContainers $Container
     $neighbours = @($Instances | Where-Object { $_.Container -ne $Container -and $related -contains $_.Container } | ForEach-Object Id | Select-Object -Unique)
     $filters = @($own | ForEach-Object { "relationship.source==$_"; "relationship.destination==$_" })
-    return New-DeploymentView $Environment "${Key}_app_$Container" ($ViewTitles.ApplicationAllocation -f $Environment, (Get-InstanceName $Container)) (New-ViewSubject 'ApplicationAllocation' (Get-InstanceName $Container) $Environment $own) (@($own) + $neighbours) @() $filters
+    return New-DeploymentView $Environment "${Key}_app_$Container" ($ViewTitles.ApplicationAllocation -f $Environment, (Get-InstanceName $Container)) (New-ViewSubject 'ApplicationAllocation' (Get-InstanceName $Container) $Environment $own) (@($own) + $neighbours) @() $filters ([ordered]@{ subject = $Container })
 }
 
 # La vista d'insieme mostra i piani di calcolo e le applicazioni senza piano, con le loro istanze e le chiamate
@@ -905,7 +907,7 @@ function Get-NetworkViews($Plan, [string]$Environment) {
                 $target = Get-TreeRoot $_.Target $Plan.Tree
                 if ($source -eq $part.id) { $target } elseif ($target -eq $part.id) { $source }
             } | Where-Object { $_ -and $_ -ne $part.id } | Select-Object -Unique)
-        New-DeploymentView $network.name "${key}_$($slugs[$part.id])" ($ViewTitles.NetworkPart -f $Environment, $part.name) (New-ViewSubject 'NetworkPart' $Plan.Tree.Names[$part.id] $Environment @($part.id)) (@($part.id) + $related) $related $filters
+        New-DeploymentView $network.name "${key}_$($slugs[$part.id])" ($ViewTitles.NetworkPart -f $Environment, $part.name) (New-ViewSubject 'NetworkPart' $Plan.Tree.Names[$part.id] $Environment @($part.id)) (@($part.id) + $related) $related $filters ([ordered]@{ subject = $part.id })
     }
 }
 

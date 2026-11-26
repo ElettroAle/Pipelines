@@ -308,6 +308,36 @@ Describe "Funzionalità: Viste di deployment che rispondono a una domanda" {
         }
     }
 
+    Context "Scenario: una vista di deployment il cui soggetto e' un elemento del modello lo porta nelle proprieta' (ADR-2165)" {
+        BeforeAll {
+            function Get-IdentifiedNodeName($Nodes, [string]$Identifier) {
+                foreach ($node in @($Nodes | Where-Object { $_ })) {
+                    if ($node.properties.'structurizr.dsl.identifier' -eq $Identifier) { return $node.name }
+                    Get-IdentifiedNodeName $node.children $Identifier
+                }
+            }
+        }
+
+        It "Allora la vista di un'applicazione ha come soggetto il container dell'applicazione" {
+            (Get-ExportedView $export 'deployment_prod_app_contoso_shop_ai_api').properties.subject | Should -Be 'contoso_shop_ai_api'
+        }
+
+        It "E la vista di una rete ha come soggetto il nodo della rete" {
+            $subject = (Get-ExportedView $export 'deployment_prod_rete_vnet_shared').properties.subject
+            $subject | Should -Not -BeNullOrEmpty
+            Get-IdentifiedNodeName $export.Workspace.model.deploymentNodes $subject | Should -Be 'vnet-shared'
+        }
+
+        It "E le viste d'insieme dell'ambiente, il cui soggetto e' l'ambiente e non un elemento, non hanno soggetto" {
+            (Get-ExportedView $export 'deployment_prod').properties.subject | Should -BeNullOrEmpty
+            (Get-ExportedView $export 'deployment_prod_rete').properties.subject | Should -BeNullOrEmpty
+        }
+
+        It "E nessuna vista di deployment ha un livello" {
+            @($export.Workspace.views.deploymentViews | Where-Object { $_.properties.level }) | Should -BeNullOrEmpty
+        }
+    }
+
     Context "Scenario: la descrizione di ogni vista nasce dal suo contenuto con le frasi della lingua, fuori dal disegno, e nomina una volta ogni elemento collegato (ADR-2140, ADR-2148)" {
         It "Allora la descrizione di ogni vista di deployment nomina il soggetto, gli elementi che mostra e le relazioni con il loro testo" -ForEach @(
             @{ Key = 'deployment_prod'; Expected = "Applicazioni dell'ambiente prod: Api, Worker. Piani di calcolo e risorse che le ospitano: asp-contoso-prod. Chiamate fra le applicazioni: Worker → Api." }

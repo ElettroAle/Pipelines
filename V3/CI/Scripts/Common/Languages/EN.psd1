@@ -80,6 +80,11 @@
     ViewGroupIntroduction = @(
         @{ Text = 'The view {0} shows the whole; the views that follow take up its parts one at a time: {1}.'; Lists = @('First', 'Following') }
     )
+    ViewGroupPeers = @(
+        @{ Text = 'The sections that follow show, for {0}, one view for each of these levels: {1}.'; Lists = @('Subjects', 'Levels') }
+        @{ Text = 'The sections that follow show one view for each of these elements: {0}.'; Lists = @('UnleveledSubjects') }
+    )
+    ViewGroupLevels = @{ logic = 'the logic'; dataAccess = 'the data access' }
     ViewNameFormat = '“{0}”'
     SummaryTag     = 'Summary'
     NetworkTag     = 'Network'
