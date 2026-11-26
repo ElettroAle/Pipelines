@@ -244,12 +244,99 @@ function Format-ViewImage([string]$Key, $Caption, $Document, $Views, [int]$Level
     return @("$('#' * $Level) $title", '') + @(if ($Caption.Description) { (ConvertTo-MarkdownLiteral $Caption.Description), '' }) + "![$title]($target)"
 }
 
-# Un marcatore che porta piu' viste si apre con le frasi della lingua composte dai nomi delle viste: la prima e quelle
-# che la seguono.
-function Format-ViewGroupIntroduction([object[]]$Captions) {
+function Get-WorkspaceElements($Elements, [hashtable]$Index) {
+    foreach ($element in @($Elements | Where-Object { $_ })) {
+        $Index["$($element.id)"] = $element
+        foreach ($inner in 'containers', 'components', 'children', 'infrastructureNodes', 'containerInstances', 'softwareSystemInstances') {
+            Get-WorkspaceElements $element.$inner $Index
+        }
+    }
+}
+
+function Get-ElementIndex($Workspace) {
+    $index = @{}
+    foreach ($elements in 'people', 'softwareSystems', 'deploymentNodes') { Get-WorkspaceElements $Workspace.model.$elements $index }
+    return $index
+}
+
+function Get-DslIdentifier($Element) {
+    return "$($Element.properties.'structurizr.dsl.identifier')"
+}
+
+# Una vista mostra un elemento se lo include o ne include un'istanza.
+function Get-ShownIdentifiers($View, [hashtable]$Index) {
+    foreach ($shown in @($View.elements | Where-Object { $_ })) {
+        $element = $Index["$($shown.id)"]
+        Get-DslIdentifier $element
+        $instanced = @($element.containerId, $element.softwareSystemId) | Where-Object { $_ } | Select-Object -First 1
+        if ($instanced) { Get-DslIdentifier $Index["$instanced"] }
+    }
+}
+
+# Le parti di una vista d'insieme sono le viste che la seguono, fino alla prima il cui soggetto la vista non mostra.
+function Get-OverviewPartCount([object[]]$Views, [int]$Start, [hashtable]$Index) {
+    $shown = @(Get-ShownIdentifiers $Views[$Start] $Index | Where-Object { $_ })
+    $count = 0
+    while ($Start + $count + 1 -lt $Views.Count -and $shown -contains "$($Views[$Start + $count + 1].properties.subject)") { $count++ }
+    return $count
+}
+
+function New-ViewSegment([bool]$Overview, [int[]]$Positions) {
+    return [pscustomobject]@{ Overview = $Overview; Positions = @($Positions) }
+}
+
+# Il gruppo si divide in tratti consecutivi: una vista d'insieme con le sue parti, oppure viste alla pari.
+function Get-ViewSegments([object[]]$Views, [hashtable]$Index) {
+    $peers = [Collections.Generic.List[int]]::new()
+    $position = 0
+    while ($position -lt $Views.Count) {
+        $parts = Get-OverviewPartCount $Views $position $Index
+        if (-not $parts) { $peers.Add($position); $position++; continue }
+        if ($peers.Count) { New-ViewSegment $false $peers.ToArray(); $peers.Clear() }
+        New-ViewSegment $true ($position..($position + $parts))
+        $position += $parts + 1
+    }
+    if ($peers.Count) { New-ViewSegment $false $peers.ToArray() }
+}
+
+function Get-OverviewGroupLists([object[]]$Captions) {
     $names = @($Captions | ForEach-Object { $DocumentLanguage.ViewNameFormat -f $(if ($_.Title) { $_.Title } else { $_.Key }) })
-    $lists = @{ First = @($names[0]); Following = @($names | Select-Object -Skip 1) }
-    return ConvertTo-MarkdownLiteral (Format-LanguagePhrases $DocumentLanguage.ViewGroupIntroduction { param($Binding) $lists[$Binding] })
+    return @{ First = @($names[0]); Following = @($names | Select-Object -Skip 1) }
+}
+
+function Get-SubjectName([string]$Subject, [hashtable]$Index) {
+    $element = $Index.Values | Where-Object { (Get-DslIdentifier $_) -eq $Subject } | Select-Object -First 1
+    if ($element.name) { return $element.name }
+    return $Subject
+}
+
+function Get-LevelName([string]$Level) {
+    if ($DocumentLanguage.ViewGroupLevels.ContainsKey($Level)) { return $DocumentLanguage.ViewGroupLevels[$Level] }
+    return $Level
+}
+
+# Le viste alla pari si presentano con i loro soggetti e i loro livelli, in ordine di comparsa; senza livelli, con i
+# soli soggetti.
+function Get-PeerGroupLists([object[]]$Views, [hashtable]$Index) {
+    $subjects = @($Views | ForEach-Object { "$($_.properties.subject)" } | Where-Object { $_ } | Select-Object -Unique | ForEach-Object { Get-SubjectName $_ $Index })
+    $levels = @($Views | ForEach-Object { "$($_.properties.level)" } | Where-Object { $_ } | Select-Object -Unique | ForEach-Object { Get-LevelName $_ })
+    return @{ Subjects = $subjects; Levels = $levels; UnleveledSubjects = @(if (-not $levels) { $subjects }) }
+}
+
+# Un marcatore che porta piu' viste si apre con le frasi della lingua che dicono come il gruppo e' fatto, una per
+# tratto: una vista d'insieme e le sue parti, con i nomi delle viste, oppure viste alla pari, con i loro soggetti e livelli.
+function Format-ViewGroupIntroduction($Workspace, [string[]]$Keys, [object[]]$Captions) {
+    $views = @($Keys | ForEach-Object { Get-WorkspaceView $Workspace $_ })
+    $index = Get-ElementIndex $Workspace
+    $sentences = foreach ($segment in @(Get-ViewSegments $views $index)) {
+        if ($segment.Overview) { Format-GroupPhrases $DocumentLanguage.ViewGroupIntroduction (Get-OverviewGroupLists @($Captions[$segment.Positions])) }
+        else { Format-GroupPhrases $DocumentLanguage.ViewGroupPeers (Get-PeerGroupLists @($views[$segment.Positions]) $index) }
+    }
+    return @($sentences | Where-Object { $_ }) -join ' '
+}
+
+function Format-GroupPhrases($Phrases, [hashtable]$GroupLists) {
+    return ConvertTo-MarkdownLiteral (Format-LanguagePhrases $Phrases { param($Binding) $GroupLists[$Binding] })
 }
 
 # Chi gestisce l'infrastruttura cerca le risorse con il loro nome in Azure, non con quello che hanno nelle viste.
@@ -319,7 +406,8 @@ function Convert-PageBody($Page, [hashtable]$PagesBySource, $Views, [hashtable]$
             $keys = @(Resolve-ViewMarker $marker $Views.Workspace)
             if (-not $keys.Count -or @($keys | Where-Object { -not $Views.Diagrams.ContainsKey($_) }).Count) { throw "$($Page.Source): la vista $marker non esiste nel modello C4" }
             $captions = @($keys | ForEach-Object { Get-ViewCaption $Views.Workspace $_ | Add-Member -NotePropertyName Key -NotePropertyValue $_ -PassThru })
-            if ($keys.Count -gt 1) { $output.Add((Format-ViewGroupIntroduction $captions)); $output.Add('') }
+            $introduction = if ($keys.Count -gt 1) { Format-ViewGroupIntroduction $Views.Workspace $keys $captions }
+            if ($introduction) { $output.Add($introduction); $output.Add('') }
             for ($index = 0; $index -lt $keys.Count; $index++) {
                 $key = $keys[$index]
                 $ShownViews[$key] = $Views.Diagrams[$key]

@@ -125,6 +125,32 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
         }
     }
 
+    Context "Scenario: ogni vista dei container e dei componenti porta nelle proprieta' il suo soggetto e, se lo ha, il suo livello (ADR-2165)" {
+        BeforeAll {
+            $res = Invoke-Generation (New-EngineRepository) 'Contoso.Shop.AI'
+            $views = $res.Generated['views/contoso.shop.ai.dsl']
+            $containers = Get-Block $views (Get-ComponentViewOpening 'sistema' 'container-contoso_shop_ai_api' 'container')
+            $logic = Get-Block $views (Get-ComponentViewOpening 'contoso_shop_ai_api' 'contoso_shop_ai_api')
+            $dataAccess = Get-Block $views (Get-ComponentViewOpening 'contoso_shop_ai_api' 'contoso_shop_ai_api-accesso-dati')
+        }
+
+        It "Allora la vista dei container di un'applicazione ha come soggetto l'applicazione, senza livello" {
+            $res.ExitCode | Should -Be 0 -Because ($res.Output)
+            $containers | Should -Match '"subject" "contoso_shop_ai_api"' -Because $views
+            $containers | Should -Not -Match '"level"'
+        }
+
+        It "E la vista della logica ha come soggetto il container e come livello la logica" {
+            $logic | Should -Match '"subject" "contoso_shop_ai_api"' -Because $views
+            $logic | Should -Match '"level" "logic"'
+        }
+
+        It "E la vista dell'accesso ai dati ha come soggetto il container e come livello l'accesso ai dati" {
+            $dataAccess | Should -Match '"subject" "contoso_shop_ai_api"' -Because $views
+            $dataAccess | Should -Match '"level" "dataAccess"'
+        }
+    }
+
     Context "Scenario: la descrizione di ogni vista dei container e dei componenti nasce dal suo contenuto con le frasi della lingua (ADR-2140)" {
         BeforeAll {
             $res = Invoke-Generation (New-EngineRepository) 'Contoso.Shop.AI'
@@ -619,6 +645,14 @@ Describe "Funzionalità: Modello C4 generato dal codice" {
             $view.description | Should -BeNullOrEmpty
             $view.properties.description | Should -BeLike "Componenti dell'accesso ai dati di Api: *"
             ($export.Workspace.views.containerViews | Where-Object key -EQ 'container-contoso_shop_ai_api').title | Should -Be 'Container di Api'
+        }
+
+        It "E le viste generate portano nelle proprieta' il soggetto, con l'identificativo dell'elemento nel modello, e il livello (ADR-2165)" {
+            $view = $export.Workspace.views.componentViews | Where-Object key -EQ 'contoso_shop_ai_api-accesso-dati'
+            $view.properties.subject | Should -Be 'contoso_shop_ai_api'
+            $view.properties.level | Should -Be 'dataAccess'
+            $subject = $export.Workspace.model.softwareSystems.containers | Where-Object { $_.properties.'structurizr.dsl.identifier' -eq $view.properties.subject }
+            $subject.id | Should -Be $view.containerId
         }
 
         It "E i componenti generati portano il tag dei generati" {

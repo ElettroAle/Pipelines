@@ -231,7 +231,7 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
         }
     }
 
-    Context "Scenario: un marcatore con piu' viste si apre con un'introduzione e ogni vista ha un titolo della pagina (ADR-2140)" {
+    Context "Scenario: un marcatore con piu' viste che non dicono il loro soggetto non ha l'introduzione e ogni vista ha un titolo della pagina (ADR-2140, ADR-2165)" {
         BeforeAll {
             $wiki = New-Wiki
             $docs = New-ValidDocs
@@ -244,14 +244,133 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
         }
         AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
 
-        It "Allora il marcatore si apre con l'introduzione composta dai nomi della prima vista e di quelle che la seguono" {
+        It "Allora il marcatore si apre con la prima vista, senza una frase che non saprebbe dire come il gruppo e' fatto" {
             $res.ExitCode | Should -Be 0 -Because $res.Output
-            $page | Should -Match ([regex]::Escape("## Componenti`n`nLa vista «Componenti di bff» mostra l'insieme; le viste che seguono ne riprendono una alla volta le parti: «Componenti di client», «Componenti di motore», «Componenti di worker».`n`n### Componenti di bff`n`nLe parti di bff.`n`n![Componenti di bff]"))
+            $page | Should -Match ([regex]::Escape("## Componenti`n`n### Componenti di bff`n`nLe parti di bff.`n`n![Componenti di bff]"))
         }
 
         It "E ogni vista ha un titolo un livello sotto il titolo che contiene il marcatore, nell'ordine delle viste" {
             @([regex]::Matches($page, '(?m)^### (.+)$') | ForEach-Object { $_.Groups[1].Value }) | Should -Be @('Componenti di bff', 'Componenti di client', 'Componenti di motore', 'Componenti di worker')
             $page | Should -Not -Match '\*\*Componenti di'
+        }
+    }
+
+    Context "Scenario: un gruppo la cui prima vista mostra il soggetto di ognuna delle viste che seguono si apre con la vista d'insieme (ADR-2165)" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-ValidDocs
+            Edit-Docs $docs 'docs/architecture/05_building_block_view.md' '<!-- vista: contenitori -->' '<!-- vista: contenitori* -->'
+            Edit-Docs $docs 'docs/architecture/c4/workspace.dsl' 'container sistema "contenitori" {' (@(
+                    'container sistema "contenitori-bff" {', 'title "Container di BFF"', 'include bff', 'properties {', '"subject" "bff"', '}', '}'
+                    'container sistema "contenitori-client" {', 'title "Container di Client"', 'include client', 'properties {', '"subject" "client"', '}', '}'
+                    'container sistema "contenitori" {', 'title "Container"'
+                ) -join "`n")
+            $res = Invoke-WikiPublish $docs $wiki
+            $page = Get-WikiPage $wiki 'Architettura/5.-Building-Block-View.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora il marcatore si apre con la frase della vista d'insieme, composta dai nomi della prima vista e di quelle che la seguono" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $page | Should -Match ([regex]::Escape("## In breve`n`nLa vista «Container» mostra l'insieme; le viste che seguono ne riprendono una alla volta le parti: «Container di BFF», «Container di Client».`n`n### Container`n"))
+        }
+
+        It "E non usa la frase delle viste alla pari" {
+            $page | Should -Not -Match 'Le sezioni che seguono mostrano'
+        }
+    }
+
+    Context "Scenario: un gruppo con due viste d'insieme, ciascuna seguita dalle sue parti come nella Deployment View, ha una frase per tratto (ADR-2165)" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-ValidDocs
+            $workspace = 'docs/architecture/c4/workspace.dsl'
+            Edit-Docs $docs 'docs/architecture/07_deployment_view.md' '<!-- vista: deployment-produzione -->' '<!-- vista: deployment-produzione* -->'
+            Edit-Docs $docs $workspace "                coda = component `"Coda`"`n            }" "                coda = component `"Coda`"`n            }`n            notifier = container `"Notifier`""
+            Edit-Docs $docs $workspace 'containerInstance client' "containerInstance client`n                containerInstance notifier"
+            Edit-Docs $docs $workspace 'produzione = deploymentEnvironment "Produzione" {' (@(
+                    'produzione = deploymentEnvironment "Produzione" {', 'rete = deploymentNode "Rete" {', 'vnet = deploymentNode "vnet-hub" {', 'infrastructureNode "agw"', '}', '}'
+                ) -join "`n")
+            Edit-Docs $docs $workspace 'deployment sistema produzione "deployment-produzione" {' (@(
+                    'deployment sistema produzione "deployment-produzione-client" {', 'title "Allocazione di Client"', 'include *', 'properties {', '"subject" "client"', '}', '}'
+                    'deployment sistema produzione "deployment-produzione-notifier" {', 'title "Allocazione di Notifier"', 'include *', 'properties {', '"subject" "notifier"', '}', '}'
+                    'deployment sistema produzione "deployment-produzione-rete" {', 'title "Rete"', 'include rete vnet', '}'
+                    'deployment sistema produzione "deployment-produzione-rete-vnet" {', 'title "Rete · vnet-hub"', 'include vnet', 'properties {', '"subject" "vnet"', '}', '}'
+                    'deployment sistema produzione "deployment-produzione" {', 'title "Allocazione"'
+                ) -join "`n")
+            $res = Invoke-WikiPublish $docs $wiki
+            $page = Get-WikiPage $wiki 'Architettura/7.-Deployment-View.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora il marcatore si apre con la frase della vista d'insieme di ogni tratto, nell'ordine dei tratti" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $page | Should -Match ([regex]::Escape((@(
+                            "## In breve`n`nLa vista «Allocazione» mostra l'insieme; le viste che seguono ne riprendono una alla volta le parti: «Allocazione di Client», «Allocazione di Notifier»."
+                            "La vista «Rete» mostra l'insieme; le viste che seguono ne riprendono una alla volta le parti: «Rete · vnet-hub».`n`n### Allocazione`n"
+                        ) -join ' ')))
+        }
+
+        It "E la vista d'insieme dell'ambiente mostra le applicazioni delle viste che seguono attraverso le loro istanze" {
+            $page | Should -Not -Match 'Le sezioni che seguono mostrano'
+        }
+    }
+
+    Context "Scenario: un gruppo di viste alla pari, una per container e livello come nel Livello 2, si apre con i soggetti e i livelli delle viste (ADR-2165)" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-ValidDocs
+            Edit-Docs $docs 'docs/architecture/05_building_block_view.md' "<!-- vista: componenti-client -->`n<!-- vista: componenti-bff -->`n<!-- vista: componenti-motore -->`n<!-- vista: componenti-worker -->" '<!-- vista: component* -->'
+            $names = [ordered]@{ client = 'Client'; bff = 'BFF'; motore = 'API del Motore'; worker = 'Worker' }
+            foreach ($part in $names.Keys) {
+                $dataAccess = if ($part -ne 'worker') {
+                    "component $part `"componenti-$part-accesso-dati`" {", "title `"$($names[$part]) · accesso ai dati`"", 'include *', 'properties {', "`"subject`" `"$part`"", '"level" "dataAccess"', '}', '}'
+                }
+                Edit-Docs $docs 'docs/architecture/c4/workspace.dsl' "component $part `"componenti-$part`" {" (@($dataAccess) + @(
+                        "component $part `"componenti-$part`" {", "title `"$($names[$part]) · logica`"", 'properties {', "`"subject`" `"$part`"", '"level" "logic"', '}'
+                    ) -join "`n")
+            }
+            $res = Invoke-WikiPublish $docs $wiki
+            $page = Get-WikiPage $wiki 'Architettura/5.-Building-Block-View.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora il marcatore si apre con la frase delle viste alla pari, con i soggetti e i livelli in ordine di comparsa" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $page | Should -Match ([regex]::Escape("## Componenti`n`nLe sezioni che seguono mostrano, per BFF, Client, API del Motore, Worker, una vista per ciascuno di questi livelli: la logica, l'accesso ai dati.`n`n### BFF · logica`n"))
+        }
+
+        It "E non dice che la prima vista mostra l'insieme, perche' non mostra il soggetto di ogni vista che segue" {
+            $page | Should -Not -Match "mostra l'insieme"
+        }
+
+        It "E le viste seguono nell'ordine delle chiavi" {
+            @([regex]::Matches($page, '(?m)^### (.+)$') | ForEach-Object { $_.Groups[1].Value }) | Should -Be @(
+                'BFF · logica', 'BFF · accesso ai dati', 'Client · logica', 'Client · accesso ai dati', 'API del Motore · logica', 'API del Motore · accesso ai dati', 'Worker · logica'
+            )
+        }
+    }
+
+    Context "Scenario: un gruppo di viste alla pari senza livello nomina solo i soggetti (ADR-2165)" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-ValidDocs
+            Edit-Docs $docs 'docs/architecture/05_building_block_view.md' "<!-- vista: componenti-client -->`n<!-- vista: componenti-bff -->`n<!-- vista: componenti-motore -->`n<!-- vista: componenti-worker -->" '<!-- vista: component* -->'
+            foreach ($part in 'client', 'bff', 'motore', 'worker') {
+                Edit-Docs $docs 'docs/architecture/c4/workspace.dsl' "component $part `"componenti-$part`" {" "component $part `"componenti-$part`" {`n            properties {`n                `"subject`" `"$part`"`n            }"
+            }
+            $res = Invoke-WikiPublish $docs $wiki
+            $page = Get-WikiPage $wiki 'Architettura/5.-Building-Block-View.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora il marcatore si apre con la frase delle viste alla pari che nomina i soggetti in ordine di comparsa" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $page | Should -Match ([regex]::Escape("## Componenti`n`nLe sezioni che seguono mostrano una vista per ciascuno di questi elementi: BFF, Client, API del Motore, Worker.`n`n![componenti-bff]"))
+        }
+
+        It "E non nomina livelli che le viste non hanno" {
+            $page | Should -Not -Match 'livelli'
         }
     }
 
