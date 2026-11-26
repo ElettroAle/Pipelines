@@ -23,7 +23,7 @@
 # repository, creare rami, contribuire alle PR e creare work item. La lingua delle voci delle versioni
 # segue DOCUMENT_LANGUAGE (document-language.yaml). Le verifiche dei diagrammi richiedono Java 17 e Node.js.
 # Con un targetBranch diverso da main il passo scrive la bozza su quel ramo: il ramo della PR prende il suo nome
-# come suffisso (es. documentation/update/staging) e il work item di un rifiuto lo nomina nel titolo. Dopo la
+# come suffisso (es. documentation/update-staging) e il work item di un rifiuto lo nomina nel titolo. Dopo la
 # promozione della bozza (documentation-promote.yaml) il passo non gira.
 #
 # Riusato da:
@@ -56,7 +56,7 @@
 #   originDirectory    → checkout del repository che ha causato il cambiamento (default: il repository
 #                        della documentazione)
 #   workItemType       → tipo del work item di un aggiornamento respinto (default: Bug)
-#   branch             → ramo della PR, con il suffisso /<targetBranch> se targetBranch non e' main
+#   branch             → ramo della PR, con il suffisso -<targetBranch> se targetBranch non e' main
 #                        (default: documentation/update)
 #   title              → titolo della PR (default: docs: documentation updated after the integration)
 #   targetBranch       → ramo del documento su cui si apre la PR: main o un ramo di bozza (default: main)
@@ -257,6 +257,6 @@ steps:
       descriptionFile: '$(Agent.TempDirectory)/documentation-update.md'
       originDirectory: ${{ parameters.originDirectory }}
       targetBranch: ${{ parameters.targetBranch }}
-      branch: ${{ iif(eq(parameters.targetBranch, 'main'), parameters.branch, format('{0}/{1}', parameters.branch, parameters.targetBranch)) }}
+      branch: ${{ iif(eq(parameters.targetBranch, 'main'), parameters.branch, format('{0}-{1}', parameters.branch, parameters.targetBranch)) }}
       templatesDirectory: ${{ parameters.templatesDirectory }}
       condition: and(succeeded(), eq(variables['documentationUpdateChanged'], 'True'))

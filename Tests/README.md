@@ -28,7 +28,7 @@ Tests/
     │   ├── C4/                 # Lettori, testo, scrittore e verifica del modello C4
     │   │   └── Fixtures/       # Repository sorgente finti, lettore del consumer, finto modello del testo
     │   ├── Mermaid/            # Test-MermaidDiagrams, Test-DiagramFlows, Sync-DiagramLabels, Repair-DiagramFlows
-    │   ├── Documentation/      # Test-Documentation, Test-DocumentationStyle, Update-Documentation
+    │   ├── Documentation/      # Test-Documentation, Test-DocumentationStyle, Update-Documentation, DraftWorkBranchTemplates
     │   ├── LanguageModel/      # LanguageModel, Foundry, Anthropic
     │   │   └── Fixtures/       # Endpoint finto di un fornitore, Azure CLI finta che segna se viene chiamata
     │   ├── Reference/          # Publish-Reference, ReferenceLinks, ReferenceSources, ReferenceTemplates
@@ -346,6 +346,15 @@ funzioni di espressione di Azure Pipelines che usano (`and`, `not`, `eq`, `ne`, 
 |---|---|
 | Gate sulle fonti della PR nel modulo di quality GitFlow | `ValidatePRSources` gira sulla PR verso `dev` in `enforce` (`refs/heads/dev` e `dev`), non verso `main` o `staging`, non in una run che non e' una PR, non in `off`; piu' rami scelti dal consumer; default `off` su `dev` nel modulo e nei due entry point, che inoltrano i parametri; job condiviso con checkout del repo dei template e step delle fonti, riusato dalla pipeline agnostica |
 | BuildAndTest dopo i gate della PR | Dipende da `ValidatePRTitle` e `ValidatePRSources`; parte con ogni combinazione di `Succeeded`, `SucceededWithIssues`, `Skipped`, non parte se uno dei due fallisce |
+
+#### `DraftWorkBranchTemplates.Tests.ps1`
+
+Il nome del ramo di lavoro si legge dal testo di `adr-register.yaml` e `documentation-update.yaml` e si valuta come
+farebbe l'espansione; il push si prova su un origin bare locale che ha già il ramo di lavoro di main.
+
+| Suite | Scenario testato |
+|---|---|
+| Rami di lavoro della bozza accanto a quelli di main | Push del ramo di lavoro della bozza riuscito mentre esiste quello di main; stessa espressione in ogni punto che compone il ramo; su main il ramo di default; sulla bozza il ramo del documento come suffisso dopo un trattino, mai cartella del ramo di main o del ramo del documento né dentro la loro |
 
 #### `ScenarioCoverage.Tests.ps1` (14 suite, 25 test)
 
