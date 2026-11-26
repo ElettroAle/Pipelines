@@ -22,6 +22,8 @@
             @{ Text = 'Nell''ambiente {0}, {1} gira su {2}.'; Lists = @('Environment', 'Subject', 'Host') }
             @{ Text = 'Si rivolge a {0}.'; Lists = @('Outgoing') }
             @{ Text = 'Riceve le richieste di {0}.'; Lists = @('Incoming') }
+            @{ Text = 'Scambia richieste con {0}.'; Lists = @('Mutual') }
+            @{ Text = 'Non ha relazioni con altri elementi dell''ambiente.'; Lists = @('Unrelated') }
         )
         Network = @(
             @{ Text = 'Reti virtuali dell''ambiente {0}: {1}.'; Lists = @('Environment', 'Shown.virtualNetwork') }
@@ -34,22 +36,46 @@
             @{ Text = 'Risorse raggiunte in privato dalla rete: {0}.'; Lists = @('Shown.privateEndpoint') }
             @{ Text = 'Riceve il traffico da {0}.'; Lists = @('Incoming') }
             @{ Text = 'Si collega a {0}.'; Lists = @('Outgoing') }
+            @{ Text = 'Scambia traffico con {0}.'; Lists = @('Mutual') }
+            @{ Text = 'Non ha collegamenti con altre reti.'; Lists = @('Unrelated') }
         )
         Containers = @(
-            @{ Text = 'Le relazioni di {0} con il resto del sistema.'; Lists = @('Subject') }
-            @{ Text = 'Si rivolge a {0}.'; Lists = @('Outgoing') }
-            @{ Text = 'Riceve le richieste di {0}.'; Lists = @('Incoming') }
+            @{ Text = '{0} si rivolge a {1}.'; Lists = @('Subject', 'Outgoing') }
+            @{ Text = '{0} riceve le richieste di {1}.'; Lists = @('Subject', 'Incoming') }
+            @{ Text = '{0} scambia richieste con {1}.'; Lists = @('Subject', 'Mutual') }
+            @{ Text = '{0} non ha relazioni con altri sistemi.'; Lists = @('Unrelated') }
         )
         Logic = @(
             @{ Text = 'Componenti della logica di {0}: {1}.'; Lists = @('Subject', 'Shown.logic') }
             @{ Text = 'Si rivolgono a {0}.'; Lists = @('Outgoing') }
             @{ Text = 'Ricevono le richieste di {0}.'; Lists = @('Incoming') }
+            @{ Text = 'Si scambiano richieste con {0}.'; Lists = @('Mutual') }
+            @{ Text = 'Non si rivolgono ad altri elementi e non ne ricevono richieste.'; Lists = @('Unrelated') }
         )
         DataAccess = @(
             @{ Text = 'Componenti dell''accesso ai dati di {0}: {1}.'; Lists = @('Subject', 'Shown.dataAccess') }
             @{ Text = 'Si rivolgono a {0}.'; Lists = @('Outgoing') }
             @{ Text = 'Usati da {0}.'; Lists = @('Incoming') }
+            @{ Text = 'Si scambiano richieste con {0}.'; Lists = @('Mutual') }
+            @{ Text = 'Non si rivolgono ad altri elementi e non ne ricevono richieste.'; Lists = @('Unrelated') }
         )
+    }
+    LevelSummaries = @{
+        person = @{ Count = '{0} persone' }
+        softwareSystem = @{ Count = '{0} sistemi esterni' }
+        container = @{ Count = '{0} container' }
+        logic = @{ Count = '{0} componenti della logica'; InView = '{0} componenti della logica descritti nella vista {1}' }
+        dataAccess = @{ Count = '{0} componenti dell''accesso ai dati'; InView = '{0} componenti dell''accesso ai dati descritti nella vista {1}' }
+        containerInstance = @{ Count = '{0} istanze di container' }
+        region = @{ Count = '{0} regioni' }
+        hostingPlan = @{ Count = '{0} piani di calcolo' }
+        application = @{ Count = '{0} risorse che ospitano applicazioni' }
+        virtualNetwork = @{ Count = '{0} reti virtuali' }
+        subnet = @{ Count = '{0} subnet' }
+        privateEndpoint = @{ Count = '{0} accessi privati' }
+        gateway = @{ Count = '{0} gateway' }
+        ingress = @{ Count = '{0} ingressi pubblici' }
+        ingressEndpoint = @{ Count = '{0} punti d''ingresso pubblici' }
     }
     ViewGroupIntroduction = @(
         @{ Text = 'La vista {0} mostra l''insieme; le viste che seguono ne riprendono una alla volta le parti: {1}.'; Lists = @('First', 'Following') }
