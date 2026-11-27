@@ -420,18 +420,21 @@ Modello C4 (`c4-verify.yaml`, `CI/Scripts/C4/Test-C4Model.ps1`):
   derivate fra due elementi di deployment (tag `Riassunto` in italiano), che la generazione scrive da quelle fra i
   loro elementi. Un riferimento a un elemento che nessuna
   parte contiene rende il modello non valido, e l'errore nomina l'identificativo.
-- Ogni vista si disegna come nella wiki (`CI/Scripts/C4/ViewImages.ps1`): dall'alto in basso e da sinistra
-  a destra, con gli spazi di default e stretti, con i ranghi come escono e con i ranghi più larghi di 3, 5
-  o 8 elementi a capo (frecce nascoste fra un elemento e quello tante posizioni dopo, come `unflatten` di
-  Graphviz), con il testo dei riquadri che va a capo alla larghezza di default di C4-PlantUML e al doppio,
-  e resta il disegno che si rimpicciolisce meno per entrare in una pagina larga `pageWidth` pixel (default
-  1200); a parità resta il più largo, che riempie di più la pagina, poi il più basso. La pagina della wiki
-  scorre in verticale, quindi l'altezza non rimpicciolisce il disegno. PlantUML disegna fino a 16384 pixel
-  per lato, senza il ritaglio di default a 4096. Una disposizione che il layout smetana non riesce a disegnare (un arco che non
-  instrada) resta fuori e la vista sceglie fra le altre; solo una vista senza nessuna disposizione disegnabile
-  ferma la misura. Il log ne dà misure, disposizione, ranghi, testo largo e scala. Se anche quel disegno scende sotto `minScale` (default 0.6) un avviso segnala la
-  vista come troppo piena, senza fermare la verifica: una vista troppo piena si snellisce nel modello. La
-  direzione scritta nel modello è solo il punto di partenza.
+- Ogni vista si disegna come nella wiki (`CI/Scripts/C4/ViewImages.ps1`): dall'alto in basso e da sinistra a
+  destra, con gli spazi di default e stretti, con i ranghi come escono e con i ranghi più larghi di 3, 5 o 8
+  elementi a capo (frecce nascoste fra un elemento e quello tante posizioni dopo, come `unflatten` di
+  Graphviz), con il testo dei riquadri che va a capo alla larghezza di default di C4-PlantUML e al doppio, e
+  ogni disegno si adatta a una pagina larga `pageWidth` pixel (default 1200). Fra i disegni che restano
+  almeno a `minScale` (default 0.6) vince quello che sulla pagina occupa più larghezza, poi il più basso
+  sulla pagina: una colonna stretta che entra intera perde contro un disegno largo rimpicciolito ma
+  leggibile. La pagina della wiki scorre in verticale, quindi l'altezza non rimpicciolisce il disegno. Se
+  nessun disegno arriva a `minScale` resta quello che si rimpicciolisce meno. PlantUML disegna fino a 16384
+  pixel per lato, senza il ritaglio di default a 4096. Una disposizione che il layout smetana non riesce a
+  disegnare (un arco che non instrada) resta fuori e la vista sceglie fra le altre; solo una vista senza
+  nessuna disposizione disegnabile ferma la misura. Il log ne dà misure, disposizione, ranghi, testo largo e
+  scala. Se anche quel disegno scende sotto `minScale` un avviso segnala la vista come troppo piena, senza
+  fermare la verifica: una vista troppo piena si snellisce nel modello. La direzione scritta nel modello è
+  solo il punto di partenza.
 - **Requisiti.** Java 17 o successivo per la Structurizr CLI (versione fissata, SHA-256 verificato) e per
   PlantUML, con i font di sistema; lo step li prepara con `ensure-java.yaml` e `ensure-fonts.yaml`. Senza
   Java la verifica fallisce nominando il controllo non eseguito.

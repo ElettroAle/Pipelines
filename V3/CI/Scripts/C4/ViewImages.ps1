@@ -2,9 +2,9 @@
 
 # Disegna le viste C4 esportate in C4-PlantUML nel modo che si legge meglio. Ogni vista si disegna
 # dall'alto in basso e da sinistra a destra, con gli spazi di default e stretti, con i ranghi come escono e
-# a capo, con il testo dei riquadri di default e largo, e resta il disegno che si rimpicciolisce meno per
-# entrare nei C4_PAGE_WIDTH pixel della pagina e, a parita', la riempie di piu'. La pagina della wiki scorre
-# in verticale: l'altezza non limita. Sotto C4_MIN_SCALE il disegno scelto si segnala senza fermare nulla.
+# a capo, con il testo dei riquadri di default e largo. Fra i disegni che, adattati ai C4_PAGE_WIDTH pixel
+# della pagina, restano sopra C4_MIN_SCALE vince quello che occupa piu' larghezza, poi il piu' basso: la
+# pagina della wiki scorre in verticale. Senza disegni leggibili vince la scala maggiore, segnalata.
 
 . "$PSScriptRoot/../Arc42/PlantUml.ps1"
 
@@ -132,8 +132,12 @@ function Get-DiagramVariants([string]$Diagram) {
     return $variants
 }
 
+# La larghezza occupata sulla pagina, larghezza per scala, vale proprio la larghezza della pagina per ogni
+# disegno che la supera: calcolata come prodotto, due disegni a pari merito si separerebbero per arrotondamento.
 function Select-ReadableImage($Images) {
-    return $Images | Sort-Object @{ Expression = 'Scale'; Descending = $true }, @{ Expression = 'Width'; Descending = $true }, Height, Order | Select-Object -First 1
+    $readable = @($Images | Where-Object { Test-ViewReadable $_ })
+    if (-not $readable.Count) { return $Images | Sort-Object @{ Expression = 'Scale'; Descending = $true }, Order | Select-Object -First 1 }
+    return $readable | Sort-Object @{ Expression = { [math]::Min($_.Width, $ViewPage.Width) }; Descending = $true }, @{ Expression = { $_.Height * $_.Scale } }, Order | Select-Object -First 1
 }
 
 function Invoke-PlantUml([hashtable]$Sources, [string]$Java) {

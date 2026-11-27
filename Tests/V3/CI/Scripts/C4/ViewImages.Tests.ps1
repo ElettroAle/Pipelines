@@ -110,7 +110,7 @@ Describe "Funzionalità: Viste C4 disegnate nella direzione che si legge" {
 
     Context "Scenario: gli spazi stretti fanno entrare la vista nella pagina" {
         It "Allora resta il disegno con gli spazi stretti" {
-            $images = ConvertTo-ViewImages @{ componenti = (New-Diagram '2400x900' '2000x1000' 'top to bottom direction' 'tbs=1500x800 lrs=1600x900') } 'java'
+            $images = ConvertTo-ViewImages @{ componenti = (New-Diagram '2400x900' '2100x1000' 'top to bottom direction' 'tbs=1500x800 lrs=1600x1100') } 'java'
             $images['componenti'].Layout | Should -Be 'tb-stretto'
             $images['componenti'].Scale | Should -Be 0.8
         }
@@ -194,7 +194,7 @@ Describe "Funzionalità: ranghi troppo larghi a capo" {
 
     Context "Scenario: le risorse chiamate da un'applicazione non entrano in una riga" {
         BeforeEach {
-            $measures = 'tb=3000x900 lr=900x3400 tbs=2700x800 lrs=800x3000 tb6=900x1500 lr6=1500x2000 tb4=1800x1200'
+            $measures = 'tb=3000x900 lr=900x3400 tbs=2700x800 lrs=800x3000 tb6=900x1500 lr6=2500x2000 tb4=2200x1200'
             $images = ConvertTo-ViewImages @{ container = (New-FanOutDiagram 9 $measures) } 'java'
         }
 
@@ -218,7 +218,7 @@ Describe "Funzionalità: ranghi troppo larghi a capo" {
 
     Context "Scenario: i ranghi a capo non rendono il disegno piu' leggibile" {
         It "Allora resta il disegno senza frecce nascoste" {
-            $images = ConvertTo-ViewImages @{ container = (New-FanOutDiagram 9 'tb=1000x900 lr=900x1000 tbs=1000x900 lrs=900x1000 tb6=900x1500 lr6=1500x900') } 'java'
+            $images = ConvertTo-ViewImages @{ container = (New-FanOutDiagram 9 'tb=1000x900 lr=900x1000 tbs=1000x900 lrs=900x1000 tb6=900x1500 lr6=2500x900') } 'java'
             $images['container'].RankWidth | Should -Be 0
             Format-ViewMeasure $images['container'] | Should -Be '1000x900 px in tb, scala 1.00 (minima 0.60)'
         }
@@ -314,17 +314,38 @@ Describe "Funzionalità: viste che riempiono la larghezza della pagina" {
         }
     }
 
-    Context "Scenario: entrambe le direzioni sono piu' larghe della pagina" {
-        It "Allora resta il disegno che si rimpicciolisce meno" {
-            $images = ConvertTo-ViewImages @{ container = (New-Diagram '2400x900' '1800x1200') } 'java'
-            $images['container'].Layout | Should -Be 'lr'
-            $images['container'].Scale | Should -Be (1200 / 1800)
+    Context "Scenario: una colonna stretta entra intera e un disegno largo si legge rimpicciolito (ADR-2176)" {
+        BeforeEach {
+            $images = ConvertTo-ViewImages @{ allocazione = (New-Diagram '601x3728' '1674x1850') } 'java'
+        }
+
+        It "Allora resta il disegno largo" {
+            $images['allocazione'].Layout | Should -Be 'lr'
+        }
+
+        It "E la scala e' quella con cui il disegno entra nella larghezza della pagina" {
+            $images['allocazione'].Scale | Should -Be (1200 / 1674)
         }
     }
 
-    Context "Scenario: due disegni hanno la stessa larghezza" {
-        It "Allora resta il disegno piu' basso" {
-            $images = ConvertTo-ViewImages @{ container = (New-Diagram '1000x1400' '1000x900') } 'java'
+    Context "Scenario: il disegno largo scende sotto la scala minima" {
+        It "Allora resta il disegno che si legge" {
+            $images = ConvertTo-ViewImages @{ container = (New-Diagram '900x1500' '3000x900') } 'java'
+            $images['container'].Layout | Should -Be 'tb'
+        }
+    }
+
+    Context "Scenario: nessun disegno arriva alla scala minima" {
+        It "Allora resta il disegno che si rimpicciolisce meno" {
+            $images = ConvertTo-ViewImages @{ container = (New-Diagram '2400x900' '3000x700') } 'java'
+            $images['container'].Layout | Should -Be 'tb'
+            $images['container'].Scale | Should -Be 0.5
+        }
+    }
+
+    Context "Scenario: due disegni occupano la stessa larghezza della pagina" {
+        It "Allora resta il disegno piu' basso sulla pagina" {
+            $images = ConvertTo-ViewImages @{ container = (New-Diagram '1500x1500' '2000x1500') } 'java'
             $images['container'].Layout | Should -Be 'lr'
         }
     }
@@ -410,8 +431,9 @@ Describe "Funzionalità: ranghi a capo disegnati da PlantUML" {
 
     AfterAll { $env:PATH = $previousPath }
 
-    It "Una vista con trenta risorse chiamate da un'applicazione si legge" {
+    It "Una vista con trenta risorse chiamate da un'applicazione si legge con i ranghi a capo" {
         Format-ViewMeasure $images['container'] | Write-Host
+        $images['container'].RankWidth | Should -BeGreaterThan 0
         Test-ViewReadable $images['container'] | Should -BeTrue
     }
 
