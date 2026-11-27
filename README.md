@@ -344,6 +344,8 @@ template d'ingresso: lo step `document-directories.yaml` le mette in `DOCS_DIREC
 | Ambiente e viste della rete, relazioni di rete e riassunte | `<ambiente> rete`, tag `Rete` e `Riassunto` | `<ambiente> network`, tag `Network` and `Summary` |
 | Colonne della tabella dei gruppi di risorse | `Gruppo di risorse`, `Contenuto`, `Modulo` | `Resource group`, `Content`, `Module` |
 | Frasi della descrizione dei nodi di deployment, per livello | `NodeDescriptions` in `IT.psd1` | `NodeDescriptions` in `EN.psd1` |
+| Chiave di lettura di un gruppo con viste di deployment, per tipo di vista | `ViewTypeReadings` in `IT.psd1` | `ViewTypeReadings` in `EN.psd1` |
+| Riassunto di un elenco lungo nelle viste di allocazione | `<n> servizi del gruppo di risorse <gruppo>` | `<n> services of the resource group <group>` |
 | Parti della decisione con struttura e flusso nel codice | `Struttura nel codice`, `Flusso nel codice` | `Code structure`, `Code flow` |
 | Pagina della wiki (default di `wikiRoot`) | `Architettura` | `Architecture` |
 | Colonna dello stato nella wiki | `Stato` | `Status` |
@@ -589,9 +591,10 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   `environments` associa a ogni ambiente del modello la sua directory d'ambiente; una directory che non
   vi compare entra negli ambienti con cui scambia remote state. `instances` istanzia un modulo radice
   per ogni directory di un glob, con il nome della directory in una variabile. Ogni ambiente del modello
-  ne scrive due, ciascuno per una domanda. L'allocazione, `<ambiente>`: la regione della risorsa (o del suo
-  gruppo di risorse), con i piani di calcolo e le applicazioni che ospitano; un'applicazione senza piano sta
-  nella regione, e cosi' un servizio che ospita un container. La rete, `<ambiente> rete` in italiano: le reti
+  ne scrive due, ciascuno per una domanda. L'allocazione, `<ambiente>`: la regione del gruppo di risorse, il
+  gruppo di risorse e le risorse che vi stanno: i piani di calcolo con le applicazioni che ospitano, le
+  applicazioni senza piano e i servizi che ospitano un container; una risorsa senza gruppo noto sta nella
+  regione. Ogni istanza porta il livello della risorsa che la ospita. La rete, `<ambiente> rete` in italiano: le reti
   virtuali con le subnet, le applicazioni che vi si integrano, i private endpoint, con il nome della risorsa
   che espongono e i servizi esposti, e gli Application Gateway; i profili Front Door con i loro endpoint; le
   relazioni di peering fra due reti (una per coppia), di origine dall'endpoint del Front Door alla risorsa
@@ -599,11 +602,13 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   Gateway all'applicazione o al private endpoint del suo pool. Un collegamento che la dichiarazione non
   risolve, come un nome fuori dalla dichiarazione, da' un avviso e non ferma la lettura. Ogni elemento porta
   il gruppo di risorse, il modulo radice che lo dichiara, il nome Azure della risorsa (un'istanza quello
-  della risorsa che la ospita; una regione nessuno) e il suo livello (`region`, `hostingPlan`,
-  `application`, `virtualNetwork`, `subnet`, `privateEndpoint`, `gateway`, `ingress`, `ingressEndpoint`).
+  della risorsa che la ospita; una regione nessuno) e il suo livello (`region`, `resourceGroup`, `hostingPlan`,
+  `application`, `virtualNetwork`, `subnet`, `privateEndpoint`, `gateway`, `ingress`, `ingressEndpoint`); il
+  gruppo di risorse non porta un gruppo, perche' non e' contenuto di se stesso.
   La descrizione di un nodo la compone lo scrittore con le frasi del suo livello in `NodeDescriptions`
   della lingua del documento, riempite con i nomi che il modello gia' contiene (cio' che il nodo ospita,
-  la parte che espone, la rete in cui sta, le relazioni che riceve o manda), senza tipo di risorsa e senza
+  la parte che espone, la rete in cui sta, le relazioni che riceve o manda, l'ambiente, i moduli, il
+  contenuto contato per livello con `LevelSummaries`), senza tipo di risorsa e senza
   a capo; una frase senza nomi non si scrive, e un livello senza frasi ferma l'esportazione nominandolo.
   Un container dei frammenti sta sulla risorsa con
   il suo nome nel codice o su quella che un frammento dichiara in `hosts`. Una risorsa che ospita un
@@ -611,8 +616,9 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   Lo scrittore mette gli ambienti in `deployment/<repository>.dsl`, da includere nel modello dopo il
   sistema software, e le viste in `deployment-views/<repository>.dsl`, da includere nelle viste. Le viste
   nascono dalle domande e non dalla forma dell'albero dei nodi: per ogni ambiente l'allocazione
-  (`deployment_<ambiente>`), con i soli piani di calcolo, le applicazioni che ospitano e le chiamate fra le
-  applicazioni; per ogni applicazione ospitata la sua allocazione (`deployment_<ambiente>_app_<container>`),
+  (`deployment_<ambiente>`), con i soli piani di calcolo, le applicazioni che ospitano, i gruppi e le regioni
+  che li contengono e le chiamate fra le applicazioni; per ogni applicazione ospitata la sua allocazione
+  (`deployment_<ambiente>_app_<container>`),
   con il suo piano, i servizi e le applicazioni con cui ha relazioni e solo le sue relazioni; la rete
   (`deployment_<ambiente>_rete`), con le reti e i profili d'ingresso chiusi e fra loro le relazioni di rete,
   per ogni rete con subnet la sua vista (`deployment_<ambiente>_rete_<rete>`), con chiuse le radici con
@@ -623,7 +629,9 @@ testo lo scrive un modello linguistico, e i controlli deterministici verificano 
   Un nodo e un'istanza di container, che Structurizr non collega, si collegano attraverso il nodo
   dell'istanza. Le viste di rete mostrano solo le relazioni con il tag `Rete`. Il titolo dice il tipo della vista, l'ambiente e la parte
   (`Allocazione · prod · Bff.Web` in italiano) e la descrizione e' composta dal contenuto della vista con le
-  frasi del suo tipo, come per le viste dei container.
+  frasi del suo tipo, come per le viste dei container; nelle viste di allocazione un elenco di relazioni oltre
+  cinque elementi si riassume per gruppo di risorse, in ordine di nome del gruppo. Ogni vista di deployment
+  dichiara nella proprieta' `type` il suo tipo, `allocation` o `network`, e si dispone da sinistra a destra.
   L'allocazione dichiara nella proprieta' `resourceGroups` gli ambienti di cui la pubblicazione elenca i
   gruppi di risorse in una tabella sotto l'immagine, con il nome Azure di ogni risorsa. Due nodi fratelli con lo stesso nome, che Structurizr
   rifiuta, aggiungono al nome i servizi esposti, il gruppo di risorse o il nome della risorsa, e la
@@ -829,7 +837,9 @@ pubblicazione:
   marcatore, così l'indice mostra le viste, e la descrizione della vista: la proprieta' `description` di una
   vista generata, la descrizione di una vista scritta a mano. Il titolo è anche il testo alternativo; una vista
   senza titolo ha la chiave. Un marcatore che porta più viste si apre con l'introduzione `ViewGroupIntroduction`
-  della lingua, composta dai nomi della prima vista e di quelle che la seguono. Lo stesso vale nel documento unico.
+  della lingua, composta dai nomi della prima vista e di quelle che la seguono, preceduta dalla chiave di
+  lettura `ViewTypeReadings` di ogni tipo delle sue viste di deployment, una volta per tipo nell'ordine di
+  comparsa. Lo stesso vale nel documento unico.
   Con la proprieta' `c4plantuml.tags` delle viste, colori e forme vengono dagli stili del modello, che
   allora dichiara anche quelli di `Person`, `Software System`, `Container` e `Component`.
 - I blocchi ` ```mermaid ` diventano la sintassi della wiki `::: mermaid`. I link alle sezioni e alle
@@ -950,7 +960,7 @@ albero in `Tests/V3/CI/Scripts/`, con le fixture accanto ai test che le usano.
 | `CI/Scripts/C4/C4CodeModel.ps1` | Contratto del frammento del modello C4 generato, incluso dai lettori: file di progetto letti, container, componenti, relazioni, indirizzi di avvio e chiamati e il loro legame |
 | `CI/Scripts/C4/Read-C4DotNet10Model.ps1` | Lettore .NET 10 (`c4-read-dotnet10.yaml`): applicazioni come container, progetti di produzione come componenti, regole di .NET 10; un progetto di un'altra versione ferma la lettura |
 | `CI/Scripts/C4/Read-C4Angular18Model.ps1` | Lettore Angular 18 (`c4-read-angular18.yaml`): l'applicazione come container, cartelle di funzionalità e moduli di base come componenti; un workspace di un'altra versione ferma la lettura |
-| `CI/Scripts/C4/Read-C4TerraformModel.ps1` | Lettore Terraform (`c4-read-terraform.yaml`): per ambiente l'allocazione (regioni, piani di calcolo, istanze dei container dei frammenti) e la rete (reti virtuali, subnet, private endpoint, Application Gateway, Front Door, peering, origini e backend), con gruppo di risorse e modulo di ogni elemento; una risorsa di hosting di un tipo che le regole non riconoscono ferma la lettura |
+| `CI/Scripts/C4/Read-C4TerraformModel.ps1` | Lettore Terraform (`c4-read-terraform.yaml`): per ambiente l'allocazione (regioni, gruppi di risorse, piani di calcolo, istanze dei container dei frammenti) e la rete (reti virtuali, subnet, private endpoint, Application Gateway, Front Door, peering, origini e backend), con gruppo di risorse e modulo di ogni elemento; una risorsa di hosting di un tipo che le regole non riconoscono ferma la lettura |
 | `CI/Scripts/C4/TerraformCode.ps1` | Blocchi dei file Terraform e riferimenti delle loro espressioni seguiti per nome fino alle risorse, condivisi dai lettori dell'infrastruttura |
 | `CI/Scripts/C4/TerraformValues.ps1` | Valori della dichiarazione Terraform di un ambiente: espressioni, funzioni, variabili, locals, moduli, override e remote state, con i valori sconosciuti |
 | `CI/Scripts/C4/Write-C4ModelText.ps1` | Testo del modello C4 di tutto il sistema (`c4-describe.yaml`): stesure del modello linguistico (`C4_TEXT_PROVIDER`) corrette in modo deterministico o rimandate al modello, catalogo unico di persone e sistemi esterni controllato dal modello, revisione di tutto il modello con prove verificate nella configurazione di produzione, testo salvato un container alla volta e ripreso al rilancio, correzioni elencate |

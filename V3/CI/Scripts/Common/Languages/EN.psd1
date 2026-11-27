@@ -68,6 +68,8 @@
         dataAccess = @{ Count = '{0} data access components'; InView = '{0} data access components described in the view {1}' }
         containerInstance = @{ Count = '{0} container instances' }
         region = @{ Count = '{0} regions' }
+        resourceGroup = @{ Count = '{0} resource groups' }
+        service = @{ Count = '{0} services' }
         hostingPlan = @{ Count = '{0} compute plans' }
         application = @{ Count = '{0} resources hosting applications' }
         virtualNetwork = @{ Count = '{0} virtual networks' }
@@ -88,6 +90,11 @@
         @{ Text = 'The sections that follow show one view for each of these elements: {0}.'; Lists = @('UnleveledSubjects') }
     )
     ViewGroupLevels = @{ logic = 'the logic'; dataAccess = 'the data access' }
+    ViewTypeReadings = @{
+        allocation = 'The allocation views read from the outside in: the Azure region holds the resource groups, a group holds the compute plans and the services, a plan the applications it runs; the filled boxes are the applications and the services that keep data or messages, the arrows the calls between them.'
+        network = 'The network views show the virtual networks with their subnets, the applications integrated in each subnet and the private accesses to the services; the arrows are the peerings between the networks and the path of the requests from the public entry to the applications.'
+    }
+    ResourceGroupSummary = '{0} services of the resource group {1}'
     ListConjunction = 'and'
     ViewNameFormat = '“{0}”'
     SummaryTag     = 'Summary'
@@ -97,7 +104,10 @@
     NetworkEnvironmentSuffix = 'network'
     NodeDescriptions = @{
         region = @(
-            @{ Text = 'Hosts {0}.'; Lists = @('Children') }
+            @{ Text = 'Azure region of the {0} environment: {1}.'; Lists = @('Environment', 'ChildCounts') }
+        )
+        resourceGroup = @(
+            @{ Text = 'Resource group of the module {0}: {1}.'; Lists = @('Modules', 'ChildCounts') }
         )
         hostingPlan = @(
             @{ Text = 'Compute plan of {0}.'; Lists = @('Children') }
@@ -105,7 +115,6 @@
         application = @(
             @{ Text = 'Hosts {0}.'; Lists = @('Children') }
             @{ Text = 'Receives the requests from {0}.'; Lists = @('Incoming.Backend,Incoming.Origin') }
-            @{ Text = 'Sits in {0}.'; Lists = @('Parent') }
         )
         virtualNetwork = @(
             @{ Text = 'Holds the subnets {0}.'; Lists = @('Children') }

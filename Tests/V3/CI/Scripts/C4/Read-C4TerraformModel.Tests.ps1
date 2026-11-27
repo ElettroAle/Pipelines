@@ -149,8 +149,8 @@ Describe "Funzionalità: Viste di deployment generate dall'infrastruttura" {
     Context "Scenario: applicazione integrata in una subnet" {
         BeforeAll { $result = Invoke-TerraformReader (New-TerraformRepository) }
 
-        It "Allora nell'allocazione l'istanza dell'applicazione sta nel nodo del piano di hosting, nella sua regione" {
-            (Get-InstancePath $result.Fragment 'prod' 'contoso_shop_ai_api') | Should -Be @('westeurope', 'asp-contoso-prod')
+        It "Allora nell'allocazione l'istanza dell'applicazione sta nel nodo del piano di hosting, nel suo gruppo di risorse e nella sua regione" {
+            (Get-InstancePath $result.Fragment 'prod' 'contoso_shop_ai_api') | Should -Be @('westeurope', 'rg-contoso-prod', 'asp-contoso-prod')
         }
 
         It "E nella rete l'istanza sta nella subnet ""snet-engine"" della sua rete virtuale" {
@@ -228,15 +228,15 @@ Describe "Funzionalità: Viste di deployment che rispondono a una domanda" {
     }
 
     Context "Scenario: la vista di allocazione mostra solo i piani di calcolo con le applicazioni che ospitano e le chiamate fra le applicazioni" {
-        It "Allora la vista ""deployment_prod"" mostra i piani di calcolo con le applicazioni che ospitano, nella loro regione" {
+        It "Allora la vista ""deployment_prod"" mostra i piani di calcolo con le applicazioni che ospitano, nel loro gruppo di risorse e nella loro regione" {
             $generation.ExitCode | Should -Be 0 -Because $generation.Output
             $export.Error | Should -BeNullOrEmpty
-            Get-ShownNames $export 'deployment_prod' | Sort-Object | Should -Be @('Api', 'asp-contoso-prod', 'westeurope', 'Worker')
+            Get-ShownNames $export 'deployment_prod' | Sort-Object | Should -Be @('Api', 'asp-contoso-prod', 'rg-contoso-prod', 'westeurope', 'Worker')
         }
 
-        It "E non mostra reti, subnet, private endpoint, gruppi di risorse ne' servizi gestiti" {
+        It "E non mostra reti, subnet, private endpoint ne' servizi gestiti" {
             $shown = Get-ShownNames $export 'deployment_prod'
-            foreach ($hidden in 'vnet-contoso-prod', 'snet-engine', 'Api · sites', 'rg-contoso-prod', 'kv-contoso-prod', 'afd-contoso-prod') { $shown | Should -Not -Contain $hidden }
+            foreach ($hidden in 'vnet-contoso-prod', 'snet-engine', 'Api · sites', 'kv-contoso-prod', 'afd-contoso-prod') { $shown | Should -Not -Contain $hidden }
         }
 
         It "E mostra le chiamate fra le applicazioni" {
@@ -246,7 +246,7 @@ Describe "Funzionalità: Viste di deployment che rispondono a una domanda" {
 
     Context "Scenario: la vista di allocazione di un'applicazione mostra il suo piano e i servizi gestiti che usa, con le relazioni vere" {
         It "Allora la vista dell'applicazione mostra il suo piano, i servizi gestiti che usa e le applicazioni con cui comunica" {
-            Get-ShownNames $export 'deployment_prod_app_contoso_shop_ai_api' | Sort-Object | Should -Be @('Api', 'asp-contoso-prod', 'kv-contoso-prod', 'westeurope', 'Worker')
+            Get-ShownNames $export 'deployment_prod_app_contoso_shop_ai_api' | Sort-Object | Should -Be @('Api', 'asp-contoso-prod', 'kv-contoso-prod', 'rg-contoso-prod', 'westeurope', 'Worker')
         }
 
         It "E mostra solo le relazioni dell'applicazione, quelle che il codice dichiara" {
@@ -409,10 +409,10 @@ resource "azurerm_service_plan" "edge" {
             $grownExport = Export-DeploymentWorkspace $grown
         }
 
-        It "Allora la vista di allocazione mostra il piano nuovo nella sua regione, con l'applicazione che ospita" {
+        It "Allora la vista di allocazione mostra il piano nuovo nel suo gruppo e nella sua regione, con l'applicazione che ospita" {
             $grown.ExitCode | Should -Be 0 -Because $grown.Output
             $grownExport.Error | Should -BeNullOrEmpty
-            Get-ShownNames $grownExport 'deployment_prod' | Sort-Object | Should -Be @('Api', 'asp-contoso-prod', 'asp-edge-prod', 'italynorth', 'westeurope', 'Worker')
+            Get-ShownNames $grownExport 'deployment_prod' | Sort-Object | Should -Be @('Api', 'asp-contoso-prod', 'asp-edge-prod', 'italynorth', 'rg-contoso-prod', 'rg-edge-prod', 'westeurope', 'Worker')
         }
 
         It "E la rete nuova ha la sua vista, accanto a quelle che c'erano" {
@@ -589,6 +589,223 @@ resource "azurerm_service_plan" "edge" {
     }
 }
 
+Describe "Funzionalità: Viste di allocazione che mostrano dove vive ogni parte in Azure (ADR-2172)" {
+    BeforeAll {
+        function Get-EnvironmentNodeText([string]$Dsl, [string]$Environment, [string]$Name) {
+            $block = Get-Block ($Dsl -replace "`r`n", "`n") "^deploymentEnvironment `"$([regex]::Escape($Environment))`" \{"
+            $match = [regex]::Match($block, "= (?:deploymentNode|infrastructureNode) `"$([regex]::Escape($Name))`" `"(?<text>[^`"]*)`"")
+            if (-not $match.Success) { throw "nodo $Name assente da $Environment" }
+            return $match.Groups['text'].Value
+        }
+
+        function New-Instance([string]$Container, [string]$Kind, [string]$Group, [string]$Module) {
+            return [ordered]@{ container = $Container; kind = $Kind; resourceGroup = $Group; module = $Module; azureName = "res-$Container" }
+        }
+
+        function New-AllocationNode([string]$Id, [string]$Name, [string]$Kind, [string]$Group, [string]$Module, $Children = @(), $Instances = @()) {
+            return [ordered]@{ id = $Id; name = $Name; technology = 'T'; element = 'deploymentNode'; kind = $Kind; module = $Module; resourceGroup = $Group; azureName = $Name; children = @($Children); instances = @($Instances) }
+        }
+
+        # Un ambiente come lo scrive il lettore: nella regione il gruppo dell'applicazione, con il piano dell'Api e la
+        # risorsa del Worker senza piano, e un gruppo per ogni elenco di servizi, ciascuno usato dall'Api.
+        function Invoke-AllocationExport([System.Collections.IDictionary]$ServiceGroups, [string]$Language = '') {
+            $fragments = New-ContainerFragments
+            $services = [System.Collections.Generic.List[object]]::new()
+            $groups = foreach ($group in $ServiceGroups.Keys) {
+                $instances = foreach ($index in 1..$ServiceGroups[$group]) {
+                    $id = "contoso_infrastructure_$($group -replace '-', '_')_svc_$index"
+                    $services.Add([ordered]@{ id = $id; name = "$group-svc-$index"; codeName = "$group-svc-$index"; tags = @(); components = @() })
+                    New-Instance $id 'service' $group 'Data'
+                }
+                New-AllocationNode "x_$($group -replace '-', '_')" $group 'resourceGroup' '' 'Data' @() $instances
+            }
+            $plan = New-AllocationNode 'x_plan' 'asp-app' 'hostingPlan' 'rg-app' 'App' @() @(New-Instance 'contoso_shop_ai_api' 'application' 'rg-app' 'App')
+            $site = New-AllocationNode 'x_site' 'func-worker' 'application' 'rg-app' 'App' @() @(New-Instance 'contoso_shop_ai_worker' 'application' 'rg-app' 'App')
+            $application = New-AllocationNode 'x_rg_app' 'rg-app' 'resourceGroup' '' 'App' @($plan, $site)
+            $region = New-AllocationNode 'x_region' 'westeurope' 'region' '' 'azure' (@($application) + @($groups))
+            $fragments['contoso.infrastructure.deployment.json'] = [ordered]@{
+                containers = @($services); relationships = @($services | ForEach-Object { [ordered]@{ source = 'contoso_shop_ai_api'; target = $_.id } })
+                deployment = @([ordered]@{ name = 'prod'; kind = 'allocation'; nodes = @($region) })
+            } | ConvertTo-Json -Depth 12
+            $generation = Invoke-C4Steps ([ordered]@{ 'source/README.md' = "# x`n" }) 'Contoso.Infrastructure' @('C4/Export-C4CodeModel.ps1') 'write' $fragments @{ GATE_MODE = 'enforce'; DOCUMENT_LANGUAGE = $Language }
+            return [pscustomobject]@{
+                ExitCode = $generation.ExitCode; Output = $generation.Output
+                Deployment = "$($generation.Generated['deployment/contoso.infrastructure.dsl'])" -replace "`r`n", "`n"
+                Views = "$($generation.Generated['deployment-views/contoso.infrastructure.dsl'])" -replace "`r`n", "`n"
+            }
+        }
+
+        function Get-ViewDescription([string]$Views, [string]$Key) {
+            $match = [regex]::Match((Get-Block $Views "^deployment \* `"[^`"]+`" `"$([regex]::Escape($Key))`" "), '"description" "(?<text>[^"]*)"')
+            return $match.Groups['text'].Value
+        }
+    }
+
+    Context "Scenario: una risorsa sta nel nodo del suo gruppo di risorse, dentro la regione del gruppo" {
+        BeforeAll { $result = Invoke-TerraformReader (New-TerraformRepository) }
+
+        It "Allora il servizio che ospita un container sta nel gruppo di risorse della sua risorsa, nella regione del gruppo" {
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            (Get-InstancePath $result.Fragment 'prod' 'contoso_infrastructure_kv_contoso_prod') | Should -Be @('westeurope', 'rg-contoso-prod')
+        }
+
+        It "E il gruppo e' un nodo di deployment con il tipo Azure del gruppo, il suo nome Azure e il modulo che lo dichiara" {
+            $group = Find-Node $result.Fragment 'prod' 'rg-contoso-prod'
+            $group.element | Should -Be 'deploymentNode'
+            $group.technology | Should -Be 'Microsoft.Resources/resourceGroups'
+            $group.kind | Should -Be 'resourceGroup'
+            $group.azureName | Should -Be 'rg-contoso-prod'
+            $group.module | Should -Be 'App'
+        }
+
+        It "E il gruppo non e' contenuto di se stesso: non porta un gruppo di risorse" {
+            $group = Find-Node $result.Fragment 'prod' 'rg-contoso-prod'
+            $group | Should -Not -BeNullOrEmpty
+            $group.resourceGroup | Should -BeNullOrEmpty
+        }
+
+        It "E un'istanza porta il livello della risorsa che la ospita" {
+            ((Find-Node $result.Fragment 'prod' 'rg-contoso-prod').instances | Where-Object container -EQ 'contoso_infrastructure_kv_contoso_prod').kind | Should -Be 'service'
+            ((Find-Node $result.Fragment 'prod' 'asp-contoso-prod').instances | Where-Object container -EQ 'contoso_shop_ai_api').kind | Should -Be 'application'
+        }
+    }
+
+    Context "Scenario: un piano con le sue applicazioni sta nel gruppo del piano" {
+        BeforeAll {
+            $files = New-TerraformRepository
+            Set-FileText $files 'source/App/main.tf' "  name                = `"app-`${local.suffix}-api`"`n  resource_group_name = azurerm_resource_group.app.name" "  name                = `"app-`${local.suffix}-api`"`n  resource_group_name = `"rg-apps-`${var.environment}`""
+            $result = Invoke-TerraformReader $files
+        }
+
+        It "Allora l'applicazione sta nel piano che la ospita, dentro il gruppo del piano anche se la sua risorsa sta in un altro gruppo" {
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            (Get-InstancePath $result.Fragment 'prod' 'contoso_shop_ai_api') | Should -Be @('westeurope', 'rg-contoso-prod', 'asp-contoso-prod')
+        }
+
+        It "E l'istanza porta il gruppo della risorsa che la ospita" {
+            ((Find-Node $result.Fragment 'prod' 'asp-contoso-prod').instances | Where-Object container -EQ 'contoso_shop_ai_api').resourceGroup | Should -Be 'rg-apps-prod'
+        }
+
+        It "E il gruppo della risorsa dell'applicazione non diventa un nodo vuoto" {
+            Find-Node $result.Fragment 'prod' 'rg-apps-prod' | Should -BeNullOrEmpty
+        }
+    }
+
+    Context "Scenario: una risorsa senza gruppo noto resta sotto la regione" {
+        BeforeAll {
+            $files = New-TerraformRepository
+            $files['source/App/site.tf'] = @'
+variable "site_group" {
+  type = string
+}
+
+resource "azurerm_static_web_app" "site" {
+  name                = "stapp-${var.environment}"
+  resource_group_name = var.site_group
+  location            = "West Europe"
+}
+'@
+            $result = Invoke-TerraformReader $files
+        }
+
+        It "Allora la risorsa sta direttamente nella sua regione" {
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            (Get-NodePath (Get-DeploymentEnvironment $result.Fragment 'prod').nodes { param($node) $node.name -eq 'stapp-prod' }) | Should -Be @('westeurope', 'stapp-prod')
+        }
+
+        It "E nessun gruppo prende il nome del valore sconosciuto" {
+            @(Get-AllNodes (Get-DeploymentEnvironment $result.Fragment 'prod').nodes | Where-Object { $_.kind -eq 'resourceGroup' -and $_.name -match '\{' }) | Should -BeNullOrEmpty
+        }
+    }
+
+    Context "Scenario: ogni nodo dice che cosa e' e conta per livello cio' che contiene, in italiano e in inglese" {
+        BeforeAll {
+            $italian = Invoke-AllocationExport ([ordered]@{ 'rg-a' = 6 })
+            $english = Invoke-AllocationExport ([ordered]@{ 'rg-a' = 6 }) 'EN'
+        }
+
+        It "Allora la regione dice l'ambiente e conta i gruppi di risorse" {
+            $italian.ExitCode | Should -Be 0 -Because $italian.Output
+            Get-EnvironmentNodeText $italian.Deployment 'prod' 'westeurope' | Should -Be "Regione Azure dell'ambiente prod: 2 gruppi di risorse."
+        }
+
+        It "E il gruppo di risorse dice il modulo e conta per livello cio' che contiene, nominando un elemento solo del suo livello" {
+            Get-EnvironmentNodeText $italian.Deployment 'prod' 'rg-a' | Should -Be 'Gruppo di risorse del modulo Data: 6 servizi.'
+            Get-EnvironmentNodeText $italian.Deployment 'prod' 'rg-app' | Should -Be 'Gruppo di risorse del modulo App: asp-app e func-worker.'
+        }
+
+        It "E il piano di calcolo nomina le applicazioni che ospita" {
+            Get-EnvironmentNodeText $italian.Deployment 'prod' 'asp-app' | Should -Be 'Piano di calcolo di Api.'
+        }
+
+        It "E la risorsa che ospita un'applicazione dice solo che cosa ospita" {
+            Get-EnvironmentNodeText $italian.Deployment 'prod' 'func-worker' | Should -Be 'Ospita Worker.'
+        }
+
+        It "E in inglese le frasi sono le corrispondenti" {
+            $english.ExitCode | Should -Be 0 -Because $english.Output
+            Get-EnvironmentNodeText $english.Deployment 'prod' 'westeurope' | Should -Be 'Azure region of the prod environment: 2 resource groups.'
+            Get-EnvironmentNodeText $english.Deployment 'prod' 'rg-a' | Should -Be 'Resource group of the module Data: 6 services.'
+            Get-EnvironmentNodeText $english.Deployment 'prod' 'rg-app' | Should -Be 'Resource group of the module App: asp-app and func-worker.'
+            Get-EnvironmentNodeText $english.Deployment 'prod' 'asp-app' | Should -Be 'Compute plan of Api.'
+            Get-EnvironmentNodeText $english.Deployment 'prod' 'func-worker' | Should -Be 'Hosts Worker.'
+        }
+    }
+
+    Context "Scenario: nelle viste di allocazione un elenco di istanze oltre la soglia si riassume per gruppo di risorse" {
+        BeforeAll {
+            $one = Invoke-AllocationExport ([ordered]@{ 'rg-a' = 6 })
+            $two = Invoke-AllocationExport ([ordered]@{ 'rg-b' = 3; 'rg-a' = 4 })
+            $english = Invoke-AllocationExport ([ordered]@{ 'rg-b' = 3; 'rg-a' = 4 }) 'EN'
+        }
+
+        It "Allora con un gruppo la descrizione conta i servizi del gruppo" {
+            $one.ExitCode | Should -Be 0 -Because $one.Output
+            Get-ViewDescription $one.Views 'deployment_prod_app_contoso_shop_ai_api' | Should -Be "Nell'ambiente prod, Api gira su asp-app. Si rivolge a 6 servizi del gruppo di risorse rg-a."
+        }
+
+        It "E con due gruppi un conteggio per gruppo, nell'ordine dei gruppi" {
+            $two.ExitCode | Should -Be 0 -Because $two.Output
+            Get-ViewDescription $two.Views 'deployment_prod_app_contoso_shop_ai_api' | Should -Be "Nell'ambiente prod, Api gira su asp-app. Si rivolge a 4 servizi del gruppo di risorse rg-a e 3 servizi del gruppo di risorse rg-b."
+        }
+
+        It "E in inglese il conteggio usa la frase della lingua" {
+            Get-ViewDescription $english.Views 'deployment_prod_app_contoso_shop_ai_api' | Should -Be 'In the prod environment, Api runs on asp-app. It turns to 4 services of the resource group rg-a and 3 services of the resource group rg-b.'
+        }
+    }
+
+    Context "Scenario: le viste di allocazione si dispongono da sinistra a destra" {
+        BeforeAll { $generation = Invoke-DeploymentGeneration }
+
+        It "Allora ogni vista di allocazione ha la disposizione da sinistra a destra" {
+            $generation.ExitCode | Should -Be 0 -Because $generation.Output
+            $views = $generation.Generated['deployment-views/contoso.infrastructure.dsl'] -replace "`r`n", "`n"
+            $allocation = @(Get-ViewKeys $generation | Where-Object { $_ -notmatch '_rete' })
+            $allocation.Count | Should -BeGreaterThan 0
+            foreach ($key in $allocation) { Get-Block $views "^deployment \* `"[^`"]+`" `"$key`" " | Should -Match '(?m)^    autoLayout lr$' -Because $key }
+        }
+    }
+}
+
+Describe "Funzionalità: Ogni vista di deployment dice il suo tipo (ADR-2173)" {
+    BeforeAll { $generation = Invoke-DeploymentGeneration }
+
+    Context "Scenario: le viste di allocazione e di rete portano il loro tipo nelle proprieta'" {
+        It "Allora ogni vista di allocazione ha il tipo allocation" {
+            $generation.ExitCode | Should -Be 0 -Because $generation.Output
+            $views = $generation.Generated['deployment-views/contoso.infrastructure.dsl'] -replace "`r`n", "`n"
+            foreach ($key in @(Get-ViewKeys $generation | Where-Object { $_ -notmatch '_rete' })) { Get-Block $views "^deployment \* `"[^`"]+`" `"$key`" " | Should -Match '"type" "allocation"' -Because $key }
+        }
+
+        It "E ogni vista di rete ha il tipo network" {
+            $views = $generation.Generated['deployment-views/contoso.infrastructure.dsl'] -replace "`r`n", "`n"
+            $network = @(Get-ViewKeys $generation | Where-Object { $_ -match '_rete' })
+            $network.Count | Should -BeGreaterThan 0
+            foreach ($key in $network) { Get-Block $views "^deployment \* `"[^`"]+`" `"$key`" " | Should -Match '"type" "network"' -Because $key }
+        }
+    }
+}
+
 Describe 'Read-C4TerraformModel.ps1' {
     Context 'sulla dichiarazione completa' {
         BeforeAll {
@@ -599,9 +816,9 @@ Describe 'Read-C4TerraformModel.ps1' {
             @($result.Fragment.deployment | ForEach-Object { "$($_.name):$($_.kind):$($_.environment)" }) | Should -Be @('dev:allocation:', 'dev rete:network:dev', 'sta:allocation:', 'sta rete:network:sta', 'prod:allocation:', 'prod rete:network:prod')
         }
 
-        It 'mette un servizio che ospita un container nella regione della sua risorsa, con il gruppo di risorse e il modulo' {
-            (Get-InstancePath $result.Fragment 'prod' 'contoso_infrastructure_kv_contoso_prod') | Should -Be @('westeurope')
-            $instance = (Find-Node $result.Fragment 'prod' 'westeurope').instances | Where-Object container -EQ 'contoso_infrastructure_kv_contoso_prod'
+        It 'mette un servizio che ospita un container nel suo gruppo di risorse, nella regione del gruppo, con il gruppo di risorse e il modulo' {
+            (Get-InstancePath $result.Fragment 'prod' 'contoso_infrastructure_kv_contoso_prod') | Should -Be @('westeurope', 'rg-contoso-prod')
+            $instance = (Find-Node $result.Fragment 'prod' 'rg-contoso-prod').instances | Where-Object container -EQ 'contoso_infrastructure_kv_contoso_prod'
             $instance.resourceGroup | Should -Be 'rg-contoso-prod'
             $instance.module | Should -Be 'App'
         }
@@ -685,7 +902,7 @@ Describe 'Read-C4TerraformModel.ps1' {
             Set-FileText $files 'source/App/main.tf' '  subnet_id      = azurerm_subnet.engine.id' '  subnet_id      = azurerm_subnet.engine.id`n  count = 0'.Replace('`n', "`n")
             $result = Invoke-TerraformReader $files
             $result.ExitCode | Should -Be 0 -Because $result.Output
-            (Get-InstancePath $result.Fragment 'prod' 'contoso_shop_ai_api') | Should -Be @('westeurope', 'asp-contoso-prod')
+            (Get-InstancePath $result.Fragment 'prod' 'contoso_shop_ai_api') | Should -Be @('westeurope', 'rg-contoso-prod', 'asp-contoso-prod')
             (Get-InstancePath $result.Fragment 'prod rete' 'contoso_shop_ai_api') | Should -BeNullOrEmpty
         }
 
@@ -712,12 +929,12 @@ resource "azapi_resource" "ignored" {
 '@
             $result = Invoke-TerraformReader $files
             $result.ExitCode | Should -Be 0 -Because $result.Output
-            (Get-NodePath (Get-DeploymentEnvironment $result.Fragment 'prod').nodes { param($node) $node.name -eq 'func-backup-prod' }) | Should -Be @('westeurope', 'asp-contoso-prod', 'func-backup-prod')
+            (Get-NodePath (Get-DeploymentEnvironment $result.Fragment 'prod').nodes { param($node) $node.name -eq 'func-backup-prod' }) | Should -Be @('westeurope', 'rg-contoso-prod', 'asp-contoso-prod', 'func-backup-prod')
             (Get-NodePath (Get-DeploymentEnvironment $result.Fragment 'prod rete').nodes { param($node) $node.name -eq 'func-backup-prod' }) | Should -Be @('vnet-contoso-prod', 'snet-worker', 'func-backup-prod')
             Find-Node $result.Fragment 'prod' 'ai-backup' | Should -BeNullOrEmpty
         }
 
-        It "mette nella regione della risorsa un'applicazione senza piano, e una regione segnaposto se nessuno la dichiara" {
+        It "mette un'applicazione senza piano nel suo gruppo, nella regione del gruppo, e in una regione segnaposto se nessuno la dichiara" {
             $files = New-TerraformRepository
             $files['source/App/site.tf'] = @'
 resource "azurerm_static_web_app" "site" {
@@ -732,8 +949,8 @@ resource "azurerm_static_web_app" "portal" {
 }
 '@
             $result = Invoke-TerraformReader $files
-            (Get-NodePath (Get-DeploymentEnvironment $result.Fragment 'prod').nodes { param($node) $node.name -eq 'stapp-prod' }) | Should -Be @('{location}', 'stapp-prod')
-            (Get-NodePath (Get-DeploymentEnvironment $result.Fragment 'prod').nodes { param($node) $node.name -eq 'stapp-portal-prod' }) | Should -Be @('westeurope2', 'stapp-portal-prod')
+            (Get-NodePath (Get-DeploymentEnvironment $result.Fragment 'prod').nodes { param($node) $node.name -eq 'stapp-prod' }) | Should -Be @('{location}', 'rg-existing', 'stapp-prod')
+            (Get-NodePath (Get-DeploymentEnvironment $result.Fragment 'prod').nodes { param($node) $node.name -eq 'stapp-portal-prod' }) | Should -Be @('westeurope', 'rg-contoso-prod', 'stapp-portal-prod')
         }
 
         It "applica i file override dell'ambiente" {
@@ -751,7 +968,7 @@ resource "azurerm_static_web_app" "portal" {
             Set-FileText $files 'source/App/main.tf' "resource `"azurerm_key_vault`" `"secrets`" {" "resource `"azurerm_key_vault`" `"secrets`" {`n  provider            = azurerm.other"
             $result = Invoke-TerraformReader $files
             $result.ExitCode | Should -Be 0 -Because $result.Output
-            (Get-InstancePath $result.Fragment 'prod' 'contoso_infrastructure_kv_contoso_prod') | Should -Be @('westeurope')
+            (Get-InstancePath $result.Fragment 'prod' 'contoso_infrastructure_kv_contoso_prod') | Should -Be @('westeurope', 'rg-contoso-prod')
             (Get-InstancePath $result.Fragment 'prod rete' 'contoso_shop_ai_api') | Should -Be @('vnet-contoso-prod', 'snet-engine')
         }
     }
@@ -781,8 +998,8 @@ resource "azurerm_static_web_app" "portal" {
             $fragments['contoso.infrastructure.customers.json'] = $grouped | ConvertTo-Json -Depth 10
             $result = Invoke-TerraformReader (New-TerraformRepository) $fragments
             $result.ExitCode | Should -Be 0 -Because $result.Output
-            (Get-InstancePath $result.Fragment 'prod' 'contoso_infrastructure_mail') | Should -Be @('westeurope')
-            ((Find-Node $result.Fragment 'prod' 'westeurope').instances | Where-Object container -EQ 'contoso_infrastructure_mail').resourceGroup | Should -Be 'rg-north-prod'
+            (Get-InstancePath $result.Fragment 'prod' 'contoso_infrastructure_mail') | Should -Be @('westeurope', 'rg-north-prod')
+            ((Find-Node $result.Fragment 'prod' 'rg-north-prod').instances | Where-Object container -EQ 'contoso_infrastructure_mail').resourceGroup | Should -Be 'rg-north-prod'
         }
 
         It "accetta in hosts una risorsa dichiarata senza istanze in nessun ambiente" {

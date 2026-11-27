@@ -24,7 +24,9 @@
 # Nelle proprieta' subject e level una vista porta l'identificativo dell'elemento che e' il suo soggetto e il suo
 # livello, quando li ha: la pubblicazione ne ricava come e' fatto un gruppo di viste.
 # Negli elenchi delle relazioni ogni elemento collegato compare una volta; oltre LinkedListLimit elementi l'elenco
-# si riassume per livello (LevelSummaries), perche' una frase con piu' nomi non si legge di seguito.
+# si riassume per livello (LevelSummaries), nelle viste di allocazione per gruppo di risorse (ResourceGroupSummary),
+# perche' una frase con piu' nomi non si legge di seguito. Ogni vista di deployment porta nella proprieta' type il
+# suo tipo, allocation o network, da cui la pubblicazione ricava la chiave di lettura del gruppo.
 # Le viste della parte stanno in GENERATED_DIRECTORY/views/<repository>.dsl. Ogni applicazione ha la vista
 # dei container container-<applicazione>, con gli elementi con cui ha relazioni, nel sistema che nel
 # workspace accanto a GENERATED_DIRECTORY include i container generati: una vista con tutte le applicazioni
@@ -59,6 +61,8 @@ $NodeDescriptions = $DocumentLanguage.NodeDescriptions
 $LevelSummaries = $DocumentLanguage.LevelSummaries
 $ViewNameFormat = $DocumentLanguage.ViewNameFormat
 $LinkedListLimit = 5
+$AllocationViewType = 'allocation'
+$NetworkViewType = 'network'
 $TitleSeparator = ' · '
 $DataAccessSegments = @("$(if ($env:C4_DATA_ACCESS_SEGMENTS) { $env:C4_DATA_ACCESS_SEGMENTS } else { 'DataAccess' })" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $WorkspaceFile = Join-Path (Split-Path -Parent $GeneratedDirectory) 'workspace.dsl'
@@ -294,8 +298,8 @@ function Format-RelationshipItem([string]$Name, [string]$Text) {
     return $Name
 }
 
-function New-LinkedEnd([string]$Name, [string]$Kind, [string]$Group) {
-    return [pscustomobject]@{ Name = $Name; Kind = $Kind; Group = $Group }
+function New-LinkedEnd([string]$Name, [string]$Kind, [string]$Group, [string]$ResourceGroup = '') {
+    return [pscustomobject]@{ Name = $Name; Kind = $Kind; Group = $Group; ResourceGroup = $ResourceGroup }
 }
 
 # Una voce di un elenco delle relazioni: il nome con cui compare, il testo e il senso della relazione che vi
@@ -307,9 +311,9 @@ function New-LinkedItem([string]$Name, [string]$Text, [string]$Direction, $Ends)
 # Le relazioni del soggetto per elemento collegato: un elemento collegato nei due sensi sta solo in Mutual.
 function Get-SubjectLinks($Content) {
     $outgoing = @($Content.Relationships | Where-Object { $Content.Inside -contains $_.Source -and $Content.Inside -notcontains $_.Target } |
-            ForEach-Object { New-LinkedItem $_.TargetName $_.Text 'Outgoing' (New-LinkedEnd $_.TargetName $_.TargetKind $_.TargetGroup) })
+            ForEach-Object { New-LinkedItem $_.TargetName $_.Text 'Outgoing' (New-LinkedEnd $_.TargetName $_.TargetKind $_.TargetGroup $_.TargetResourceGroup) })
     $incoming = @($Content.Relationships | Where-Object { $Content.Inside -contains $_.Target -and $Content.Inside -notcontains $_.Source } |
-            ForEach-Object { New-LinkedItem $_.SourceName $_.Text 'Incoming' (New-LinkedEnd $_.SourceName $_.SourceKind $_.SourceGroup) })
+            ForEach-Object { New-LinkedItem $_.SourceName $_.Text 'Incoming' (New-LinkedEnd $_.SourceName $_.SourceKind $_.SourceGroup $_.SourceResourceGroup) })
     $mutual = @($outgoing | ForEach-Object Name | Where-Object { @($incoming.Name) -ccontains $_ })
     return @{
         Outgoing = @($outgoing | Where-Object { $mutual -cnotcontains $_.Name })
@@ -320,30 +324,48 @@ function Get-SubjectLinks($Content) {
 
 function Get-ViewLinks($Content) {
     return @($Content.Relationships | ForEach-Object {
-            New-LinkedItem "$($_.SourceName) → $($_.TargetName)" $_.Text '' @((New-LinkedEnd $_.SourceName $_.SourceKind $_.SourceGroup), (New-LinkedEnd $_.TargetName $_.TargetKind $_.TargetGroup))
+            New-LinkedItem "$($_.SourceName) → $($_.TargetName)" $_.Text '' @((New-LinkedEnd $_.SourceName $_.SourceKind $_.SourceGroup $_.SourceResourceGroup), (New-LinkedEnd $_.TargetName $_.TargetKind $_.TargetGroup $_.TargetResourceGroup))
         })
 }
 
 # Ogni elemento collegato compare una volta, con il testo solo se vi porta una relazione sola: le relazioni fra le
-# stesse istanze in nodi diversi hanno lo stesso testo e contano come una.
-function Get-LinkedNames($Items, [string]$ViewKey) {
+# stesse istanze in nodi diversi hanno lo stesso testo e contano come una. I nomi sono in ordine di nome.
+function Get-LinkedNames($Items, [string]$ViewKey, [bool]$ByResourceGroup) {
     $linked = @($Items | Group-Object Name -CaseSensitive)
-    if ($linked.Count -gt $LinkedListLimit) { return Get-LevelSummaries @($Items | ForEach-Object Ends) $ViewKey }
-    foreach ($element in $linked) {
+    if ($linked.Count -gt $LinkedListLimit) {
+        $ends = @($Items | ForEach-Object Ends)
+        if ($ByResourceGroup) { return Get-ResourceGroupSummaries $ends $ViewKey }
+        return @(Get-LevelSummaries $ends $ViewKey | Sort-Object -Unique)
+    }
+    $names = foreach ($element in $linked) {
         $relationships = @($element.Group | ForEach-Object { "$($_.Direction)|$($_.Text)" } | Sort-Object -Unique)
         Format-RelationshipItem $element.Name $(if ($relationships.Count -eq 1) { $element.Group[0].Text })
     }
+    return @($names | Sort-Object -Unique)
 }
 
 # Per livello il numero degli elementi collegati, con la vista che li descrive se sono tutti dello stesso gruppo e
 # quel gruppo ha una vista del loro livello; un elemento solo del suo livello si nomina.
 function Get-LevelSummaries($Ends, [string]$ViewKey) {
-    foreach ($level in @($Ends | Sort-Object Name -Unique | Group-Object Kind)) {
-        $phrases = $LevelSummaries["$($level.Name)"]
-        if ($level.Count -eq 1 -or -not $phrases) { $level.Group | ForEach-Object Name; continue }
-        $view = Get-LevelView $level.Group $level.Name $ViewKey
-        if ($view -and $phrases.InView) { $phrases.InView -f $level.Count, ($ViewNameFormat -f $view) } else { $phrases.Count -f $level.Count }
+    foreach ($level in @($Ends | Sort-Object Name -Unique | Group-Object Kind)) { Format-LevelCount $level.Name @($level.Group) $ViewKey }
+}
+
+function Format-LevelCount([string]$Kind, $Ends, [string]$ViewKey = '') {
+    $phrases = $LevelSummaries[$Kind]
+    if (@($Ends).Count -eq 1 -or -not $phrases) { return @($Ends | ForEach-Object Name) }
+    $view = Get-LevelView $Ends $Kind $ViewKey
+    if ($view -and $phrases.InView) { return $phrases.InView -f @($Ends).Count, ($ViewNameFormat -f $view) }
+    return $phrases.Count -f @($Ends).Count
+}
+
+# Per gruppo di risorse, in ordine di nome del gruppo, il numero degli elementi collegati; un elemento solo del suo
+# gruppo si nomina, quelli senza gruppo si riassumono per livello.
+function Get-ResourceGroupSummaries($Ends, [string]$ViewKey) {
+    $unique = @($Ends | Sort-Object Name -Unique)
+    foreach ($group in @($unique | Where-Object ResourceGroup | Group-Object ResourceGroup)) {
+        if ($group.Count -eq 1) { $group.Group[0].Name } else { $DocumentLanguage.ResourceGroupSummary -f $group.Count, $group.Name }
     }
+    Get-LevelSummaries @($unique | Where-Object { -not $_.ResourceGroup }) $ViewKey | Sort-Object -Unique
 }
 
 function Get-LevelView($Ends, [string]$Kind, [string]$ViewKey) {
@@ -357,9 +379,11 @@ function Get-LevelView($Ends, [string]$Kind, [string]$ViewKey) {
 # I nomi di un elenco del contenuto della vista, in ordine di nome: Subject, Environment, Host (cio' che ospita il
 # soggetto), Shown.<livello> (gli elementi mostrati di quel livello, senza il soggetto), Outgoing, Incoming e
 # Mutual (gli elementi collegati al soggetto in un senso o nei due), Unrelated (il soggetto, se non ha relazioni),
-# Relationships (tutte le relazioni della vista).
+# Relationships (tutte le relazioni della vista). Gli elenchi delle relazioni tengono l'ordine dei loro riassunti.
 function Get-ViewListNames($Content, [string]$Binding, [string]$ViewKey) {
     $links = Get-SubjectLinks $Content
+    $byResourceGroup = [bool]$Content.ByResourceGroup
+    $linkList = $false
     $names = foreach ($source in ($Binding -split ',' | ForEach-Object Trim)) {
         $list, $kind = $source -split '\.', 2
         switch ($list) {
@@ -367,11 +391,12 @@ function Get-ViewListNames($Content, [string]$Binding, [string]$ViewKey) {
             'Environment' { $Content.Environment }
             'Host' { $Content.Elements | Where-Object { $Content.SubjectIds -contains $_.Id } | ForEach-Object Host }
             'Shown' { $Content.Elements | Where-Object { $Content.SubjectIds -notcontains $_.Id -and (-not $kind -or $_.Kind -eq $kind) } | ForEach-Object Name }
-            { $links.ContainsKey($_) } { Get-LinkedNames $links[$list] $ViewKey }
+            { $links.ContainsKey($_) } { $linkList = $true; Get-LinkedNames $links[$list] $ViewKey $byResourceGroup }
             'Unrelated' { if (-not @($links.Values | ForEach-Object { $_ }).Count) { $Content.Subject } }
-            'Relationships' { Get-LinkedNames (Get-ViewLinks $Content) $ViewKey }
+            'Relationships' { $linkList = $true; Get-LinkedNames (Get-ViewLinks $Content) $ViewKey $byResourceGroup }
         }
     }
+    if ($linkList) { return @($names | Where-Object { $_ } | Select-Object -Unique) }
     return @($names | Where-Object { $_ } | Sort-Object -Unique)
 }
 
@@ -511,7 +536,7 @@ function Get-NodeInstances($Node) {
         $container = Get-KeptId $(if ($instance -is [string]) { $instance } else { "$($instance.container)" })
         if ($seen.ContainsKey($container)) { continue }
         $seen[$container] = $true
-        [pscustomobject]@{ Container = $container; ResourceGroup = $instance.resourceGroup; Module = $instance.module; AzureName = $instance.azureName }
+        [pscustomobject]@{ Container = $container; Kind = $instance.kind; ResourceGroup = $instance.resourceGroup; Module = $instance.module; AzureName = $instance.azureName }
     }
 }
 
@@ -624,9 +649,9 @@ function Get-SystemRelationships {
 }
 
 # L'albero di un ambiente: il padre di ogni nodo e di ogni istanza, il nome con cui le descrizioni li elencano, il
-# livello e le istanze di ogni container.
+# livello, il gruppo di risorse e le istanze di ogni container.
 function New-EnvironmentTree($Environment) {
-    $tree = @{ Parents = @{}; Names = @{}; Elements = @{}; Kinds = @{}; Instances = @{} }
+    $tree = @{ Parents = @{}; Names = @{}; Elements = @{}; Kinds = @{}; Groups = @{}; Instances = @{} }
     foreach ($node in @($Environment.nodes | Where-Object { $_ })) { Register-TreeNode $node $null $tree }
     return $tree
 }
@@ -636,12 +661,14 @@ function Register-TreeNode($Node, [string]$Parent, [hashtable]$Tree) {
     $Tree.Names[$Node.id] = Get-NodeName $Node
     $Tree.Elements[$Node.id] = $Node.element
     $Tree.Kinds[$Node.id] = "$($Node.kind)"
+    $Tree.Groups[$Node.id] = "$($Node.resourceGroup)"
     foreach ($instance in @(Get-NodeInstances $Node)) {
         $id = Get-InstanceId $Node $instance.Container
         $Tree.Parents[$id] = $Node.id
         $Tree.Names[$id] = Get-InstanceName $instance.Container
         $Tree.Elements[$id] = 'containerInstance'
         $Tree.Kinds[$id] = 'containerInstance'
+        $Tree.Groups[$id] = "$($instance.ResourceGroup)"
         $Tree.Instances[$instance.Container] = @($Tree.Instances[$instance.Container] | Where-Object { $_ }) + $id
     }
     $Node.children | Where-Object { $_ } | ForEach-Object { Register-TreeNode $_ $Node.id $Tree }
@@ -660,15 +687,31 @@ function Get-TreeRoot([string]$Id, [hashtable]$Tree) {
 
 # Le frasi della lingua per il livello del nodo, ognuna con i nomi di cio' che elenca in ordine di nome:
 # i figli, il nodo che lo contiene, la risorsa che espone, le relazioni di un tipo che dal nodo o dal suo
-# contenuto escono o vi entrano.
-function Get-NodeDescription($Node, [hashtable]$Tree, $Relationships) {
-    return Format-LanguagePhrases $NodeDescriptions[$Node.kind] { param($Binding) Get-DescribedNames $Node $Binding $Tree $Relationships }
+# contenuto escono o vi entrano, l'ambiente, i moduli che dichiarano il nodo e il suo contenuto. ChildCounts conta
+# per livello i figli e le istanze, nell'ordine in cui compaiono.
+function Get-NodeDescription($Node, [hashtable]$Tree, $Relationships, [string]$Environment) {
+    return Format-LanguagePhrases $NodeDescriptions[$Node.kind] { param($Binding) Get-DescribedNames $Node $Binding $Tree $Relationships $Environment }
 }
 
-function Get-DescribedNames($Node, [string]$Binding, [hashtable]$Tree, $Relationships) {
+# Un'istanza ha il livello della risorsa che la ospita, se il lettore lo scrive.
+function Get-ChildCounts($Node, [hashtable]$Tree) {
+    $ends = @($Node.children | Where-Object { $_ } | ForEach-Object { New-LinkedEnd $Tree.Names[$_.id] "$($_.kind)" '' }) +
+        @(Get-NodeInstances $Node | ForEach-Object { New-LinkedEnd $Tree.Names[(Get-InstanceId $Node $_.Container)] $(if ($_.Kind) { "$($_.Kind)" } else { 'containerInstance' }) '' })
+    $levels = [ordered]@{}
+    foreach ($end in $ends) {
+        if (-not $levels.Contains($end.Kind)) { $levels[$end.Kind] = [System.Collections.Generic.List[object]]::new() }
+        $levels[$end.Kind].Add($end)
+    }
+    foreach ($kind in $levels.Keys) { Format-LevelCount $kind @($levels[$kind]) }
+}
+
+function Get-DescribedNames($Node, [string]$Binding, [hashtable]$Tree, $Relationships, [string]$Environment) {
+    if ($Binding -eq 'ChildCounts') { return @(Get-ChildCounts $Node $Tree) }
     $names = foreach ($source in ($Binding -split ',' | ForEach-Object Trim)) {
         $direction, $kind = $source -split '\.', 2
         switch ($direction) {
+            'Environment' { $Environment }
+            'Modules' { Get-TreeNodes @($Node) | ForEach-Object { $_.module; Get-NodeInstances $_ | ForEach-Object Module } }
             'Children' {
                 @($Node.children | Where-Object { $_ } | ForEach-Object { $Tree.Names[$_.id] })
                 @(Get-NodeInstances $Node | ForEach-Object { $Tree.Names[(Get-InstanceId $Node $_.Container)] })
@@ -713,18 +756,19 @@ function Get-InstanceRelationships([hashtable]$Tree) {
 
 function New-PlanEnvironment($Environment, $Relationships) {
     $tree = New-EnvironmentTree $Environment
-    Get-TreeNodes $Environment.nodes | ForEach-Object { $script:NodeTexts[$_.id] = Get-NodeDescription $_ $tree $Relationships }
+    $name = if ($Environment.environment) { $Environment.environment } else { $Environment.name }
+    Get-TreeNodes $Environment.nodes | ForEach-Object { $script:NodeTexts[$_.id] = Get-NodeDescription $_ $tree $Relationships $name }
     return [pscustomobject]@{
         Environment = $Environment; Tree = $tree; Relationships = @($Relationships); Derived = [ordered]@{}
         Links = @($Relationships) + @(Get-InstanceRelationships $tree)
     }
 }
 
-# Una vista dichiara gli elementi che mostra: un nodo incluso con il suo contenuto, un nodo chiuso solo con il
-# suo riquadro. Con dei filtri sulle relazioni la vista le esclude tutte e include solo quelle.
-function New-DeploymentView([string]$Environment, [string]$Key, [string]$Title, $Subject, [string[]]$Shown, [string[]]$Closed = @(), [string[]]$Filters = @(), [System.Collections.IDictionary]$Properties = @{}) {
+# Una vista dichiara il suo tipo e gli elementi che mostra: un nodo incluso con il suo contenuto, un nodo chiuso solo
+# con il suo riquadro. Con dei filtri sulle relazioni la vista le esclude tutte e include solo quelle.
+function New-DeploymentView([string]$Type, [string]$Environment, [string]$Key, [string]$Title, $Subject, [string[]]$Shown, [string[]]$Closed = @(), [string[]]$Filters = @(), [System.Collections.IDictionary]$Properties = @{}) {
     return [pscustomobject]@{
-        Environment = $Environment; Key = $Key; Title = $Title; Subject = $Subject; Shown = @($Shown); Closed = @($Closed | Where-Object { $_ })
+        Type = $Type; Environment = $Environment; Key = $Key; Title = $Title; Subject = $Subject; Shown = @($Shown); Closed = @($Closed | Where-Object { $_ })
         Filters = @($Filters); Properties = $Properties; Visible = $null; Own = @(); Excluded = @(); Description = ''
     }
 }
@@ -814,6 +858,7 @@ function Get-ViewRelationships($View, $Plan) {
         [pscustomobject]@{
             Source = $relationship.Source; Target = $relationship.Target; SourceName = $Plan.Tree.Names[$source]; TargetName = $Plan.Tree.Names[$target]; Text = $relationship.Text
             SourceKind = $Plan.Tree.Kinds[$source]; TargetKind = $Plan.Tree.Kinds[$target]; SourceGroup = ''; TargetGroup = ''
+            SourceResourceGroup = $Plan.Tree.Groups[$source]; TargetResourceGroup = $Plan.Tree.Groups[$target]
         }
     }
 }
@@ -823,7 +868,8 @@ function Get-DeploymentViewContent($View, $Plan) {
     $elements = @($View.Visible | ForEach-Object { [pscustomobject]@{ Id = $_; Name = $tree.Names[$_]; Kind = $tree.Kinds[$_]; Host = $tree.Names[$tree.Parents[$_]] } })
     $subject = $View.Subject
     $inside = @($tree.Parents.Keys | Where-Object { $id = $_; @($subject.Ids | Where-Object { Test-Within $id $_ $tree }).Count })
-    return New-ViewContent $subject.Kind $subject.Name $subject.Environment $elements @(Get-ViewRelationships $View $Plan) $subject.Ids $inside
+    $content = New-ViewContent $subject.Kind $subject.Name $subject.Environment $elements @(Get-ViewRelationships $View $Plan) $subject.Ids $inside
+    return $content | Add-Member -NotePropertyName ByResourceGroup -NotePropertyValue ($View.Type -eq $AllocationViewType) -PassThru
 }
 
 function Set-ViewDescriptions($Views, $Plans) {
@@ -840,17 +886,24 @@ function Format-DeploymentView($View) {
     if ($View.Filters) { $lines += '    exclude relationship==*' }
     $lines += @($View.Filters | ForEach-Object { "    include $(Format-Text $_)" })
     $lines += @($View.Excluded | ForEach-Object { "    exclude $_" })
-    $properties = [ordered]@{ description = $View.Description }
+    $properties = [ordered]@{ description = $View.Description; type = $View.Type }
     foreach ($name in $View.Properties.Keys) { $properties[$name] = $View.Properties[$name] }
     return $lines + @(Format-ViewProperties $properties) + '    autoLayout lr' + '}'
 }
 
+# Una risorsa sta in un gruppo di risorse, la regione e il gruppo no: un'istanza dentro una risorsa e' un'applicazione
+# ospitata, una nella regione o nel gruppo e' un servizio.
 function Get-AllocationInstances($Environment) {
-    foreach ($root in (Get-DeploymentRoots $Environment)) {
-        foreach ($instance in @(Get-NodeInstances $root)) { [pscustomobject]@{ Container = $instance.Container; Id = Get-InstanceId $root $instance.Container; Placed = $false } }
-        foreach ($node in @($root.children | Where-Object { $_ -and $_.element -ne 'infrastructureNode' })) {
-            foreach ($instance in @(Get-NodeInstances $node)) { [pscustomobject]@{ Container = $instance.Container; Id = Get-InstanceId $node $instance.Container; Placed = $true } }
-        }
+    foreach ($node in @(Get-TreeNodes (Get-DeploymentRoots $Environment) | Where-Object element -NE 'infrastructureNode')) {
+        foreach ($instance in @(Get-NodeInstances $node)) { [pscustomobject]@{ Container = $instance.Container; Id = Get-InstanceId $node $instance.Container; Placed = [bool]$node.resourceGroup } }
+    }
+}
+
+# Le risorse piu' esterne: si scende nei nodi che non stanno in un gruppo di risorse, la regione e il gruppo.
+function Get-AllocationResources($Nodes) {
+    foreach ($node in @($Nodes | Where-Object { $_ })) {
+        if ($node.element -eq 'deploymentNode' -and -not $node.resourceGroup) { Get-AllocationResources $node.children }
+        else { $node }
     }
 }
 
@@ -866,17 +919,18 @@ function New-ApplicationAllocationView([string]$Environment, [string]$Key, [stri
     $related = Get-RelatedContainers $Container
     $neighbours = @($Instances | Where-Object { $_.Container -ne $Container -and $related -contains $_.Container } | ForEach-Object Id | Select-Object -Unique)
     $filters = @($own | ForEach-Object { "relationship.source==$_"; "relationship.destination==$_" })
-    return New-DeploymentView $Environment "${Key}_app_$Container" ($ViewTitles.ApplicationAllocation -f $Environment, (Get-InstanceName $Container)) (New-ViewSubject 'ApplicationAllocation' (Get-InstanceName $Container) $Environment $own) (@($own) + $neighbours) @() $filters ([ordered]@{ subject = $Container })
+    return New-DeploymentView $AllocationViewType $Environment "${Key}_app_$Container" ($ViewTitles.ApplicationAllocation -f $Environment, (Get-InstanceName $Container)) (New-ViewSubject 'ApplicationAllocation' (Get-InstanceName $Container) $Environment $own) (@($own) + $neighbours) @() $filters ([ordered]@{ subject = $Container })
 }
 
-# La vista d'insieme mostra i piani di calcolo e le applicazioni senza piano, con le loro istanze e le chiamate
-# fra le applicazioni; porta gli ambienti di cui la pubblicazione elenca i gruppi di risorse.
+# La vista d'insieme mostra i piani di calcolo e le applicazioni senza piano, con le loro istanze, i gruppi e le
+# regioni che li contengono e le chiamate fra le applicazioni; porta gli ambienti di cui la pubblicazione elenca i
+# gruppi di risorse.
 function Get-AllocationViews($Environment, $Network) {
     $key = "deployment_$(ConvertTo-Identifier $Environment.name)"
-    $placed = @(Get-DeploymentRoots $Environment | ForEach-Object { @($_.children | Where-Object { $_ }) } | ForEach-Object id)
+    $placed = @(Get-AllocationResources (Get-DeploymentRoots $Environment) | ForEach-Object id)
     $shown = if ($placed) { $placed } else { @('*') }
     $groups = [ordered]@{ resourceGroups = (@($Environment.name) + @(if ($Network) { $Network.name })) -join ';' }
-    New-DeploymentView $Environment.name $key ($ViewTitles.Allocation -f $Environment.name) (New-ViewSubject 'Allocation' $Environment.name $Environment.name) $shown @() @() $groups
+    New-DeploymentView $AllocationViewType $Environment.name $key ($ViewTitles.Allocation -f $Environment.name) (New-ViewSubject 'Allocation' $Environment.name $Environment.name) $shown @() @() $groups
     $instances = @(Get-AllocationInstances $Environment)
     foreach ($container in @($instances | Where-Object Placed | ForEach-Object Container | Sort-Object -Unique)) {
         New-ApplicationAllocationView $Environment.name $key $container $instances
@@ -898,7 +952,7 @@ function Get-NetworkViews($Plan, [string]$Environment) {
     $filters = @("relationship.tag==$NetworkTag")
     $rootNodes = @(Get-DeploymentRoots $network)
     $rootIds = @($rootNodes | ForEach-Object id)
-    New-DeploymentView $network.name $key ($ViewTitles.Network -f $Environment) (New-ViewSubject 'Network' $Environment $Environment) $(if ($rootIds) { $rootIds } else { @('*') }) $rootIds $filters
+    New-DeploymentView $NetworkViewType $network.name $key ($ViewTitles.Network -f $Environment) (New-ViewSubject 'Network' $Environment $Environment) $(if ($rootIds) { $rootIds } else { @('*') }) $rootIds $filters
     $parts = @($rootNodes | Where-Object { @($_.children | Where-Object { $_ -and $_.element -ne 'infrastructureNode' -and (Test-DeploymentContent $_) }).Count })
     $slugs = Get-PartSlugs $parts
     foreach ($part in $parts) {
@@ -907,7 +961,7 @@ function Get-NetworkViews($Plan, [string]$Environment) {
                 $target = Get-TreeRoot $_.Target $Plan.Tree
                 if ($source -eq $part.id) { $target } elseif ($target -eq $part.id) { $source }
             } | Where-Object { $_ -and $_ -ne $part.id } | Select-Object -Unique)
-        New-DeploymentView $network.name "${key}_$($slugs[$part.id])" ($ViewTitles.NetworkPart -f $Environment, $part.name) (New-ViewSubject 'NetworkPart' $Plan.Tree.Names[$part.id] $Environment @($part.id)) (@($part.id) + $related) $related $filters ([ordered]@{ subject = $part.id })
+        New-DeploymentView $NetworkViewType $network.name "${key}_$($slugs[$part.id])" ($ViewTitles.NetworkPart -f $Environment, $part.name) (New-ViewSubject 'NetworkPart' $Plan.Tree.Names[$part.id] $Environment @($part.id)) (@($part.id) + $related) $related $filters ([ordered]@{ subject = $part.id })
     }
 }
 

@@ -355,8 +355,15 @@ function Get-PeerGroupLists([object[]]$Views, [hashtable]$Index) {
     }
 }
 
-# Un marcatore che porta piu' viste si apre con le frasi della lingua che dicono come il gruppo e' fatto, una per
-# tratto: una vista d'insieme e le sue parti, con i nomi delle viste, oppure viste alla pari, con i loro soggetti e livelli.
+# La chiave di lettura di ogni tipo delle viste del gruppo, una volta per tipo, nell'ordine di comparsa.
+function Get-ViewTypeReadings([object[]]$Views) {
+    $types = @($Views | ForEach-Object { "$($_.properties.type)" } | Where-Object { $_ -and $DocumentLanguage.ViewTypeReadings.ContainsKey($_) } | Select-Object -Unique)
+    return @($types | ForEach-Object { ConvertTo-MarkdownLiteral $DocumentLanguage.ViewTypeReadings[$_] })
+}
+
+# Un marcatore che porta piu' viste si apre con la chiave di lettura dei tipi delle sue viste e con le frasi della
+# lingua che dicono come il gruppo e' fatto, una per tratto: una vista d'insieme e le sue parti, con i nomi delle
+# viste, oppure viste alla pari, con i loro soggetti e livelli.
 function Format-ViewGroupIntroduction($Workspace, [string[]]$Keys, [object[]]$Captions) {
     $views = @($Keys | ForEach-Object { Get-WorkspaceView $Workspace $_ })
     $index = Get-ElementIndex $Workspace
@@ -364,7 +371,7 @@ function Format-ViewGroupIntroduction($Workspace, [string[]]$Keys, [object[]]$Ca
         if ($segment.Overview) { Format-GroupPhrases $DocumentLanguage.ViewGroupIntroduction (Get-OverviewGroupLists @($Captions[$segment.Positions])) }
         else { Get-PeerGroupLists @($views[$segment.Positions]) $index | ForEach-Object { Format-GroupPhrases $DocumentLanguage.ViewGroupPeers $_ } }
     }
-    return @($sentences | Where-Object { $_ }) -join ' '
+    return @(@(Get-ViewTypeReadings $views) + @($sentences) | Where-Object { $_ }) -join ' '
 }
 
 function Format-GroupPhrases($Phrases, [hashtable]$GroupLists) {
