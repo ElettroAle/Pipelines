@@ -7,17 +7,20 @@
 # dichiara nel frontmatter governs i pattern sui nomi completi delle classi che governa: prefissi che
 # finiscono con * e contengono per intero il namespace di ogni classe che coprono, mai il nome di una
 # sola classe ne' un namespace intero. Le classi di primo livello dei progetti .NET che non sono di
-# test, nel codice dei repository sorgente, che corrispondono a quei pattern stanno nel diagramma
-# delle classi della decisione; ogni voce di governs copre almeno una classe. Una classe che nessun
-# pattern copre non si controlla. Ogni rilievo nomina la decisione e la classe o la voce. Le decisioni
-# superseded, deprecated e rejected non si controllano. I nomi delle parti seguono DOCUMENT_LANGUAGE
+# test, nel codice dei repository sorgente, che corrispondono a quei pattern stanno in uno dei diagrammi
+# delle classi della decisione; ogni voce di governs copre almeno una classe. Una classe del codice che
+# nessun pattern copre non si controlla; una classe del diagramma che nessun pattern copre, anche del
+# framework o assente dal codice, si segnala. Ogni rilievo nomina la decisione e la classe o la voce. Le
+# decisioni superseded, deprecated e rejected non si controllano. I nomi delle parti seguono DOCUMENT_LANGUAGE
 # (document-language.yaml). Il parser dei diagrammi richiede Node.js.
-# In modalita' fix un modello linguistico propone prima le decisioni che la verifica respinge o che hanno
+# In modalita' fix un modello linguistico propone prima le decisioni che la verifica respinge, che hanno
 # classi candidate, le classi dei namespace governati che nessun pattern copre e che il registro
-# candidatesFile non ha gia' visto (V3/CI/Scripts/Adr/Repair-DecisionClasses.ps1): risponde con le voci da
-# aggiungere a governs e la struttura nel codice riscritta, lo script alza la versione della decisione e la
-# verifica accetta o rimanda ogni stesura; una decisione con voci che non sono pattern validi non va al
-# modello, che non toglie voci. Le decisioni accettate e il registro vanno sul ramo
+# candidatesFile non ha gia' visto, o che il registro readabilityFile non ha valutato nel testo corrente
+# (V3/CI/Scripts/Adr/Repair-DecisionClasses.ps1): il modello giudica la leggibilita' dei diagrammi e divide
+# per aspetto quelli che non si leggono, e risponde con le voci da aggiungere a governs e le parti della
+# struttura e del flusso nel codice riscritte; lo script alza la versione della decisione e la verifica
+# accetta o rimanda ogni stesura; una decisione con voci che non sono pattern validi non va al modello, che
+# non toglie voci. Le decisioni accettate e i registri vanno sul ramo
 # progressBranch, da cui una run rilanciata riprende senza richiamare il modello, e restano nel checkout
 # per la PR che il consumer apre; la verifica che segue segnala senza bloccare, perche' il cancello e' la
 # quality di quella PR. Con provider foundry l'accesso al modello passa dalla service connection con un
@@ -51,6 +54,8 @@
 #                        (default: nessuno, nessuna ripresa)
 #   candidatesFile     → registro delle classi candidate gia' viste dal modello, relativo ai sorgenti
 #                        (default: nessuno: ogni run ripropone le candidate)
+#   readabilityFile    → registro delle decisioni di cui il modello ha giudicato la leggibilita', relativo ai
+#                        sorgenti (default: nessuno: una decisione senza rilievi ne' candidate non va al modello)
 #   nodeVersion        → versione di Node.js per il parser (default: 22.x)
 #   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
 #   condition          → condizione dei passi (default: succeeded())
@@ -112,6 +117,10 @@ parameters:
     type: string
     default: ''
 
+  - name: readabilityFile
+    type: string
+    default: ''
+
   - name: nodeVersion
     type: string
     default: '22.x'
@@ -157,6 +166,7 @@ steps:
         CLASSES_REPAIR_PROVIDER: ${{ parameters.provider }}
         PROGRESS_BRANCH: ${{ parameters.progressBranch }}
         CANDIDATES_FILE: ${{ parameters.candidatesFile }}
+        READABILITY_FILE: ${{ parameters.readabilityFile }}
         STYLE_GUIDE: ${{ parameters.guide }}
         ${{ if ne(parameters.decisionsDirectory, '') }}:
           DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}
@@ -181,6 +191,7 @@ steps:
         ANTHROPIC_API_KEY: ${{ parameters.anthropicApiKey }}
         PROGRESS_BRANCH: ${{ parameters.progressBranch }}
         CANDIDATES_FILE: ${{ parameters.candidatesFile }}
+        READABILITY_FILE: ${{ parameters.readabilityFile }}
         STYLE_GUIDE: ${{ parameters.guide }}
         ${{ if ne(parameters.decisionsDirectory, '') }}:
           DECISIONS_DIRECTORY: ${{ parameters.decisionsDirectory }}

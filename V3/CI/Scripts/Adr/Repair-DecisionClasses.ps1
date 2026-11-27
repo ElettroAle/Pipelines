@@ -1,14 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Propone con un modello linguistico le decisioni che la verifica delle classi (DecisionClasses.ps1)
-# respinge o che hanno classi candidate: le classi dei namespace delle classi governate che nessun pattern
-# della decisione copre e che il registro delle candidate (CANDIDATES_FILE) non ha gia' visto. Il modello
-# riceve la decisione, i rilievi, le candidate e il codice delle classi, e risponde con le voci da
-# aggiungere a governs, la parte della struttura nel codice e la riga della versione; la versione la alza
-# lo script. La verifica delle classi, il flusso della decisione e il parser Mermaid accettano la stesura o
-# la rimandano, fino a CLASSES_REPAIR_MAX_DRAFTS stesure; poi la decisione resta com'era e la verifica la
-# segnala. Il modello propone e non respinge: una decisione non accettata non ferma il passo.
-# Ogni decisione accettata va in un commit sul ramo di avanzamento (PROGRESS_BRANCH) con il registro: una
+# respinge, che hanno classi candidate (le classi dei namespace delle classi governate che nessun pattern
+# della decisione copre e che il registro delle candidate, CANDIDATES_FILE, non ha gia' visto) o che il
+# registro delle decisioni valutate (READABILITY_FILE) non ha nel testo corrente: la leggibilita' dei
+# diagrammi la giudica il modello, una volta per testo. Il modello riceve la decisione, i rilievi, le
+# candidate e il codice delle classi, e risponde con le voci da aggiungere a governs, le parti della
+# struttura e del flusso nel codice e la riga della versione; la versione la alza lo script. La verifica
+# delle classi, il flusso della decisione e il parser Mermaid accettano la stesura o la rimandano, fino a
+# CLASSES_REPAIR_MAX_DRAFTS stesure; poi la decisione resta com'era e la verifica la segnala. Il modello
+# propone e non respinge: una decisione non accettata non ferma il passo.
+# Ogni decisione accettata va in un commit sul ramo di avanzamento (PROGRESS_BRANCH) con i registri: una
 # run rilanciata riprende da li', applicando il lavoro salvato sopra il testo corrente di main, senza
 # richiamare il modello per le decisioni gia' accettate.
 
@@ -23,6 +25,7 @@ $MaxTokens = [int]"0$env:CLASSES_REPAIR_MAX_TOKENS"
 $ReasoningEffort = if ($env:CLASSES_REPAIR_REASONING_EFFORT) { $env:CLASSES_REPAIR_REASONING_EFFORT } else { 'high' }
 $MaxDrafts = if ($env:CLASSES_REPAIR_MAX_DRAFTS) { [math]::Max(1, [int]$env:CLASSES_REPAIR_MAX_DRAFTS) } else { 3 }
 $CandidatesFile = $env:CANDIDATES_FILE
+$ReadabilityFile = $env:READABILITY_FILE
 $ProgressBranch = "$env:PROGRESS_BRANCH" -replace '^refs/heads/', ''
 $GuidePath = $env:STYLE_GUIDE
 
@@ -34,12 +37,14 @@ $script:LanguageModel = $null
 $script:Usage = @{ Requests = 0; Input = 0; Output = 0 }
 
 $Instructions = @'
-Aggiorni una decisione architetturale (ADR in Markdown) perche' il suo diagramma delle classi torni a
-corrispondere al codice che la decisione governa. La decisione dichiara nel frontmatter governs i pattern
-sui nomi completi delle classi governate: prefissi che finiscono con * e contengono per intero il
-namespace di ogni classe che coprono. Ogni classe
-del codice che un pattern copre deve comparire, con il suo nome senza namespace, nel diagramma delle
-classi Mermaid della parte della struttura nel codice; ogni voce di governs copre almeno una classe.
+Aggiorni una decisione architetturale (ADR in Markdown) perche' i suoi diagrammi delle classi tornino a
+corrispondere al codice che la decisione governa e restino leggibili. La decisione dichiara nel
+frontmatter governs i pattern sui nomi completi delle classi governate: prefissi che finiscono con * e
+contengono per intero il namespace di ogni classe che coprono. Ogni classe del codice che un pattern
+copre deve comparire, con il suo nome senza namespace, in un diagramma delle classi Mermaid della parte
+della struttura nel codice; ogni voce di governs copre almeno una classe.
+Il diagramma disegna solo le classi governate e le relazioni fra loro: una classe che nessun pattern
+copre, del framework, vicina alle classi governate o assente dal codice, non sta nel diagramma.
 
 Il messaggio riporta la decisione con il numero di ogni riga, i rilievi della verifica, le classi
 candidate e il codice delle classi.
@@ -50,20 +55,29 @@ candidate e il codice delle classi.
   pattern: il suo nome completo seguito da *, oppure un prefisso piu' corto con * se copre solo classi
   che appartengono alla decisione. Il prefisso contiene sempre per intero il namespace della classe: una
   voce non e' mai il nome di una sola classe ne' un namespace intero. Non togliere voci di governs.
+  Una classe candidata entra nel diagramma solo con la voce di governs che la copre.
+- Ogni diagramma delle classi resta leggibile alla larghezza della pagina della wiki. Giudica sempre la
+  leggibilita', anche senza rilievi ne' candidate: quando le classi governate sono troppe per un solo
+  diagramma leggibile, dividile in piu' diagrammi, uno per aspetto della decisione, ciascuno
+  preceduto da una frase che dice quale aspetto mostra. Ogni classe governata compare in almeno un
+  diagramma; una classe compare in due diagrammi solo come estremita' di una relazione che li collega.
 - La parte della struttura nel codice e' il testo che sta sotto il suo titolo, fino al titolo successivo,
-  senza il titolo: il diagramma delle classi e la spiegazione di ogni classe e di ogni relazione. Riscrivila
+  senza il titolo: i diagrammi delle classi e la spiegazione di ogni classe e di ogni relazione. Riscrivila
   solo dove serve: aggiungi le classi governate che mancano con le loro relazioni e la loro spiegazione,
-  togli le classi che il codice non ha piu', lascia com'e' il resto. Le classi del framework da cui una
-  classe governata dipende possono restare nel diagramma.
-- Il flusso nel codice usa come partecipanti le classi del diagramma: non togliere una classe che il flusso
-  usa.
+  togli le classi che nessun pattern copre, dividi i diagrammi che non si leggono, lascia com'e' il resto.
+- Il flusso nel codice usa come partecipanti solo classi dei diagrammi delle classi. La sua parte e' il
+  testo sotto il suo titolo, fino al titolo successivo, senza il titolo: riscrivila solo se un partecipante
+  non sta piu' nei diagrammi, togliendolo con i suoi messaggi o sostituendolo con la classe governata che
+  fa quel passo.
 - version e' una riga breve che dice cosa cambia in questa versione, per esempio: classi del biglietto
   aggiunte al diagramma.
 
 Rispondi con:
 - governs: le voci da aggiungere, anche nessuna;
 - structure: la parte della struttura nel codice riscritta, oppure una stringa vuota se non cambia;
+- flow: la parte del flusso nel codice riscritta, oppure una stringa vuota se non cambia;
 - version: la riga della versione.
+Senza rilievi ne' candidate e con ogni diagramma leggibile, governs, structure e flow restano vuoti.
 Se il messaggio riporta una stesura scartata, la nuova stesura evita i motivi dello scarto.
 '@
 
@@ -71,10 +85,11 @@ function New-RepairSchema {
     return @{
         type                 = 'object'
         additionalProperties = $false
-        required             = @('governs', 'structure', 'version')
+        required             = @('governs', 'structure', 'flow', 'version')
         properties           = @{
             governs   = @{ type = 'array'; items = @{ type = 'string' } }
             structure = @{ type = 'string' }
+            flow      = @{ type = 'string' }
             version   = @{ type = 'string' }
         }
     }
@@ -107,12 +122,46 @@ function Read-CandidatesFile {
     return Read-Candidates ([IO.File]::ReadAllText($CandidatesFile))
 }
 
+function Write-LedgerFile([string]$Path, [hashtable]$Ledger, [scriptblock]$Value) {
+    $ordered = [ordered]@{}
+    $Ledger.Keys | Sort-Object | ForEach-Object { $ordered[$_] = & $Value $Ledger[$_] }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent ([IO.Path]::GetFullPath($Path))) | Out-Null
+    [IO.File]::WriteAllText($Path, (ConvertTo-Json -InputObject $ordered -Depth 4) + "`n")
+}
+
 function Save-Candidates([hashtable]$Ledger) {
     if (-not $CandidatesFile) { return }
-    $ordered = [ordered]@{}
-    $Ledger.Keys | Sort-Object | ForEach-Object { $ordered[$_] = @($Ledger[$_] | Sort-Object -Unique) }
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent ([IO.Path]::GetFullPath($CandidatesFile))) | Out-Null
-    [IO.File]::WriteAllText($CandidatesFile, (ConvertTo-Json -InputObject $ordered -Depth 4) + "`n")
+    Write-LedgerFile $CandidatesFile $Ledger { param($names) , @($names | Sort-Object -Unique) }
+}
+
+# Il registro delle decisioni valutate: per ogni decisione l'impronta del testo che il modello ha giudicato.
+function Get-TextHash([string]$Text) {
+    $bytes = [Text.Encoding]::UTF8.GetBytes(($Text -replace "`r`n", "`n"))
+    return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+}
+
+function Read-Readability([string]$Json) {
+    $ledger = @{}
+    if (-not "$Json".Trim()) { return $ledger }
+    $parsed = $Json | ConvertFrom-Json -ErrorAction Stop
+    foreach ($property in @($parsed.PSObject.Properties)) { $ledger[$property.Name] = "$($property.Value)" }
+    return $ledger
+}
+
+function Read-ReadabilityFile {
+    if (-not $ReadabilityFile -or -not (Test-Path $ReadabilityFile -PathType Leaf)) { return @{} }
+    return Read-Readability ([IO.File]::ReadAllText($ReadabilityFile))
+}
+
+function Save-Readability([hashtable]$Ledger) {
+    if (-not $ReadabilityFile) { return }
+    Write-LedgerFile $ReadabilityFile $Ledger { param($hash) $hash }
+}
+
+# Senza registro una decisione in pari non va al modello: la valuterebbe di nuovo a ogni run.
+function Test-Evaluated($Decision, [hashtable]$Readability) {
+    if (-not $ReadabilityFile) { return $true }
+    return $Readability[$Decision.Id] -ceq (Get-TextHash ([IO.File]::ReadAllText($Decision.Section.File.FullName)))
 }
 
 function Get-Candidates($Decision, $Types, [hashtable]$Ledger) {
@@ -179,9 +228,10 @@ function Get-PartRange([string[]]$Lines, [string]$Name) {
     return @{ Start = $start; End = $next }
 }
 
-function Set-StructurePart([Collections.Generic.List[string]]$Lines, [string]$Structure) {
-    $range = Get-PartRange $Lines.ToArray() $StructureSection
-    $body = @('') + @("$Structure".Trim() -split "`r?`n") + @('')
+function Set-PartText([Collections.Generic.List[string]]$Lines, [string]$Name, [string]$Text) {
+    $range = Get-PartRange $Lines.ToArray() $Name
+    if (-not $range) { return }
+    $body = @('') + @("$Text".Trim() -split "`r?`n") + @('')
     $Lines.RemoveRange($range.Start + 1, $range.End - $range.Start - 1)
     $Lines.InsertRange($range.Start + 1, [string[]]$body)
 }
@@ -214,17 +264,19 @@ function ConvertTo-GovernsPattern([string]$Entry) {
     return "$entry*"
 }
 
-# La stesura applicata al testo della decisione: voci di governs in piu', struttura riscritta, versione
-# nuova con la sua voce. Torna $null se la stesura non cambia la decisione.
+# La stesura applicata al testo della decisione: voci di governs in piu', struttura e flusso riscritti,
+# versione nuova con la sua voce. Torna $null se la stesura non cambia la decisione.
 function Get-DraftText([string]$Original, $Draft, [string[]]$Governs) {
     $additions = @($Draft.governs | ForEach-Object { ConvertTo-GovernsPattern $_ } | Where-Object { $_ -and $Governs -cnotcontains $_ } | Select-Object -Unique)
     $structure = "$($Draft.structure)"
-    if (-not $additions -and -not $structure.Trim()) { return $null }
+    $flow = "$($Draft.flow)"
+    if (-not $additions -and -not $structure.Trim() -and -not $flow.Trim()) { return $null }
     $newline = if ($Original.Contains("`r`n")) { "`r`n" } else { "`n" }
     $lines = [Collections.Generic.List[string]]::new([string[]]($Original -split "`r?`n"))
     $version = (Get-DecisionVersion $Original) + 1
     Set-FrontMatter $lines $additions $version
-    if ($structure.Trim()) { Set-StructurePart $lines $structure }
+    if ($structure.Trim()) { Set-PartText $lines $StructureSection $structure }
+    if ($flow.Trim()) { Set-PartText $lines $FlowSection $flow }
     Add-VersionEntry $lines $version $Draft.version
     return $lines -join $newline
 }
@@ -289,6 +341,7 @@ function Test-ProgressBranch {
 }
 
 function Get-ProgressFile([string]$Path) {
+    if (-not $Path) { return $null }
     $content = git show "refs/remotes/origin/${ProgressBranch}:$(Get-RepositoryPath $Path)" 2>$null
     if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0; return $null }
     return ($content -join "`n") + "`n"
@@ -333,19 +386,28 @@ function Find-MainText([string]$Path, [string[]]$Entries) {
     return $null
 }
 
+function Get-ResumedPart([string]$Base, [string]$Progress, [string]$Current, [string]$Name) {
+    $basePart = Get-PartText $Base $Name
+    $part = Get-PartText $Progress $Name
+    if ($part -ceq $basePart -or (Get-PartText $Current $Name) -cne $basePart) { return '' }
+    return $part
+}
+
 # Il lavoro del modello sul ramo, rispetto al testo da cui e' partito, applicato sopra il testo corrente di
-# main: le voci di governs per classi che main non governa, la struttura se main non l'ha cambiata, e una
-# versione nuova con le righe delle versioni del ramo.
+# main: le voci di governs per classi che main non governa, la struttura e il flusso se main non li ha
+# cambiati, e una versione nuova con le righe delle versioni del ramo.
 function Get-ResumedText([string]$Base, [string]$Progress, [string]$Current, [string[]]$Notes, $Types) {
     $baseGoverns = Get-Governs $Base
     $currentGoverns = Get-Governs $Current
     $governed = @((Get-GovernedTypes $Types $currentGoverns).FullName)
     $additions = @(Get-Governs $Progress | Where-Object { $baseGoverns -cnotcontains $_ } |
             Where-Object { @((Get-GovernedTypes $Types @($_)).FullName | Where-Object { $governed -cnotcontains $_ }).Count })
-    $baseStructure = Get-PartText $Base $StructureSection
-    $structure = Get-PartText $Progress $StructureSection
-    if ($structure -ceq $baseStructure -or (Get-PartText $Current $StructureSection) -cne $baseStructure) { $structure = '' }
-    $draft = [pscustomobject]@{ governs = $additions; structure = $structure; version = ($Notes -join '; ') }
+    $draft = [pscustomobject]@{
+        governs   = $additions
+        structure = Get-ResumedPart $Base $Progress $Current $StructureSection
+        flow      = Get-ResumedPart $Base $Progress $Current $FlowSection
+        version   = ($Notes -join '; ')
+    }
     return Get-DraftText $Current $draft $currentGoverns
 }
 
@@ -362,26 +424,37 @@ function Get-ResumedDecision([string]$Path, [string]$Progress, [string]$Current,
     return Get-ResumedText $base $Progress $Current $notes $Types
 }
 
+# Torna vero se la decisione del ramo, applicata sopra main, entra nella copia di lavoro.
+function Restore-Decision($Decision, [string]$Progress, $Types) {
+    $path = $Decision.Section.File.FullName
+    $current = [IO.File]::ReadAllText($path)
+    if (($Progress -replace "`r`n", "`n") -eq ($current -replace "`r`n", "`n")) { return $false }
+    $resumed = Get-ResumedDecision $path $Progress $current $Types
+    if (-not $resumed) { return $false }
+    [IO.File]::WriteAllText($path, $resumed)
+    if (@(Get-DecisionFindings $Decision.Id $Types)) { [IO.File]::WriteAllText($path, $current); return $false }
+    Write-Host "Decisione $($Decision.Id) ripresa dal ramo $ProgressBranch"
+    return $true
+}
+
 # Le decisioni del ramo di avanzamento, gia' accettate da una run interrotta, tornano nella copia di lavoro
 # applicate sopra main, se la verifica le accetta ancora. Il registro del ramo si unisce a quello di main,
 # tranne le classi che il modello aveva aggiunto a governs e che la decisione ripresa non governa: tornano
-# candidate.
-function Resume-Progress($Decisions, $Types, [hashtable]$Ledger) {
+# candidate. Una decisione valutata sul ramo resta valutata nel testo ripreso.
+function Resume-Progress($Decisions, $Types, [hashtable]$Ledger, [hashtable]$Readability) {
     if (-not (Test-ProgressBranch)) { return }
     $saved = Read-Candidates (Get-ProgressFile $CandidatesFile)
+    $judged = Read-Readability (Get-ProgressFile $ReadabilityFile)
     $lost = @{}
     foreach ($decision in $Decisions) {
         $path = $decision.Section.File.FullName
         $progress = Get-ProgressFile $path
-        $current = [IO.File]::ReadAllText($path)
-        if ($null -eq $progress -or ($progress -replace "`r`n", "`n") -eq ($current -replace "`r`n", "`n")) { continue }
-        $resumed = Get-ResumedDecision $path $progress $current $Types
-        if ($resumed) {
-            [IO.File]::WriteAllText($path, $resumed)
-            if (@(Get-DecisionFindings $decision.Id $Types)) { [IO.File]::WriteAllText($path, $current) }
-            else { Write-Host "Decisione $($decision.Id) ripresa dal ramo $ProgressBranch" }
-        }
-        $kept = @((Get-GovernedTypes $Types (Get-Governs ([IO.File]::ReadAllText($path)))).FullName)
+        if ($null -eq $progress) { continue }
+        $resumed = Restore-Decision $decision $progress $Types
+        $final = [IO.File]::ReadAllText($path)
+        $hash = $judged[$decision.Id]
+        if ($hash -and ($hash -ceq (Get-TextHash $final) -or ($resumed -and $hash -ceq (Get-TextHash $progress)))) { $Readability[$decision.Id] = Get-TextHash $final }
+        $kept = @((Get-GovernedTypes $Types (Get-Governs $final)).FullName)
         $lost[$decision.Id] = @((Get-GovernedTypes $Types (Get-Governs $progress)).FullName | Where-Object { $kept -cnotcontains $_ })
     }
     foreach ($id in $saved.Keys) {
@@ -426,7 +499,7 @@ function Publish-Progress($Progress, [string[]]$Paths, [string]$Label) {
 }
 
 # Il modello non toglie voci di governs: una decisione con voci che non sono pattern validi non gli va.
-function Get-PendingDecisions($Decisions, $Types, [hashtable]$Ledger) {
+function Get-PendingDecisions($Decisions, $Types, [hashtable]$Ledger, [hashtable]$Readability) {
     foreach ($decision in $Decisions) {
         $entryIssues = @(Get-GovernsEntryIssues $decision $Types)
         if ($entryIssues) {
@@ -435,7 +508,7 @@ function Get-PendingDecisions($Decisions, $Types, [hashtable]$Ledger) {
         }
         $findings = @(Get-DecisionClassIssues $decision $Types)
         $candidates = @(Get-Candidates $decision $Types $Ledger)
-        if ($findings -or $candidates) { [pscustomobject]@{ Decision = $decision; Findings = $findings; Candidates = $candidates } }
+        if ($findings -or $candidates -or -not (Test-Evaluated $decision $Readability)) { [pscustomobject]@{ Decision = $decision; Findings = $findings; Candidates = $candidates } }
     }
 }
 
@@ -446,13 +519,15 @@ function Repair-DecisionClasses {
 
     $types = @(Get-ProductionTypes (Read-DotNetProjects))
     $ledger = Read-CandidatesFile
-    try { Resume-Progress $decisions $types $ledger }
+    $readability = Read-ReadabilityFile
+    try { Resume-Progress $decisions $types $ledger $readability }
     catch { return New-Issue $RepairScope 'proposta interrotta non ripresa' $_.Exception.Message }
 
     $decisions = @(Get-Decisions | Where-Object { $_.Governs })
     Add-DiagramClasses $decisions
-    $pending = @(Get-PendingDecisions $decisions $types $ledger)
+    $pending = @(Get-PendingDecisions $decisions $types $ledger $readability)
     Save-Candidates $ledger
+    Save-Readability $readability
     if (-not $pending) { return }
     try { $script:LanguageModel = New-LanguageModel $Provider $Endpoint $ModelName $ReasoningEffort -AccessToken $env:CLASSES_REPAIR_TOKEN -MaxTokens $MaxTokens -TimeoutSeconds $RequestTimeoutSeconds }
     catch { return New-Issue $RepairScope 'proposta non eseguita' $_.Exception.Message }
@@ -465,7 +540,9 @@ function Repair-DecisionClasses {
             if (-not $accepted) { Write-Host "##vso[task.logissue type=warning]Decisione $($item.Decision.Id) non aggiornata: la verifica delle classi la segnala"; continue }
             $ledger[$item.Decision.Id] = @(@($ledger[$item.Decision.Id]) + @($item.Candidates.FullName) | Where-Object { $_ } | Sort-Object -Unique)
             Save-Candidates $ledger
-            Publish-Progress $progress @($item.Decision.Section.File.FullName, $CandidatesFile) $item.Decision.Id
+            $readability[$item.Decision.Id] = Get-TextHash ([IO.File]::ReadAllText($item.Decision.Section.File.FullName))
+            Save-Readability $readability
+            Publish-Progress $progress @($item.Decision.Section.File.FullName, $CandidatesFile, $ReadabilityFile) $item.Decision.Id
         }
     }
     catch { return New-Issue $RepairScope 'proposta non salvata' $_.Exception.Message }

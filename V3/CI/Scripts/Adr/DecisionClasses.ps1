@@ -4,8 +4,9 @@
 # pattern sui nomi completi delle classi che governa: prefissi che finiscono con * e contengono per intero
 # il namespace di ogni classe che coprono, mai il nome di una sola classe ne' un namespace intero.
 # Le classi del codice .NET dei repository sorgente (SOURCE_DIRECTORY) che corrispondono a quei pattern
-# sono le classi del diagramma delle classi della decisione; una classe che nessun pattern copre non si
-# controlla. Usato da Test-DecisionClasses.ps1.
+# sono esattamente le classi dei diagrammi delle classi della decisione: una classe del codice che nessun
+# pattern copre non si controlla, una classe del diagramma che nessun pattern copre si segnala, perche'
+# il diagramma resti leggibile. Usato da Test-DecisionClasses.ps1.
 
 . "$PSScriptRoot/../Common/VerificationGate.ps1"
 . "$PSScriptRoot/../Common/DocumentLanguage.ps1"
@@ -106,6 +107,12 @@ function Get-StructureIssues($Decision) {
     if (-not $Decision.Classes) { return New-Issue $Decision.Id 'struttura nel codice senza diagramma delle classi' $StructureSection }
 }
 
+function Get-UngovernedClassIssues($Decision, $Governed) {
+    $names = @($Governed | ForEach-Object Name)
+    $Decision.Classes | Where-Object { $names -cnotcontains $_ } | Select-Object -Unique |
+        ForEach-Object { New-Issue $Decision.Id 'classe del diagramma non governata' $_ }
+}
+
 function Get-DecisionClassIssues($Decision, $Types) {
     $structureIssue = Get-StructureIssues $Decision
     if ($structureIssue) { return $structureIssue }
@@ -114,6 +121,7 @@ function Get-DecisionClassIssues($Decision, $Types) {
     $governed = Get-GovernedTypes $Types $Decision.Governs
     $governed | Where-Object { $Decision.Classes -cnotcontains $_.Name } | Sort-Object FullName -Unique |
         ForEach-Object { New-Issue $Decision.Id 'classe governata assente dal diagramma delle classi' $_.FullName }
+    Get-UngovernedClassIssues $Decision $governed
     $Decision.Governs | Where-Object { -not (Get-GovernedTypes $Types @($_)) } |
         ForEach-Object { New-Issue $Decision.Id "voce di $GovernsField che non copre classi del codice" $_ }
 }

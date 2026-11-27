@@ -651,22 +651,27 @@ Classi delle decisioni (`adr-classes-verify.yaml`, `CI/Scripts/Adr/Test-Decision
   (`Contoso.Shop.Core.Queue.*`, `Contoso.Shop.Core.Handlers.V2.QueueTicket*`).
 - **Confronto.** Le classi di primo livello (classi, record, struct, interfacce, enum) dei progetti .NET che non
   sono di test, nella cartella `sourceDirectory` con il codice dei repository sorgente, lette con le regole del
-  lettore .NET 10 del modello C4 (`CI/Scripts/C4/DotNet10Code.ps1`), che corrispondono a un pattern stanno nel
-  diagramma delle classi della decisione. La verifica fallisce nominando la decisione e la classe, o la voce di
-  `governs` che non copre nessuna classe, e se la decisione ha la struttura senza `governs`, `governs` senza la
-  struttura o la struttura senza diagramma delle classi. Una classe che nessun pattern copre, come la classe
-  del framework da cui una classe governata eredita, non si controlla; un tipo annidato neppure. Le decisioni
-  `superseded`, `deprecated` e `rejected` non si controllano.
+  lettore .NET 10 del modello C4 (`CI/Scripts/C4/DotNet10Code.ps1`), che corrispondono a un pattern stanno in
+  uno dei diagrammi delle classi della decisione, e i diagrammi disegnano solo quelle classi. La verifica
+  fallisce nominando la decisione e la classe governata assente dai diagrammi, la classe del diagramma che
+  nessun pattern copre (anche del framework o assente dal codice) o la voce di `governs` che non copre nessuna
+  classe, e se la decisione ha la struttura senza `governs`, `governs` senza la struttura o la struttura senza
+  diagramma delle classi. Una classe del codice che nessun pattern copre non si controlla; un tipo annidato
+  neppure. Le decisioni `superseded`, `deprecated` e `rejected` non si controllano.
 - **Proposta.** In modalità `fix`, `CI/Scripts/Adr/Repair-DecisionClasses.ps1` propone prima con il modello
-  linguistico le decisioni che la verifica respinge o che hanno classi candidate: le classi dei namespace delle
-  classi governate che nessun pattern copre e che il registro `candidatesFile` non ha già visto. Il modello
-  riceve la decisione, i rilievi, le candidate e il codice delle classi, e risponde con le voci da aggiungere a
-  `governs` (mai da togliere), la parte della struttura nel codice riscritta e la riga della versione; lo script
-  alza la versione della decisione e aggiunge la voce sotto Versioni. La verifica delle classi, quella del flusso
-  della decisione e il parser accettano la stesura o la rimandano con i motivi, fino a `maxDrafts` stesure; poi
-  la decisione resta com'è e il passo la segnala senza fallire. Ogni decisione accettata e il registro vanno in
-  un commit sul ramo `progressBranch`, da cui una run rilanciata riprende senza richiamare il modello; il
-  registro evita di chiedere al modello le stesse candidate a ogni run. La verifica che segue segnala senza
+  linguistico le decisioni che la verifica respinge, che hanno classi candidate (le classi dei namespace delle
+  classi governate che nessun pattern copre e che il registro `candidatesFile` non ha già visto) o che il
+  registro `readabilityFile` non ha valutato nel testo corrente. Il modello riceve la decisione, i rilievi, le
+  candidate e il codice delle classi; giudica se ogni diagramma delle classi si legge alla larghezza della
+  pagina della wiki e, se le classi governate sono troppe, le divide in più diagrammi, uno per aspetto della
+  decisione; risponde con le voci da aggiungere a `governs` (mai da togliere), le parti della struttura e del
+  flusso nel codice riscritte e la riga della versione; lo script alza la versione della decisione e aggiunge la
+  voce sotto Versioni. La verifica delle classi, quella del flusso della decisione e il parser accettano la
+  stesura o la rimandano con i motivi, fino a `maxDrafts` stesure; poi la decisione resta com'è e il passo la
+  segnala senza fallire. Ogni decisione accettata e i registri vanno in un commit sul ramo `progressBranch`, da
+  cui una run rilanciata riprende senza richiamare il modello; i registri evitano di chiedere al modello le
+  stesse candidate e la leggibilità dello stesso testo a ogni run. Senza `readabilityFile` una decisione senza
+  rilievi né candidate non va al modello. La verifica che segue segnala senza
   bloccare: il cancello è la quality della PR che il consumer apre con le decisioni proposte.
 - **Requisiti.** Node.js per il parser Mermaid, preparato dallo step con `UseNode@1`, e il checkout dei
   repository sorgente prima dello step; in modalità `fix`, il modello linguistico (vedi sotto) e un'identità

@@ -29,9 +29,8 @@ classDiagram
     }
     class QueueTicketIssuer
     class QueueTicketHandler~TMessage~
-    class BackgroundService
     IQueueTicketIssuer <|.. QueueTicketIssuer : realizza
-    BackgroundService <|-- QueueTicketHandler : estende
+    QueueTicketHandler ..> IQueueTicketIssuer : usa
 '@ -replace "`r`n", "`n"
 
     function New-DecisionText([string]$Status = 'accepted', [string[]]$Patterns = $Governs, [string]$Structure = "``````mermaid`n$Diagram`n``````", [switch]$NoStructure) {
@@ -74,9 +73,42 @@ classDiagram
 
 Describe "Funzionalità: Diagramma delle classi di una decisione coerente con il codice che governa" {
 
-    Context "Scenario: diagramma delle classi coerente" {
+    Context "Scenario: diagramma delle classi coerente, con le sole classi governate (ADR-2175)" {
         BeforeAll {
             $res = Invoke-ClassCheck
+        }
+
+        It "Allora la verifica passa" {
+            Get-Issues $res.Output | Should -BeNullOrEmpty -Because ($res.Output)
+            $res.ExitCode | Should -Be 0
+        }
+    }
+
+    Context "Schema dello scenario: classe del diagramma che nessun pattern copre (<Caso>) (ADR-2175)" -ForEach @(
+        @{ Caso = 'una classe del codice accanto alle classi governate'; Classe = 'TextDeliveryHandler' }
+        @{ Caso = 'una classe che non esiste nel codice di produzione'; Classe = 'BackgroundService' }
+    ) {
+        BeforeAll {
+            $structure = "``````mermaid`n$Diagram`n    class $Classe`n    $Classe <|-- QueueTicketHandler : estende`n``````"
+            $res = Invoke-ClassCheck (New-ClassesCorpus -DecisionText (New-DecisionText -Structure $structure))
+        }
+
+        It "Allora la verifica fallisce" {
+            $res.ExitCode | Should -Be 1
+        }
+
+        It "E nomina la decisione e la classe del diagramma non governata, una volta sola" {
+            @(Get-ClassIssue $res "^0036-intenzioni-applicate-dopo-il-turno: classe del diagramma non governata \($Classe\)$").Count | Should -Be 1 -Because ($res.Output)
+            @(Get-Issues $res.Output).Count | Should -Be 1 -Because ($res.Output)
+        }
+    }
+
+    Context "Scenario: due diagrammi delle classi che insieme coprono le classi governate (ADR-2175)" {
+        BeforeAll {
+            $issuing = "classDiagram`n    class IQueueTicketIssuer`n    class QueueTicketIssuer`n    IQueueTicketIssuer <|.. QueueTicketIssuer : realizza"
+            $handling = "classDiagram`n    class IQueueTicketIssuer`n    class QueueTicketHandler~TMessage~`n    QueueTicketHandler ..> IQueueTicketIssuer : usa"
+            $structure = "L'emissione del biglietto.`n`n``````mermaid`n$issuing`n```````n`nLa gestione dei messaggi della coda.`n`n``````mermaid`n$handling`n``````"
+            $res = Invoke-ClassCheck (New-ClassesCorpus -DecisionText (New-DecisionText -Structure $structure))
         }
 
         It "Allora la verifica passa" {
@@ -276,6 +308,22 @@ Describe "DecisionClasses.ps1" {
             Get-ClassName 'Repository~T~' | Should -Be 'Repository'
             Get-ClassName 'Repository<T>' | Should -Be 'Repository'
             Get-ClassName 'Issuer' | Should -Be 'Issuer'
+        }
+    }
+
+    Context "Get-UngovernedClassIssues (ADR-2175)" {
+        It "nomina una volta sola, in ordine, le classi del diagramma che nessuna classe governata porta per nome" {
+            $decision = [pscustomobject]@{ Id = 'd'; Classes = @('Issuer', 'BackgroundService', 'Issuer', 'Clock', 'Clock') }
+            $governed = @([pscustomobject]@{ FullName = 'A.Queue.Issuer'; Name = 'Issuer' })
+            Get-UngovernedClassIssues $decision $governed | Should -Be @(
+                'd: classe del diagramma non governata (BackgroundService)'
+                'd: classe del diagramma non governata (Clock)'
+            )
+        }
+
+        It "non nomina nulla quando ogni classe del diagramma e' governata" {
+            $decision = [pscustomobject]@{ Id = 'd'; Classes = @('Issuer') }
+            @(Get-UngovernedClassIssues $decision @([pscustomobject]@{ FullName = 'A.Queue.Issuer'; Name = 'Issuer' })).Count | Should -Be 0
         }
     }
 
