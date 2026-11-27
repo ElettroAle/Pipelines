@@ -340,11 +340,11 @@ Describe "Funzionalità: Viste di deployment che rispondono a una domanda" {
 
     Context "Scenario: la descrizione di ogni vista nasce dal suo contenuto con le frasi della lingua, fuori dal disegno, e nomina una volta ogni elemento collegato (ADR-2140, ADR-2148)" {
         It "Allora la descrizione di ogni vista di deployment nomina il soggetto, gli elementi che mostra e le relazioni con il loro testo" -ForEach @(
-            @{ Key = 'deployment_prod'; Expected = "Applicazioni dell'ambiente prod: Api, Worker. Piani di calcolo e risorse che le ospitano: asp-contoso-prod. Chiamate fra le applicazioni: Worker → Api." }
+            @{ Key = 'deployment_prod'; Expected = "Applicazioni dell'ambiente prod: Api e Worker. Piani di calcolo e risorse che le ospitano: asp-contoso-prod. Chiamate fra le applicazioni: Worker → Api." }
             @{ Key = 'deployment_prod_app_contoso_shop_ai_api'; Expected = "Nell'ambiente prod, Api gira su asp-contoso-prod. Si rivolge a kv-contoso-prod. Riceve le richieste di Worker." }
             @{ Key = 'deployment_prod_app_contoso_shop_ai_worker'; Expected = "Nell'ambiente prod, Worker gira su asp-contoso-prod. Si rivolge a Api." }
-            @{ Key = 'deployment_prod_rete'; Expected = "Reti virtuali dell'ambiente prod: vnet-contoso-prod, vnet-shared. Ingresso del traffico pubblico: afd-contoso-prod. Collegamenti fra le reti: afd-contoso-prod → vnet-contoso-prod (Inoltra le richieste all'origine), vnet-contoso-prod → vnet-shared." }
-            @{ Key = 'deployment_prod_rete_vnet_contoso_prod'; Expected = "Subnet della rete vnet-contoso-prod nell'ambiente prod: snet-engine, snet-gateway, snet-worker. Applicazioni integrate nella rete: Api, Worker. Riceve il traffico da afd-contoso-prod (Inoltra le richieste all'origine). Si collega a vnet-shared." }
+            @{ Key = 'deployment_prod_rete'; Expected = "Reti virtuali dell'ambiente prod: vnet-contoso-prod e vnet-shared. Ingresso del traffico pubblico: afd-contoso-prod. Collegamenti fra le reti: afd-contoso-prod → vnet-contoso-prod (Inoltra le richieste all'origine) e vnet-contoso-prod → vnet-shared." }
+            @{ Key = 'deployment_prod_rete_vnet_contoso_prod'; Expected = "Subnet della rete vnet-contoso-prod nell'ambiente prod: snet-engine, snet-gateway e snet-worker. Applicazioni integrate nella rete: Api e Worker. Riceve il traffico da afd-contoso-prod (Inoltra le richieste all'origine). Si collega a vnet-shared." }
             @{ Key = 'deployment_prod_rete_vnet_shared'; Expected = "Subnet della rete vnet-shared nell'ambiente prod: snet-endpoints. Risorse raggiunte in privato dalla rete: Api. Riceve il traffico da vnet-contoso-prod." }
         ) {
             (Get-ExportedView $export $Key).properties.description | Should -Be $Expected
@@ -474,12 +474,12 @@ Describe "Funzionalità: Relazioni, testi dei nodi e tabella dei gruppi di risor
 
     Context "Scenario: la descrizione di un nodo di deployment nasce dal modello con una frase della lingua per livello" {
         It "Allora la descrizione dice che cosa il nodo ospita o collega" {
-            Get-NodeText $deployment 'prod rete' 'vnet-contoso-prod' | Should -Be 'Contiene le subnet snet-engine, snet-gateway, snet-worker. Collegata in peering a vnet-shared.'
+            Get-NodeText $deployment 'prod rete' 'vnet-contoso-prod' | Should -Be 'Contiene le subnet snet-engine, snet-gateway e snet-worker. Collegata in peering a vnet-shared.'
             Get-NodeText $deployment 'prod rete' 'snet-engine' | Should -Be 'Ospita Api. Si trova in vnet-contoso-prod.'
             Get-NodeText $deployment 'prod rete' 'agw-contoso-prod' | Should -Be 'Riceve le richieste da fde-contoso-prod e le inoltra a Api.'
             Get-NodeText $deployment 'prod rete' 'Api · sites' | Should -Be 'Accesso privato a Api.'
             Get-NodeText $deployment 'prod rete' 'afd-contoso-prod' | Should -Be 'Ingresso pubblico verso agw-contoso-prod.'
-            Get-NodeText $deployment 'prod' 'asp-contoso-prod' | Should -Be 'Piano di calcolo di Api, Worker.'
+            Get-NodeText $deployment 'prod' 'asp-contoso-prod' | Should -Be 'Piano di calcolo di Api e Worker.'
         }
 
         It "E vale per ogni ambiente: cambiano solo i nomi delle risorse di ciascuno" {

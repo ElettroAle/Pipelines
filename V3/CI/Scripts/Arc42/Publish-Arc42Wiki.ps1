@@ -315,12 +315,44 @@ function Get-LevelName([string]$Level) {
     return $Level
 }
 
-# Le viste alla pari si presentano con i loro soggetti e i loro livelli, in ordine di comparsa; senza livelli, con i
-# soli soggetti.
+# I livelli delle viste di ogni soggetto, in ordine di comparsa dei soggetti e dei livelli.
+function Get-SubjectLevels([object[]]$Views) {
+    $levels = [ordered]@{}
+    foreach ($view in $Views) {
+        $subject = "$($view.properties.subject)"
+        if (-not $subject) { continue }
+        if (-not $levels.Contains($subject)) { $levels[$subject] = [Collections.Generic.List[string]]::new() }
+        $level = "$($view.properties.level)"
+        if ($level -and -not $levels[$subject].Contains($level)) { $levels[$subject].Add($level) }
+    }
+    return $levels
+}
+
+# I soggetti con lo stesso insieme di livelli formano un gruppo, in ordine di comparsa del primo soggetto: ogni frase
+# dice cosi' solo cio' che e' vero per ogni soggetto che nomina.
+function Get-PeerGroups([object[]]$Views) {
+    $subjectLevels = Get-SubjectLevels $Views
+    $groups = [ordered]@{}
+    foreach ($subject in $subjectLevels.Keys) {
+        $set = @($subjectLevels[$subject] | Sort-Object) -join '|'
+        if (-not $groups.Contains($set)) { $groups[$set] = [pscustomobject]@{ Subjects = [Collections.Generic.List[string]]::new(); Levels = @($subjectLevels[$subject]) } }
+        $groups[$set].Subjects.Add($subject)
+    }
+    return @($groups.Values)
+}
+
+# Le viste alla pari si presentano con una frase per gruppo: la prima apre le sezioni che seguono, le altre riprendono
+# il soggetto; un gruppo con un livello solo ha una sola vista, un gruppo senza livelli nomina solo i soggetti.
 function Get-PeerGroupLists([object[]]$Views, [hashtable]$Index) {
-    $subjects = @($Views | ForEach-Object { "$($_.properties.subject)" } | Where-Object { $_ } | Select-Object -Unique | ForEach-Object { Get-SubjectName $_ $Index })
-    $levels = @($Views | ForEach-Object { "$($_.properties.level)" } | Where-Object { $_ } | Select-Object -Unique | ForEach-Object { Get-LevelName $_ })
-    return @{ Subjects = $subjects; Levels = $levels; UnleveledSubjects = @(if (-not $levels) { $subjects }) }
+    $groups = @(Get-PeerGroups $Views)
+    for ($position = 0; $position -lt $groups.Count; $position++) {
+        $subjects = @($groups[$position].Subjects | ForEach-Object { Get-SubjectName $_ $Index })
+        $levels = @($groups[$position].Levels | ForEach-Object { Get-LevelName $_ })
+        if (-not $levels) { @{ UnleveledSubjects = $subjects }; continue }
+        $lists = @{ $(if ($position) { 'NextSubjects' } else { 'FirstSubjects' }) = $subjects }
+        $lists[$(if ($levels.Count -gt 1) { 'SeveralLevels' } else { 'OneLevel' })] = $levels
+        $lists
+    }
 }
 
 # Un marcatore che porta piu' viste si apre con le frasi della lingua che dicono come il gruppo e' fatto, una per
@@ -330,7 +362,7 @@ function Format-ViewGroupIntroduction($Workspace, [string[]]$Keys, [object[]]$Ca
     $index = Get-ElementIndex $Workspace
     $sentences = foreach ($segment in @(Get-ViewSegments $views $index)) {
         if ($segment.Overview) { Format-GroupPhrases $DocumentLanguage.ViewGroupIntroduction (Get-OverviewGroupLists @($Captions[$segment.Positions])) }
-        else { Format-GroupPhrases $DocumentLanguage.ViewGroupPeers (Get-PeerGroupLists @($views[$segment.Positions]) $index) }
+        else { Get-PeerGroupLists @($views[$segment.Positions]) $index | ForEach-Object { Format-GroupPhrases $DocumentLanguage.ViewGroupPeers $_ } }
     }
     return @($sentences | Where-Object { $_ }) -join ' '
 }

@@ -81,10 +81,14 @@
         @{ Text = 'The view {0} shows the whole; the views that follow take up its parts one at a time: {1}.'; Lists = @('First', 'Following') }
     )
     ViewGroupPeers = @(
-        @{ Text = 'The sections that follow show, for {0}, one view for each of these levels: {1}.'; Lists = @('Subjects', 'Levels') }
+        @{ Text = 'The sections that follow show, for {0}, one view for each of these levels: {1}.'; Lists = @('FirstSubjects', 'SeveralLevels') }
+        @{ Text = 'The sections that follow show, for {0}, a single view: {1}.'; Lists = @('FirstSubjects', 'OneLevel') }
+        @{ Text = 'For {0} they show one view for each of these levels: {1}.'; Lists = @('NextSubjects', 'SeveralLevels') }
+        @{ Text = 'For {0} they show a single view: {1}.'; Lists = @('NextSubjects', 'OneLevel') }
         @{ Text = 'The sections that follow show one view for each of these elements: {0}.'; Lists = @('UnleveledSubjects') }
     )
     ViewGroupLevels = @{ logic = 'the logic'; dataAccess = 'the data access' }
+    ListConjunction = 'and'
     ViewNameFormat = '“{0}”'
     SummaryTag     = 'Summary'
     NetworkTag     = 'Network'

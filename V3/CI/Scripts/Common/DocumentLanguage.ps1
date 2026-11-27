@@ -18,11 +18,18 @@ function Get-DocumentLanguage([string]$Code) {
 # di ogni elenco con la funzione Names. Una frase con un elenco vuoto non si scrive.
 function Format-LanguagePhrases($Phrases, [scriptblock]$Names) {
     $sentences = foreach ($phrase in @($Phrases)) {
-        $lists = @(@($phrase.Lists) | ForEach-Object { @(& $Names $_) -join ', ' })
+        $lists = @(@($phrase.Lists) | ForEach-Object { Join-LanguageList @(& $Names $_) })
         if ($lists -contains '') { continue }
         $phrase.Text -f $lists
     }
     return @($sentences) -join ' '
+}
+
+# Un elenco si chiude con la congiunzione della lingua prima dell'ultimo elemento.
+function Join-LanguageList([string[]]$Items) {
+    $named = @($Items | Where-Object { $_ })
+    if ($named.Count -lt 2) { return "$($named)" }
+    return "$(@($named | Select-Object -SkipLast 1) -join ', ') $($DocumentLanguage.ListConjunction) $($named[-1])"
 }
 
 $DocumentLanguage = Get-DocumentLanguage "$env:DOCUMENT_LANGUAGE"
