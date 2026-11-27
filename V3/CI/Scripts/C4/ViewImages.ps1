@@ -1,17 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Disegna le viste C4 esportate in C4-PlantUML nel modo che si legge meglio. Ogni vista si disegna
-# dall'alto in basso e da sinistra a destra, ciascuna con gli spazi di default e con spazi stretti, con i
-# ranghi come escono e con i ranghi troppo larghi a capo, e resta il disegno che, adattato alla pagina, si
-# rimpicciolisce meno: la direzione scritta nel modello e' solo il punto di partenza. La pagina misura
-# C4_PAGE_WIDTH per C4_PAGE_HEIGHT pixel; sotto C4_MIN_SCALE il disegno scelto e' il meno peggio, e lo si
-# segnala senza fermare nulla.
+# dall'alto in basso e da sinistra a destra, con gli spazi di default e stretti, con i ranghi come escono e
+# a capo, con il testo dei riquadri di default e largo, e resta il disegno che si rimpicciolisce meno per
+# entrare nei C4_PAGE_WIDTH pixel della pagina e, a parita', la riempie di piu'. La pagina della wiki scorre
+# in verticale: l'altezza non limita. Sotto C4_MIN_SCALE il disegno scelto si segnala senza fermare nulla.
 
 . "$PSScriptRoot/../Arc42/PlantUml.ps1"
 
 $ViewPage = [pscustomobject]@{
     Width    = if ($env:C4_PAGE_WIDTH) { [int]$env:C4_PAGE_WIDTH } else { 1200 }
-    Height   = if ($env:C4_PAGE_HEIGHT) { [int]$env:C4_PAGE_HEIGHT } else { 1600 }
     MinScale = if ($env:C4_MIN_SCALE) { [double]::Parse($env:C4_MIN_SCALE, [Globalization.CultureInfo]::InvariantCulture) } else { 0.6 }
 }
 # L'esportatore di Structurizr scrive la direzione in una sola riga di PlantUML: un diagramma ha una
@@ -29,6 +27,10 @@ $DirectionLinePattern = '(?m)^(?:top to bottom|left to right) direction[ \t]*\r?
 # colonne lunghe da sinistra a destra.
 $RankWidths = @(3, 5, 8)
 $RelationPattern = '(?m)^[ \t]*Rel(?:_\w+)?\((?<source>[^,\s]+)\s*,\s*(?<target>[^,\s]+)\s*,'
+# C4-PlantUML manda a capo il testo dei riquadri a skinparam wrapWidth $DEFAULT_WRAP_WIDTH, 200 pixel nella
+# versione compresa in PlantUML, e assegna la variabile con ?=: definita prima dei suoi !include, vale la nostra.
+$C4DefaultWrapWidth = 200
+$DescriptionWraps = [ordered]@{ '' = 1; 'testo-largo' = 2 }
 
 function Set-DiagramLayout([string]$Diagram, [string]$Layout) {
     $lines = (@($ViewLayouts[$Layout].Direction, $ViewLayouts[$Layout].Spacing) | Where-Object { $_ }) -join "`n"
@@ -84,12 +86,18 @@ function Get-PngSize([byte[]]$Png) {
 }
 
 function Get-PageScale($Size) {
-    return [math]::Min(1.0, [math]::Min($ViewPage.Width / $Size.Width, $ViewPage.Height / $Size.Height))
+    return [math]::Min(1.0, $ViewPage.Width / $Size.Width)
 }
 
 function New-ViewImage([byte[]]$Png, $Variant) {
     $size = Get-PngSize $Png
-    return [pscustomobject]@{ Png = $Png; Layout = $Variant.Layout; RankWidth = $Variant.RankWidth; Order = $Variant.Order; Width = $size.Width; Height = $size.Height; Scale = (Get-PageScale $size) }
+    return [pscustomobject]@{ Png = $Png; Layout = $Variant.Layout; RankWidth = $Variant.RankWidth; WrapRatio = $Variant.WrapRatio; Order = $Variant.Order; Width = $size.Width; Height = $size.Height; Scale = (Get-PageScale $size) }
+}
+
+function Set-DescriptionWrap([string]$Diagram, [int]$Ratio) {
+    if ($Ratio -eq 1) { return $Diagram }
+    $line = "!`$DEFAULT_WRAP_WIDTH = $($C4DefaultWrapWidth * $Ratio)"
+    return [regex]::new('(?m)^@startuml.*$').Replace($Diagram, "`$0`n$($line.Replace('$', '$$'))", 1)
 }
 
 # L'esportatore chiude la grandezza della descrizione solo in fondo, e Creole non porta un tag oltre un a
@@ -105,24 +113,27 @@ function Split-TitleSizes([string]$Diagram) {
         }, 1)
 }
 
-# Ogni disposizione con i ranghi come escono, poi con ogni larghezza che un rango supera, nell'ordine in cui
-# a parita' si preferiscono.
+# Ogni disposizione con i ranghi come escono, poi con ogni larghezza che un rango supera, ciascuna con il
+# testo di default e largo, nell'ordine in cui a parita' si preferiscono.
 function Get-DiagramVariants([string]$Diagram) {
     $Diagram = Split-TitleSizes $Diagram
     $variants = [Collections.Generic.List[object]]::new()
     foreach ($width in @(0) + $RankWidths) {
         $wrapped = if ($width) { Add-RankWraps $Diagram $width } else { $Diagram }
         if ($width -and $wrapped -eq $Diagram) { continue }
-        foreach ($layout in $ViewLayouts.Keys) {
-            $name = if ($width) { "$layout.$width" } else { $layout }
-            $variants.Add([pscustomobject]@{ Name = $name; Layout = $layout; RankWidth = $width; Order = $variants.Count; Diagram = (Set-DiagramLayout $wrapped $layout) })
+        foreach ($text in $DescriptionWraps.Keys) {
+            $described = Set-DescriptionWrap $wrapped $DescriptionWraps[$text]
+            foreach ($layout in $ViewLayouts.Keys) {
+                $name = (@($layout, $(if ($width) { $width }), $text) | Where-Object { $_ }) -join '.'
+                $variants.Add([pscustomobject]@{ Name = $name; Layout = $layout; RankWidth = $width; WrapRatio = $DescriptionWraps[$text]; Order = $variants.Count; Diagram = (Set-DiagramLayout $described $layout) })
+            }
         }
     }
     return $variants
 }
 
 function Select-ReadableImage($Images) {
-    return $Images | Sort-Object @{ Expression = 'Scale'; Descending = $true }, @{ Expression = { $_.Width * $_.Height } }, Order | Select-Object -First 1
+    return $Images | Sort-Object @{ Expression = 'Scale'; Descending = $true }, @{ Expression = 'Width'; Descending = $true }, Height, Order | Select-Object -First 1
 }
 
 function Invoke-PlantUml([hashtable]$Sources, [string]$Java) {
@@ -174,5 +185,6 @@ function Test-ViewReadable($Image) {
 
 function Format-ViewMeasure($Image) {
     $ranks = if ($Image.RankWidth) { ", ranghi di $($Image.RankWidth)" } else { '' }
-    return "$($Image.Width)x$($Image.Height) px in $($Image.Layout)$ranks, scala $($Image.Scale.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture)) (minima $($ViewPage.MinScale.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture)))"
+    $text = if ($Image.WrapRatio -gt 1) { ', testo largo' } else { '' }
+    return "$($Image.Width)x$($Image.Height) px in $($Image.Layout)$ranks$text, scala $($Image.Scale.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture)) (minima $($ViewPage.MinScale.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture)))"
 }
