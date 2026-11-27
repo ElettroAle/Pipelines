@@ -7,12 +7,14 @@
 .DESCRIPTION
     Il disegno di PlantUML e' sostituito da PNG finti: ogni diagramma di prova dichiara in un commento
     le misure del suo disegno in ciascuna direzione, con gli spazi di default e stretti, e il PNG finto
-    porta quelle misure nell'intestazione IHDR. Il disegno vero e' provato da Arc42/PlantUml.Tests.ps1.
+    porta quelle misure nell'intestazione IHDR. Le misure del testo dei riquadri largo (tbw, tbsw...) valgono
+    dove il diagramma le dichiara, altrove quelle del testo di default. Il disegno vero e' provato da
+    Arc42/PlantUml.Tests.ps1.
 #>
 
 BeforeAll {
-    $previous = @{ Width = $env:C4_PAGE_WIDTH; Height = $env:C4_PAGE_HEIGHT; MinScale = $env:C4_MIN_SCALE }
-    $env:C4_PAGE_WIDTH = ''; $env:C4_PAGE_HEIGHT = ''; $env:C4_MIN_SCALE = ''
+    $previous = @{ Width = $env:C4_PAGE_WIDTH; MinScale = $env:C4_MIN_SCALE }
+    $env:C4_PAGE_WIDTH = ''; $env:C4_MIN_SCALE = ''
     . "$PSScriptRoot/../../../../../V3/CI/Scripts/C4/ViewImages.ps1"
 
     function New-FakePng([int]$Width, [int]$Height) {
@@ -32,9 +34,9 @@ BeforeAll {
         return (@('@startuml', 'top to bottom direction', "' misure $Measures", 'Container(sistema.api, "Api")') + $relations + 'SHOW_LEGEND(true)', '@enduml') -join "`n"
     }
 
-    function New-Diagram([string]$TopBottom, [string]$LeftRight, [string]$Direction = 'top to bottom direction', [string]$Compact = '') {
+    function New-Diagram([string]$TopBottom, [string]$LeftRight, [string]$Direction = 'top to bottom direction', [string]$Compact = '', [string]$WideText = '') {
         $tight = if ($Compact) { $Compact } else { "tbs=$TopBottom lrs=$LeftRight" }
-        return "@startuml`n$Direction`n' misure tb=$TopBottom lr=$LeftRight $tight`nPerson(utente, `"Utente`")`n@enduml`n"
+        return "@startuml`n$Direction`n' misure tb=$TopBottom lr=$LeftRight $tight $WideText`nPerson(utente, `"Utente`")`n@enduml`n"
     }
 
     function Invoke-FakePlantUml([hashtable]$Diagrams) {
@@ -46,9 +48,11 @@ BeforeAll {
             $direction = if ($text -match '(?m)^left to right direction') { 'lr' } else { 'tb' }
             if ($text -match "(?m)^' non si disegna in .*\b$direction\b") { throw 'java.lang.UnsupportedOperationException: triangulation failed in routesplines' }
             if ($text -match '(?m)^skinparam nodesep') { $direction += 's' }
+            $measures = if ($text -match '(?m)^!\$DEFAULT_WRAP_WIDTH = ') { "${direction}w", $direction } else { , $direction }
             $hidden = ([regex]::Matches($text, '(?m)^\S+ -\[hidden\]-> \S+$')).Count
-            if ($hidden -and $text -match " $direction$hidden=(\d+)x(\d+)") { }
-            else { $null = $text -match " $direction=(\d+)x(\d+)" }
+            $suffixes = if ($hidden) { "$hidden", '' } else { , '' }
+            $found = $false
+            foreach ($measure in $measures) { foreach ($suffix in $suffixes) { if (-not $found -and $text -match " $measure$suffix=(\d+)x(\d+)") { $found = $true } } }
             $images[$key] = New-FakePng ([int]$Matches[1]) ([int]$Matches[2])
         }
         return $images
@@ -56,7 +60,7 @@ BeforeAll {
 }
 
 AfterAll {
-    $env:C4_PAGE_WIDTH = $previous.Width; $env:C4_PAGE_HEIGHT = $previous.Height; $env:C4_MIN_SCALE = $previous.MinScale
+    $env:C4_PAGE_WIDTH = $previous.Width; $env:C4_MIN_SCALE = $previous.MinScale
 }
 
 Describe "Funzionalità: Viste C4 disegnate nella direzione che si legge" {
@@ -67,16 +71,16 @@ Describe "Funzionalità: Viste C4 disegnate nella direzione che si legge" {
         Mock ConvertTo-PlantUmlPng { param($Diagrams, $Java) Invoke-FakePlantUml $Diagrams }
     }
 
-    Context "Scenario: una vista lunga dall'alto in basso si legge da sinistra a destra" {
+    Context "Scenario: una vista larga dall'alto in basso si legge da sinistra a destra" {
         BeforeEach {
-            $images = ConvertTo-ViewImages @{ container = (New-Diagram '800x3000' '1900x900') } 'java'
+            $images = ConvertTo-ViewImages @{ container = (New-Diagram '2400x900' '1900x1400') } 'java'
         }
 
         It "Allora resta il disegno da sinistra a destra" {
             $images['container'].Layout | Should -Be 'lr'
         }
 
-        It "E la scala e' quella con cui il disegno entra nella pagina" {
+        It "E la scala e' quella con cui il disegno entra nella larghezza della pagina" {
             $images['container'].Scale | Should -Be (1200 / 1900)
         }
 
@@ -96,8 +100,8 @@ Describe "Funzionalità: Viste C4 disegnate nella direzione che si legge" {
         }
     }
 
-    Context "Scenario: entrambe le direzioni entrano intere nella pagina" {
-        It "Allora resta il disegno piu' piccolo" {
+    Context "Scenario: entrambe le direzioni entrano intere nella larghezza della pagina" {
+        It "Allora resta il disegno piu' largo" {
             $images = ConvertTo-ViewImages @{ contesto = (New-Diagram '900x700' '1100x500') } 'java'
             $images['contesto'].Layout | Should -Be 'lr'
             $images['contesto'].Scale | Should -Be 1
@@ -106,7 +110,7 @@ Describe "Funzionalità: Viste C4 disegnate nella direzione che si legge" {
 
     Context "Scenario: gli spazi stretti fanno entrare la vista nella pagina" {
         It "Allora resta il disegno con gli spazi stretti" {
-            $images = ConvertTo-ViewImages @{ componenti = (New-Diagram '2400x900' '900x3200' 'top to bottom direction' 'tbs=1500x800 lrs=900x2600') } 'java'
+            $images = ConvertTo-ViewImages @{ componenti = (New-Diagram '2400x900' '2000x1000' 'top to bottom direction' 'tbs=1500x800 lrs=1600x900') } 'java'
             $images['componenti'].Layout | Should -Be 'tb-stretto'
             $images['componenti'].Scale | Should -Be 0.8
         }
@@ -114,14 +118,14 @@ Describe "Funzionalità: Viste C4 disegnate nella direzione che si legge" {
 
     Context "Scenario: gli spazi stretti non cambiano il disegno" {
         It "Allora resta il disegno con gli spazi di default" {
-            $images = ConvertTo-ViewImages @{ contesto = (New-Diagram '900x700' '1100x900') } 'java'
+            $images = ConvertTo-ViewImages @{ contesto = (New-Diagram '1100x700' '900x1100') } 'java'
             $images['contesto'].Layout | Should -Be 'tb'
         }
     }
 
     Context "Scenario: nessuna direzione si legge" {
         BeforeEach {
-            $images = ConvertTo-ViewImages @{ container = (New-Diagram '1500x6000' '5000x1400') } 'java'
+            $images = ConvertTo-ViewImages @{ container = (New-Diagram '3000x6000' '5000x1400') } 'java'
         }
 
         It "Allora la vista non si legge" {
@@ -129,7 +133,7 @@ Describe "Funzionalità: Viste C4 disegnate nella direzione che si legge" {
         }
 
         It "E la misura nomina dimensioni, direzione, scala e scala minima" {
-            Format-ViewMeasure $images['container'] | Should -Be '1500x6000 px in tb, scala 0.27 (minima 0.60)'
+            Format-ViewMeasure $images['container'] | Should -Be '3000x6000 px in tb, scala 0.40 (minima 0.60)'
         }
     }
 
@@ -140,7 +144,7 @@ Describe "Funzionalità: Viste C4 disegnate nella direzione che si legge" {
 
         It "Allora tutte le varianti si disegnano in una sola volta" {
             $script:Rendered.Count | Should -Be 1
-            $script:Rendered[0] | Sort-Object | Should -Be @('container.lr', 'container.lr-stretto', 'container.tb', 'container.tb-stretto', 'contesto.lr', 'contesto.lr-stretto', 'contesto.tb', 'contesto.tb-stretto')
+            $script:Rendered[0] | Sort-Object | Should -Be @('container.lr', 'container.lr-stretto', 'container.lr-stretto.testo-largo', 'container.lr.testo-largo', 'container.tb', 'container.tb-stretto', 'container.tb-stretto.testo-largo', 'container.tb.testo-largo', 'contesto.lr', 'contesto.lr-stretto', 'contesto.lr-stretto.testo-largo', 'contesto.lr.testo-largo', 'contesto.tb', 'contesto.tb-stretto', 'contesto.tb-stretto.testo-largo', 'contesto.tb.testo-largo')
         }
 
         It "E ogni vista ha il suo disegno" {
@@ -159,7 +163,7 @@ Describe "Funzionalità: varianti che PlantUML non disegna" {
 
     Context "Scenario: il layout non instrada un arco da sinistra a destra" {
         BeforeEach {
-            $broken = (New-Diagram '800x3000' '1900x900') -replace "(?m)^(' misure .*)$", "`$1`n' non si disegna in lr"
+            $broken = (New-Diagram '2400x900' '1100x900') -replace "(?m)^(' misure .*)$", "`$1`n' non si disegna in lr"
             $images = ConvertTo-ViewImages @{ container = $broken; contesto = (New-Diagram '900x700' '1100x500') } 'java'
         }
 
@@ -223,7 +227,7 @@ Describe "Funzionalità: ranghi troppo larghi a capo" {
     Context "Scenario: il rango piu' largo non supera tutte le larghezze provate" {
         It "Allora si disegnano solo le larghezze che il rango supera" {
             $null = ConvertTo-ViewImages @{ contesto = (New-FanOutDiagram 4 'tb=900x700 lr=700x900 tbs=900x700 lrs=700x900') } 'java'
-            $script:Rendered[0] | Sort-Object | Should -Be @('contesto.lr', 'contesto.lr-stretto', 'contesto.lr-stretto.3', 'contesto.lr.3', 'contesto.tb', 'contesto.tb-stretto', 'contesto.tb-stretto.3', 'contesto.tb.3')
+            $script:Rendered[0] | Where-Object { $_ -notlike '*.testo-largo' } | Sort-Object | Should -Be @('contesto.lr', 'contesto.lr-stretto', 'contesto.lr-stretto.3', 'contesto.lr.3', 'contesto.tb', 'contesto.tb-stretto', 'contesto.tb-stretto.3', 'contesto.tb.3')
         }
     }
 }
@@ -288,17 +292,101 @@ Describe "Funzionalità: disposizione di un diagramma C4-PlantUML" {
     }
 }
 
+Describe "Funzionalità: viste che riempiono la larghezza della pagina" {
+
+    BeforeEach {
+        $script:Rendered = @()
+        $script:Sources = @{}
+        Mock ConvertTo-PlantUmlPng { param($Diagrams, $Java) Invoke-FakePlantUml $Diagrams }
+    }
+
+    Context "Scenario: una vista stretta e alta e una larga entrano entrambe nella larghezza della pagina (ADR-2176)" {
+        BeforeEach {
+            $images = ConvertTo-ViewImages @{ allocazione = (New-Diagram '442x1492' '1100x700') } 'java'
+        }
+
+        It "Allora resta il disegno largo" {
+            $images['allocazione'].Layout | Should -Be 'lr'
+        }
+
+        It "E il disegno non si rimpicciolisce" {
+            $images['allocazione'].Scale | Should -Be 1
+        }
+    }
+
+    Context "Scenario: entrambe le direzioni sono piu' larghe della pagina" {
+        It "Allora resta il disegno che si rimpicciolisce meno" {
+            $images = ConvertTo-ViewImages @{ container = (New-Diagram '2400x900' '1800x1200') } 'java'
+            $images['container'].Layout | Should -Be 'lr'
+            $images['container'].Scale | Should -Be (1200 / 1800)
+        }
+    }
+
+    Context "Scenario: due disegni hanno la stessa larghezza" {
+        It "Allora resta il disegno piu' basso" {
+            $images = ConvertTo-ViewImages @{ container = (New-Diagram '1000x1400' '1000x900') } 'java'
+            $images['container'].Layout | Should -Be 'lr'
+        }
+    }
+
+    Context "Scenario: un disegno piu' alto della pagina" {
+        It "Allora la sua scala dipende solo dalla larghezza" {
+            $env:C4_PAGE_HEIGHT = '800'
+            try {
+                . "$PSScriptRoot/../../../../../V3/CI/Scripts/C4/ViewImages.ps1"
+                Get-PageScale ([pscustomobject]@{ Width = 800; Height = 5000 }) | Should -Be 1
+            }
+            finally {
+                $env:C4_PAGE_HEIGHT = ''
+                . "$PSScriptRoot/../../../../../V3/CI/Scripts/C4/ViewImages.ps1"
+            }
+        }
+    }
+
+    Context "Scenario: il testo dei riquadri piu' largo allarga il disegno (ADR-2176)" {
+        BeforeEach {
+            $images = ConvertTo-ViewImages @{ allocazione = (New-Diagram '500x1500' '700x1300' 'top to bottom direction' '' 'tbw=1100x900 lrw=1150x1100') } 'java'
+        }
+
+        It "Allora resta il disegno con il testo largo" {
+            $images['allocazione'].Layout | Should -Be 'lr'
+            $images['allocazione'].WrapRatio | Should -Be 2
+        }
+
+        It "E ogni disposizione si disegna anche con il testo largo" {
+            @($script:Rendered[0] | Where-Object { $_ -like '*.testo-largo' }).Count | Should -Be 4
+        }
+
+        It "E la misura nomina il testo largo" {
+            Format-ViewMeasure $images['allocazione'] | Should -Be '1150x1100 px in lr, testo largo, scala 1.00 (minima 0.60)'
+        }
+    }
+}
+
+Describe "Funzionalità: testo dei riquadri di un diagramma C4-PlantUML" {
+
+    It "Il testo largo va a capo al doppio della larghezza di default di C4-PlantUML, prima delle librerie" {
+        $diagram = "@startuml`ntop to bottom direction`n!include <C4/C4_Container>`nPerson(utente, `"Utente`")`n@enduml"
+        Set-DescriptionWrap $diagram 2 | Should -Be "@startuml`n!`$DEFAULT_WRAP_WIDTH = 400`ntop to bottom direction`n!include <C4/C4_Container>`nPerson(utente, `"Utente`")`n@enduml"
+    }
+
+    It "Il testo di default lascia il diagramma com'e'" {
+        $diagram = "@startuml`n!include <C4/C4_Container>`n@enduml"
+        Set-DescriptionWrap $diagram 1 | Should -Be $diagram
+    }
+}
+
 Describe "Funzionalità: pagina e scala minima dichiarate dalla pipeline" {
 
-    It "Pagina e scala minima vengono da C4_PAGE_WIDTH, C4_PAGE_HEIGHT e C4_MIN_SCALE" {
-        $env:C4_PAGE_WIDTH = '1000'; $env:C4_PAGE_HEIGHT = '800'; $env:C4_MIN_SCALE = '0.9'
+    It "Pagina e scala minima vengono da C4_PAGE_WIDTH e C4_MIN_SCALE" {
+        $env:C4_PAGE_WIDTH = '1000'; $env:C4_MIN_SCALE = '0.9'
         try {
             . "$PSScriptRoot/../../../../../V3/CI/Scripts/C4/ViewImages.ps1"
             Get-PageScale ([pscustomobject]@{ Width = 2000; Height = 400 }) | Should -Be 0.5
             Test-ViewReadable ([pscustomobject]@{ Scale = 0.85 }) | Should -BeFalse
         }
         finally {
-            $env:C4_PAGE_WIDTH = ''; $env:C4_PAGE_HEIGHT = ''; $env:C4_MIN_SCALE = ''
+            $env:C4_PAGE_WIDTH = ''; $env:C4_MIN_SCALE = ''
             . "$PSScriptRoot/../../../../../V3/CI/Scripts/C4/ViewImages.ps1"
         }
     }
@@ -317,13 +405,31 @@ Describe "Funzionalità: ranghi a capo disegnati da PlantUML" {
                 'System_Boundary("Negozio_boundary", "Negozio", $tags="") {', '    Container(Negozio.Api, "Api", $techn="ASP.NET Core", $descr="Espone le API del negozio.", $tags="", $link="")') +
             $resources + '}' + '' + $relations + '' + 'SHOW_LEGEND(true)' + '@enduml') -join "`n"
         $images = ConvertTo-ViewImages @{ container = $view } (Get-StructurizrJava)
+        $rows = ConvertTo-PlantUmlPng @{ riga = (Set-DiagramLayout $view 'tb'); righe = (Set-DiagramLayout (Add-RankWraps $view 3) 'tb') } (Get-StructurizrJava)
     }
 
     AfterAll { $env:PATH = $previousPath }
 
-    It "Una vista con trenta risorse chiamate da un'applicazione si legge con i ranghi a capo" {
+    It "Una vista con trenta risorse chiamate da un'applicazione si legge" {
         Format-ViewMeasure $images['container'] | Write-Host
-        $images['container'].RankWidth | Should -BeGreaterThan 0
         Test-ViewReadable $images['container'] | Should -BeTrue
+    }
+
+    It "I ranghi a capo stringono la riga delle trenta risorse" {
+        (Get-PngSize $rows['righe']).Width | Should -BeLessThan (Get-PngSize $rows['riga']).Width
+    }
+}
+
+Describe "Funzionalità: testo dei riquadri largo disegnato da PlantUML" {
+
+    BeforeAll {
+        . "$PSScriptRoot/../../../../../V3/CI/Scripts/C4/Structurizr.ps1"
+        $diagram = "@startuml`ntop to bottom direction`n!include <C4/C4_Container>`nContainer(Negozio.Api, `"Api`", `$techn=`"ASP.NET Core`", `$descr=`"Espone le API del negozio e conserva gli ordini dei clienti nella base dati condivisa con il magazzino.`")`n@enduml"
+        $pngs = ConvertTo-PlantUmlPng @{ default = $diagram; largo = (Set-DescriptionWrap $diagram 2) } (Get-StructurizrJava)
+    }
+
+    It "Una descrizione lunga va a capo piu' tardi e il riquadro si allarga" {
+        (Get-PngSize $pngs['largo']).Width | Should -BeGreaterThan (Get-PngSize $pngs['default']).Width
+        (Get-PngSize $pngs['largo']).Height | Should -BeLessThan (Get-PngSize $pngs['default']).Height
     }
 }

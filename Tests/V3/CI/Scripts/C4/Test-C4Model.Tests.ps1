@@ -16,7 +16,7 @@ BeforeAll {
     $ScriptPath = Resolve-Path "$PSScriptRoot/../../../../../V3/CI/Scripts/C4/Test-C4Model.ps1"
 
     function Invoke-ModelCheck([System.Collections.IDictionary]$Docs, [hashtable]$Environment = @{}) {
-        $variables = @{ GATE_MODE = ''; DOCUMENT_LANGUAGE = ''; C4_PAGE_WIDTH = ''; C4_PAGE_HEIGHT = ''; C4_MIN_SCALE = '' }
+        $variables = @{ GATE_MODE = ''; DOCUMENT_LANGUAGE = ''; C4_PAGE_WIDTH = ''; C4_MIN_SCALE = '' }
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
         return Invoke-DocsScript $ScriptPath $Docs $variables
     }
@@ -324,7 +324,7 @@ Describe "Funzionalità: Testo del modello sulla parte generata dal codice" {
 
     Context "Scenario: vista che non entra leggibile nella pagina in nessuna disposizione" {
         BeforeAll {
-            $res = Invoke-ModelCheck (New-ValidDocs) @{ C4_PAGE_WIDTH = '40'; C4_PAGE_HEIGHT = '40' }
+            $res = Invoke-ModelCheck (New-ValidDocs) @{ C4_PAGE_WIDTH = '40' }
         }
 
         It "Allora la verifica passa" {
@@ -333,13 +333,13 @@ Describe "Funzionalità: Testo del modello sulla parte generata dal codice" {
         }
 
         It "E un avviso nomina la vista con la misura del disegno piu' leggibile" {
-            ($res.Output -split "`n") | Where-Object { "$_" -match '^##vso\[task\.logissue type=warning\]modello C4: vista contesto: \d+x\d+ px in (tb|lr)(-stretto)?, scala 0\.\d\d \(minima 0\.60\), troppo piena per leggersi\s*$' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+            ($res.Output -split "`n") | Where-Object { "$_" -match '^##vso\[task\.logissue type=warning\]modello C4: vista contesto: \d+x\d+ px in (tb|lr)(-stretto)?(, testo largo)?, scala 0\.\d\d \(minima 0\.60\), troppo piena per leggersi\s*$' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
         }
     }
 
     Context "Scenario: Una vista che resta sotto la scala minima continua a dare l'avviso" {
         BeforeAll {
-            $res = Invoke-ModelCheck (Add-GroupedDeployment (New-ValidDocs)) @{ C4_PAGE_WIDTH = '40'; C4_PAGE_HEIGHT = '40' }
+            $res = Invoke-ModelCheck (Add-GroupedDeployment (New-ValidDocs)) @{ C4_PAGE_WIDTH = '40' }
         }
 
         It "Allora la verifica passa con la relazione riassunta fra due nodi generati, che il codice non dichiara (ADR-2112)" {
@@ -348,14 +348,14 @@ Describe "Funzionalità: Testo del modello sulla parte generata dal codice" {
         }
 
         It "E un avviso nomina la vista divisa che resta sotto la scala minima" {
-            ($res.Output -split "`n") | Where-Object { "$_" -match '^##vso\[task\.logissue type=warning\]modello C4: vista deployment-produzione-rg-client: \d+x\d+ px in (tb|lr)(-stretto)?, scala 0\.\d\d \(minima 0\.60\), troppo piena per leggersi\s*$' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+            ($res.Output -split "`n") | Where-Object { "$_" -match '^##vso\[task\.logissue type=warning\]modello C4: vista deployment-produzione-rg-client: \d+x\d+ px in (tb|lr)(-stretto)?(, testo largo)?, scala 0\.\d\d \(minima 0\.60\), troppo piena per leggersi\s*$' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
         }
     }
 
     Context "Scenario: viste che si leggono" {
         It "Allora il log ne da' la misura senza avvisi" {
             $res = Invoke-ModelCheck (New-ValidDocs)
-            ($res.Output -split "`n") | Where-Object { "$_" -match '^vista contesto: \d+x\d+ px in (tb|lr)(-stretto)?, scala 1\.00 \(minima 0\.60\)\s*$' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
+            ($res.Output -split "`n") | Where-Object { "$_" -match '^vista contesto: \d+x\d+ px in (tb|lr)(-stretto)?(, testo largo)?, scala 1\.00 \(minima 0\.60\)\s*$' } | Should -Not -BeNullOrEmpty -Because ($res.Output)
             ($res.Output -split "`n") | Where-Object { "$_" -match 'type=warning' } | Should -BeNullOrEmpty -Because ($res.Output)
         }
     }
