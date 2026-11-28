@@ -23,6 +23,7 @@ BeforeAll {
 
     $DecisionPath = 'docs/decisions/0036-biglietti-dopo-il-turno.md'
     $CandidatesPath = 'docs/architecture/c4/generated/decisions.classes.json'
+    $ReadabilityPath = 'docs/architecture/c4/generated/decisions.readability.json'
     $ProgressBranch = 'c4/model'
     $Governs = @('Contoso.Shop.Core.Queue.QueueTicketIssuer*', 'Contoso.Shop.Core.Queue.IQueueTicketIssuer*')
 
@@ -48,9 +49,21 @@ BeforeAll {
         return $files
     }
 
-    function New-Draft([string[]]$Additions = @(), [string]$Structure = '', [string]$Version = 'classi del biglietto allineate al codice') {
-        $content = @{ governs = @($Additions); structure = $Structure; version = $Version } | ConvertTo-Json -Depth 5 -Compress
+    function New-Draft([string[]]$Additions = @(), [string]$Structure = '', [string]$Version = 'classi del biglietto allineate al codice', [string]$Flow = '') {
+        $content = @{ governs = @($Additions); structure = $Structure; flow = $Flow; version = $Version } | ConvertTo-Json -Depth 5 -Compress
         return New-ModelResponse 200 @{ choices = @(@{ message = @{ role = 'assistant'; content = $content } }); usage = @{ prompt_tokens = 100; completion_tokens = 10 } }
+    }
+
+    function Get-ExpectedHash([string]$Text) {
+        return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes(($Text -replace "`r`n", "`n")))).ToLowerInvariant()
+    }
+
+    function New-ReadabilityLedger([string]$Text) {
+        return "{ `"0036-biglietti-dopo-il-turno`": `"$(Get-ExpectedHash $Text)`" }"
+    }
+
+    function Get-SystemMessage($Request) {
+        return @($Request.Body.messages | Where-Object role -EQ 'system')[0].content
     }
 
     function Invoke-Git([string]$Directory) {
@@ -62,7 +75,7 @@ BeforeAll {
     # La documentazione su un origin locale, il codice in una cartella accanto; Progress e' il testo della
     # decisione e il registro gia' salvati sul ramo di avanzamento da una run interrotta; MainText e' la
     # decisione che main integra dopo il salvataggio.
-    function New-Workspace([System.Collections.IDictionary]$Files, [string]$DecisionText = $Decision, [string]$Candidates, [System.Collections.IDictionary]$Progress, [string]$MainText) {
+    function New-Workspace([System.Collections.IDictionary]$Files, [string]$DecisionText = $Decision, [string]$Candidates, [System.Collections.IDictionary]$Progress, [string]$MainText, [string]$Readability) {
         $root = Join-Path ([IO.Path]::GetTempPath()) "pester-decision-classes-repair-$(New-Guid)"
         $origin = Join-Path $root 'origin.git'
         $docs = Join-Path $root 'docs'
@@ -71,6 +84,7 @@ BeforeAll {
         Invoke-Git $root clone -q -c core.autocrlf=false $origin $docs | Out-Null
         Write-SourceFiles $docs ([ordered]@{ $DecisionPath = $DecisionText })
         if ($Candidates) { Write-SourceFiles $docs ([ordered]@{ $CandidatesPath = $Candidates }) }
+        if ($Readability) { Write-SourceFiles $docs ([ordered]@{ $ReadabilityPath = $Readability }) }
         Invoke-Git $docs add -A | Out-Null
         Invoke-Git $docs -c user.name=Test -c user.email=test@local commit -q -m 'docs: decisions' | Out-Null
         Invoke-Git $docs push -q origin HEAD:main | Out-Null
@@ -98,7 +112,7 @@ BeforeAll {
         $variables = [ordered]@{
             GATE_MODE = ''; DOCUMENT_LANGUAGE = ''; DECISIONS_DIRECTORY = ''; SOURCE_DIRECTORY = $Workspace.Sources
             CLASSES_REPAIR_PROVIDER = 'foundry'; CLASSES_REPAIR_ENDPOINT = $Stub.Endpoint; CLASSES_REPAIR_MODEL = 'documentazione'
-            CLASSES_REPAIR_TOKEN = 'token-di-prova'; CLASSES_REPAIR_MAX_DRAFTS = '2'; CANDIDATES_FILE = $CandidatesPath; PROGRESS_BRANCH = $ProgressBranch
+            CLASSES_REPAIR_TOKEN = 'token-di-prova'; CLASSES_REPAIR_MAX_DRAFTS = '2'; CANDIDATES_FILE = $CandidatesPath; READABILITY_FILE = $ReadabilityPath; PROGRESS_BRANCH = $ProgressBranch
             SYSTEM_ACCESSTOKEN = ''; STYLE_GUIDE = ''
         }
         foreach ($name in $Environment.Keys) { $variables[$name] = $Environment[$name] }
@@ -117,13 +131,15 @@ BeforeAll {
         $progress = git -C $Workspace.Origin show "refs/heads/${ProgressBranch}:$DecisionPath" 2>$null
         $global:LASTEXITCODE = 0
         $candidatesFile = Join-Path $Workspace.Docs $CandidatesPath
+        $readabilityFile = Join-Path $Workspace.Docs $ReadabilityPath
         return @{
             ExitCode   = $exitCode
             Output     = ($output -join "`n")
             Decision   = [IO.File]::ReadAllText((Join-Path $Workspace.Docs $DecisionPath))
             Candidates = if (Test-Path $candidatesFile) { Get-Content -Raw $candidatesFile | ConvertFrom-Json } else { $null }
-            Progress   = ($progress -join "`n")
-            Requests   = @(Get-ModelEndpointRequests $Stub)
+            Progress    = ($progress -join "`n")
+            Readability = if (Test-Path $readabilityFile) { Get-Content -Raw $readabilityFile | ConvertFrom-Json } else { $null }
+            Requests    = @(Get-ModelEndpointRequests $Stub)
         }
     }
 
@@ -181,6 +197,94 @@ Describe "Funzionalità: Il modello propone pattern e diagramma delle classi del
 
         It "E il passo non fallisce" {
             $res.ExitCode | Should -Be 0 -Because ($res.Output)
+        }
+    }
+
+    Context "Scenario: decisione che la verifica respinge per una classe del diagramma non governata (ADR-2175)" {
+        BeforeAll {
+            $text = ($Decision -replace '(?m)^    class QueueTicketIssuer$', "    class QueueTicketIssuer`n    class BackgroundService") -replace '(?m)^    participant IQueueTicketIssuer$', "    participant IQueueTicketIssuer`n    participant BackgroundService"
+            $text = $text -replace '(?m)^(    QueueTicketIssuer->>IQueueTicketIssuer: emette)$', "`$1`n    BackgroundService->>QueueTicketIssuer: avvia"
+            $workspace = New-Workspace (New-ShopFiles) $text
+            $flow = ('```mermaid', 'sequenceDiagram', '    participant QueueTicketIssuer', '    participant IQueueTicketIssuer', '    QueueTicketIssuer->>IQueueTicketIssuer: emette', '```') -join "`n"
+            $res = Invoke-Repair $workspace @(New-Draft -Structure $Structure -Flow $flow -Version 'classe del framework tolta dal diagramma')
+        }
+
+        AfterAll { Remove-Workspace $workspace }
+
+        It "Allora il modello riceve il rilievo con la classe del diagramma non governata" {
+            $res.Requests.Count | Should -Be 1 -Because ($res.Output)
+            Get-UserMessage $res.Requests[0] | Should -Match 'classe del diagramma non governata \(BackgroundService\)'
+        }
+
+        It "E il diagramma delle classi e il flusso della decisione non hanno piu' la classe" {
+            $res.Decision | Should -Not -Match 'BackgroundService' -Because ($res.Output)
+            $res.Decision | Should -Match '(?m)^    class QueueTicketIssuer$'
+            $res.Decision | Should -Match '(?m)^    QueueTicketIssuer->>IQueueTicketIssuer: emette$'
+        }
+
+        It "E la decisione ha una versione nuova" {
+            $res.Decision | Should -Match "(?m)^## Versioni`n`n- 2: classe del framework tolta dal diagramma$"
+            $res.ExitCode | Should -Be 0
+        }
+    }
+
+    Context "Scenario: le istruzioni al modello portano la regola delle classi governate e della leggibilita' (ADR-2175)" {
+        BeforeAll {
+            $workspace = New-Workspace (New-ShopFiles)
+            $res = Invoke-Repair $workspace @(New-Draft)
+            $system = Get-SystemMessage $res.Requests[0]
+        }
+
+        AfterAll { Remove-Workspace $workspace }
+
+        It "Allora il diagramma disegna solo le classi governate e le relazioni fra loro" {
+            $system | Should -Match 'disegna solo le classi governate e le relazioni fra loro'
+            $system | Should -Not -Match 'possono restare nel diagramma'
+        }
+
+        It "E ogni diagramma resta leggibile alla larghezza della pagina della wiki" {
+            $system | Should -Match 'leggibile alla larghezza della pagina della wiki'
+        }
+
+        It "E le classi troppe per un diagramma leggibile si dividono per aspetto, ciascun diagramma con la sua frase" {
+            $system | Should -Match 'uno per aspetto della decisione'
+            $system | Should -Match 'preceduto da una frase che dice quale aspetto mostra'
+        }
+
+        It "E una candidata entra nel diagramma solo con la voce di governs che la copre" {
+            $system | Should -Match 'una classe candidata entra nel diagramma solo con la voce di governs che la copre'
+        }
+    }
+
+    Context "Scenario: decisione in pari con il codice valutata una volta per la leggibilita' (ADR-2175)" {
+        BeforeAll {
+            $workspace = New-Workspace (New-ShopFiles)
+            $first = Invoke-Repair $workspace @(New-Draft)
+            $again = Invoke-Repair $workspace @(New-Draft)
+            $path = Join-Path $workspace.Docs $DecisionPath
+            [IO.File]::WriteAllText($path, ([IO.File]::ReadAllText($path) -replace 'Le classi emettono il biglietto\.', 'Le classi emettono e numerano il biglietto.'))
+            $changed = Invoke-Repair $workspace @(New-Draft)
+        }
+
+        AfterAll { Remove-Workspace $workspace }
+
+        It "Allora la decisione va al modello per la valutazione, senza rilievi ne' candidate" {
+            $first.Requests.Count | Should -Be 1 -Because ($first.Output)
+            Get-UserMessage $first.Requests[0] | Should -Match "RILIEVI DELLA VERIFICA`n- nessuno`n`nCLASSI CANDIDATE`n- nessuna"
+        }
+
+        It "E la decisione giudicata leggibile non cambia e resta nel registro delle decisioni valutate" {
+            $first.Decision | Should -Be $Decision
+            $first.Readability.'0036-biglietti-dopo-il-turno' | Should -Be (Get-ExpectedHash $Decision)
+        }
+
+        It "E la run successiva non richiama il modello" {
+            $again.Requests.Count | Should -Be 0 -Because ($again.Output)
+        }
+
+        It "E la decisione cambiata torna al modello" {
+            $changed.Requests.Count | Should -Be 1 -Because ($changed.Output)
+            $changed.ExitCode | Should -Be 0
         }
     }
 
@@ -343,7 +447,7 @@ Describe "Funzionalità: Il modello propone pattern e diagramma delle classi del
             $text = $Decision -replace '(?m)^  - Contoso\.Shop\.Core\.Queue\.QueueTicketIssuer\*$', '  - Contoso.Shop.Core.Queue.QueueTicket*'
             $accepted = ($text -replace '(?m)^    class QueueTicketIssuer$', "    class QueueTicketIssuer`n    class QueueTicketCanceller") -replace 'status: accepted', "status: accepted`nversion: 2"
             $accepted += "`n## Versioni`n`n- 2: classi del biglietto allineate al codice`n"
-            $workspace = New-Workspace $files $text -Progress ([ordered]@{ $DecisionPath = $accepted })
+            $workspace = New-Workspace $files $text -Progress ([ordered]@{ $DecisionPath = $accepted; $ReadabilityPath = (New-ReadabilityLedger $accepted) })
             $res = Invoke-Repair $workspace @(New-Draft)
         }
 
@@ -367,7 +471,7 @@ Describe "Funzionalità: Il modello propone pattern e diagramma delle classi del
             $accepted += "`n## Versioni`n`n- 2: classi del biglietto allineate al codice`n"
             $changed = ($text -replace 'Il biglietto si emette a turno finito\.', 'Il biglietto si emette quando il turno finisce.') -replace 'status: accepted', "status: accepted`nversion: 2"
             $changed += "`n## Versioni`n`n- 2: contesto riscritto`n"
-            $workspace = New-Workspace $files $text -Progress ([ordered]@{ $DecisionPath = $accepted }) -MainText $changed
+            $workspace = New-Workspace $files $text -Progress ([ordered]@{ $DecisionPath = $accepted; $ReadabilityPath = (New-ReadabilityLedger $accepted) }) -MainText $changed
             $res = Invoke-Repair $workspace @(New-Draft)
         }
 
@@ -415,9 +519,9 @@ Describe "Funzionalità: Il modello propone pattern e diagramma delle classi del
         }
     }
 
-    Context "Scenario: decisioni in pari con il codice" {
+    Context "Scenario: decisioni in pari con il codice e gia' valutate" {
         BeforeAll {
-            $workspace = New-Workspace (New-ShopFiles)
+            $workspace = New-Workspace (New-ShopFiles) -Readability (New-ReadabilityLedger $Decision)
             $res = Invoke-Repair $workspace @(New-Draft) @{ CLASSES_REPAIR_ENDPOINT = '' }
         }
 
@@ -461,6 +565,12 @@ Describe "Repair-DecisionClasses.ps1" {
         ) {
             $text = Get-DraftText $Decision ([pscustomobject]@{ governs = @(); structure = 'Altro.'; version = $Note }) $Governs
             $text | Should -Match "## Versioni`n`n- 2: rimborso`n?$"
+        }
+
+        It "riscrive il flusso nel codice quando la stesura lo porta, anche senza struttura (ADR-2175)" {
+            $text = Get-DraftText $Decision ([pscustomobject]@{ governs = @(); structure = ''; flow = 'Flusso nuovo.'; version = 'flusso' }) $Governs
+            $text | Should -Match "## Struttura nel codice`n`n``````mermaid"
+            $text | Should -Match "## Flusso nel codice`n`nFlusso nuovo\.`n`n## Versioni`n`n- 2: flusso"
         }
 
         It "non cambia nulla senza voci nuove e senza struttura" {
@@ -523,6 +633,33 @@ Describe "Repair-DecisionClasses.ps1" {
         }
     }
 
+    Context "Registro delle decisioni valutate (ADR-2175)" {
+        It "riconosce il testo della decisione con qualunque fine riga" {
+            Get-TextHash "a`r`nb" | Should -Be (Get-TextHash "a`nb")
+            Get-TextHash 'a' | Should -Not -Be (Get-TextHash 'b')
+        }
+
+        It "legge il registro per decisione, vuoto senza testo" {
+            (Read-Readability '{ "0036-a": "abc" }')['0036-a'] | Should -Be 'abc'
+            (Read-Readability '').Count | Should -Be 0
+        }
+
+        It "giudica valutata la decisione con l'impronta del testo corrente e, senza registro, ogni decisione" {
+            $file = New-TemporaryFile
+            try {
+                [IO.File]::WriteAllText($file.FullName, "testo`n")
+                $decision = [pscustomobject]@{ Id = 'd'; Section = [pscustomobject]@{ File = $file } }
+                $ReadabilityFile = 'registro.json'
+                Test-Evaluated $decision @{ d = (Get-TextHash "testo`n") } | Should -BeTrue
+                Test-Evaluated $decision @{ d = (Get-TextHash 'altro') } | Should -BeFalse
+                Test-Evaluated $decision @{} | Should -BeFalse
+                $ReadabilityFile = ''
+                Test-Evaluated $decision @{} | Should -BeTrue
+            }
+            finally { Remove-Item $file.FullName -ErrorAction SilentlyContinue }
+        }
+    }
+
     Context "ConvertTo-GovernsPattern" {
         It "fa del nome di una classe il prefisso del suo nome e lascia i pattern" {
             ConvertTo-GovernsPattern ' A.Queue.Issuer ' | Should -Be 'A.Queue.Issuer*'
@@ -559,6 +696,7 @@ Describe "Repair-DecisionClasses.ps1" {
                 $SourceDirectory = $Workspace.Sources
                 $decisionsDirectory = Join-Path $Workspace.Docs 'docs/decisions'
                 $CandidatesFile = Join-Path $Workspace.Docs $CandidatesPath
+                $ReadabilityFile = Join-Path $Workspace.Docs $ReadabilityPath
                 $Provider = 'foundry'
                 $Endpoint = $Stub.Endpoint
                 $ModelName = 'documentazione'
@@ -605,7 +743,7 @@ Describe "Repair-DecisionClasses.ps1" {
             $accepted += "`n## Versioni`n`n- 2: classi del biglietto allineate al codice`n"
             $changed = ($text -replace 'Il biglietto si emette a turno finito\.', 'Il biglietto si emette quando il turno finisce.') -replace 'status: accepted', "status: accepted`nversion: 2"
             $changed += "`n## Versioni`n`n- 2: contesto riscritto`n"
-            $workspace = New-Workspace $files $text -Progress ([ordered]@{ $DecisionPath = $accepted }) -MainText $changed
+            $workspace = New-Workspace $files $text -Progress ([ordered]@{ $DecisionPath = $accepted; $ReadabilityPath = (New-ReadabilityLedger $accepted) }) -MainText $changed
             try {
                 $res = Invoke-InProcess $workspace @($repaired)
                 $res.Requests.Count | Should -Be 0
