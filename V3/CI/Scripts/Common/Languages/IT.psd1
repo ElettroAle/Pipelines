@@ -81,10 +81,14 @@
         @{ Text = 'La vista {0} mostra l''insieme; le viste che seguono ne riprendono una alla volta le parti: {1}.'; Lists = @('First', 'Following') }
     )
     ViewGroupPeers = @(
-        @{ Text = 'Le sezioni che seguono mostrano, per {0}, una vista per ciascuno di questi livelli: {1}.'; Lists = @('Subjects', 'Levels') }
+        @{ Text = 'Le sezioni che seguono mostrano, per {0}, una vista per ciascuno di questi livelli: {1}.'; Lists = @('FirstSubjects', 'SeveralLevels') }
+        @{ Text = 'Le sezioni che seguono mostrano, per {0}, una sola vista: {1}.'; Lists = @('FirstSubjects', 'OneLevel') }
+        @{ Text = 'Per {0} mostrano una vista per ciascuno di questi livelli: {1}.'; Lists = @('NextSubjects', 'SeveralLevels') }
+        @{ Text = 'Per {0} mostrano una sola vista: {1}.'; Lists = @('NextSubjects', 'OneLevel') }
         @{ Text = 'Le sezioni che seguono mostrano una vista per ciascuno di questi elementi: {0}.'; Lists = @('UnleveledSubjects') }
     )
     ViewGroupLevels = @{ logic = 'la logica'; dataAccess = 'l''accesso ai dati' }
+    ListConjunction = 'e'
     ViewNameFormat = '«{0}»'
     SummaryTag     = 'Riassunto'
     NetworkTag     = 'Rete'

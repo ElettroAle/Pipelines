@@ -110,6 +110,23 @@ BeforeAll {
         Edit-Docs $Docs 'docs/architecture/c4/workspace.dsl' 'deployment sistema produzione "deployment-produzione" {' "deployment sistema produzione `"deployment-produzione`" `"Comunica con:\nAzure (inoltra)`" {`n            title `"Produzione, nodo Azure`""
     }
 
+    # Le viste dei componenti del Livello 2, una per container e livello: tutti hanno la vista della logica, solo i
+    # container in DataAccess anche quella dell'accesso ai dati.
+    function New-PeerLevelDocs([string[]]$DataAccess) {
+        $docs = New-ValidDocs
+        Edit-Docs $docs 'docs/architecture/05_building_block_view.md' "<!-- vista: componenti-client -->`n<!-- vista: componenti-bff -->`n<!-- vista: componenti-motore -->`n<!-- vista: componenti-worker -->" '<!-- vista: component* -->'
+        $names = [ordered]@{ client = 'Client'; bff = 'BFF'; motore = 'API del Motore'; worker = 'Worker' }
+        foreach ($part in $names.Keys) {
+            $dataAccessView = if ($DataAccess -contains $part) {
+                "component $part `"componenti-$part-accesso-dati`" {", "title `"$($names[$part]) · accesso ai dati`"", 'include *', 'properties {', "`"subject`" `"$part`"", '"level" "dataAccess"', '}', '}'
+            }
+            Edit-Docs $docs 'docs/architecture/c4/workspace.dsl' "component $part `"componenti-$part`" {" (@($dataAccessView) + @(
+                    "component $part `"componenti-$part`" {", "title `"$($names[$part]) · logica`"", 'properties {', "`"subject`" `"$part`"", '"level" "logic"', '}'
+                ) -join "`n")
+        }
+        return $docs
+    }
+
     # Una vista di allocazione come la scrive Export-C4CodeModel.ps1: la descrizione e gli ambienti di cui elencare i
     # gruppi di risorse nelle proprieta', e gli elementi con il gruppo, il modulo che li dichiara e il nome Azure. Il
     # private endpoint si chiama nella vista con la parte che raggiunge.
@@ -272,7 +289,7 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
 
         It "Allora il marcatore si apre con la frase della vista d'insieme, composta dai nomi della prima vista e di quelle che la seguono" {
             $res.ExitCode | Should -Be 0 -Because $res.Output
-            $page | Should -Match ([regex]::Escape("## In breve`n`nLa vista «Container» mostra l'insieme; le viste che seguono ne riprendono una alla volta le parti: «Container di BFF», «Container di Client».`n`n### Container`n"))
+            $page | Should -Match ([regex]::Escape("## In breve`n`nLa vista «Container» mostra l'insieme; le viste che seguono ne riprendono una alla volta le parti: «Container di BFF» e «Container di Client».`n`n### Container`n"))
         }
 
         It "E non usa la frase delle viste alla pari" {
@@ -306,7 +323,7 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
         It "Allora il marcatore si apre con la frase della vista d'insieme di ogni tratto, nell'ordine dei tratti" {
             $res.ExitCode | Should -Be 0 -Because $res.Output
             $page | Should -Match ([regex]::Escape((@(
-                            "## In breve`n`nLa vista «Allocazione» mostra l'insieme; le viste che seguono ne riprendono una alla volta le parti: «Allocazione di Client», «Allocazione di Notifier»."
+                            "## In breve`n`nLa vista «Allocazione» mostra l'insieme; le viste che seguono ne riprendono una alla volta le parti: «Allocazione di Client» e «Allocazione di Notifier»."
                             "La vista «Rete» mostra l'insieme; le viste che seguono ne riprendono una alla volta le parti: «Rete · vnet-hub».`n`n### Allocazione`n"
                         ) -join ' ')))
         }
@@ -316,28 +333,18 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
         }
     }
 
-    Context "Scenario: un gruppo di viste alla pari, una per container e livello come nel Livello 2, si apre con i soggetti e i livelli delle viste (ADR-2165)" {
+    Context "Scenario: un gruppo di viste alla pari come nel Livello 2, con un soggetto che ha un solo livello, ha una frase per ogni insieme di livelli (ADR-2165, ADR-2170)" {
         BeforeAll {
             $wiki = New-Wiki
-            $docs = New-ValidDocs
-            Edit-Docs $docs 'docs/architecture/05_building_block_view.md' "<!-- vista: componenti-client -->`n<!-- vista: componenti-bff -->`n<!-- vista: componenti-motore -->`n<!-- vista: componenti-worker -->" '<!-- vista: component* -->'
-            $names = [ordered]@{ client = 'Client'; bff = 'BFF'; motore = 'API del Motore'; worker = 'Worker' }
-            foreach ($part in $names.Keys) {
-                $dataAccess = if ($part -ne 'worker') {
-                    "component $part `"componenti-$part-accesso-dati`" {", "title `"$($names[$part]) · accesso ai dati`"", 'include *', 'properties {', "`"subject`" `"$part`"", '"level" "dataAccess"', '}', '}'
-                }
-                Edit-Docs $docs 'docs/architecture/c4/workspace.dsl' "component $part `"componenti-$part`" {" (@($dataAccess) + @(
-                        "component $part `"componenti-$part`" {", "title `"$($names[$part]) · logica`"", 'properties {', "`"subject`" `"$part`"", '"level" "logic"', '}'
-                    ) -join "`n")
-            }
+            $docs = New-PeerLevelDocs @('client', 'bff', 'motore')
             $res = Invoke-WikiPublish $docs $wiki
             $page = Get-WikiPage $wiki 'Architettura/5.-Building-Block-View.md'
         }
         AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
 
-        It "Allora il marcatore si apre con la frase delle viste alla pari, con i soggetti e i livelli in ordine di comparsa" {
+        It "Allora il marcatore si apre con la frase dei soggetti che hanno tutti i livelli, poi con quella del soggetto che ne ha uno solo" {
             $res.ExitCode | Should -Be 0 -Because $res.Output
-            $page | Should -Match ([regex]::Escape("## Componenti`n`nLe sezioni che seguono mostrano, per BFF, Client, API del Motore, Worker, una vista per ciascuno di questi livelli: la logica, l'accesso ai dati.`n`n### BFF · logica`n"))
+            $page | Should -Match ([regex]::Escape("## Componenti`n`nLe sezioni che seguono mostrano, per BFF, Client e API del Motore, una vista per ciascuno di questi livelli: la logica e l'accesso ai dati. Per Worker mostrano una sola vista: la logica.`n`n### BFF · logica`n"))
         }
 
         It "E non dice che la prima vista mostra l'insieme, perche' non mostra il soggetto di ogni vista che segue" {
@@ -348,6 +355,51 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
             @([regex]::Matches($page, '(?m)^### (.+)$') | ForEach-Object { $_.Groups[1].Value }) | Should -Be @(
                 'BFF · logica', 'BFF · accesso ai dati', 'Client · logica', 'Client · accesso ai dati', 'API del Motore · logica', 'API del Motore · accesso ai dati', 'Worker · logica'
             )
+        }
+    }
+
+    Context "Scenario: un gruppo di viste alla pari in cui tutti i soggetti hanno gli stessi livelli ha una sola frase (ADR-2170)" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-PeerLevelDocs @('client', 'bff', 'motore', 'worker')
+            $res = Invoke-WikiPublish $docs $wiki
+            $page = Get-WikiPage $wiki 'Architettura/5.-Building-Block-View.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora il marcatore si apre con una frase che nomina tutti i soggetti e tutti i livelli" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $page | Should -Match ([regex]::Escape("## Componenti`n`nLe sezioni che seguono mostrano, per BFF, Client, API del Motore e Worker, una vista per ciascuno di questi livelli: la logica e l'accesso ai dati.`n`n### BFF · logica`n"))
+        }
+    }
+
+    Context "Scenario: un gruppo di viste alla pari i cui soggetti hanno tutti un solo livello dice che c'e' una sola vista (ADR-2170)" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = New-PeerLevelDocs @()
+            $res = Invoke-WikiPublish $docs $wiki
+            $page = Get-WikiPage $wiki 'Architettura/5.-Building-Block-View.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora il marcatore si apre con la frase della vista sola, per tutti i soggetti" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $page | Should -Match ([regex]::Escape("## Componenti`n`nLe sezioni che seguono mostrano, per BFF, Client, API del Motore e Worker, una sola vista: la logica.`n`n### BFF · logica`n"))
+        }
+    }
+
+    Context "Scenario: in inglese le frasi delle viste alla pari sono le corrispondenti, con la congiunzione della lingua (ADR-2170)" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $docs = ConvertTo-EnglishConventions (New-PeerLevelDocs @('client', 'bff', 'motore'))
+            $res = Invoke-WikiPublish $docs $wiki 'EN'
+            $page = Get-WikiPage $wiki 'Architecture/5.-Building-Block-View.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora il marcatore si apre con le frasi inglesi, una per ogni insieme di livelli" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $page | Should -Match ([regex]::Escape("## Componenti`n`nThe sections that follow show, for BFF, Client and API del Motore, one view for each of these levels: the logic and the data access. For Worker they show a single view: the logic.`n`n### BFF · logica`n"))
         }
     }
 
@@ -366,7 +418,7 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
 
         It "Allora il marcatore si apre con la frase delle viste alla pari che nomina i soggetti in ordine di comparsa" {
             $res.ExitCode | Should -Be 0 -Because $res.Output
-            $page | Should -Match ([regex]::Escape("## Componenti`n`nLe sezioni che seguono mostrano una vista per ciascuno di questi elementi: BFF, Client, API del Motore, Worker.`n`n![componenti-bff]"))
+            $page | Should -Match ([regex]::Escape("## Componenti`n`nLe sezioni che seguono mostrano una vista per ciascuno di questi elementi: BFF, Client, API del Motore e Worker.`n`n![componenti-bff]"))
         }
 
         It "E non nomina livelli che le viste non hanno" {
