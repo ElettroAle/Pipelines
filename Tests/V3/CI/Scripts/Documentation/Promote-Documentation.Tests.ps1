@@ -8,7 +8,8 @@
 .DESCRIPTION
     Ogni prova costruisce il repository del documento, con un bare repo come origin, il ramo principale e il ramo
     di bozza, e un repository sorgente con il suo origin e i checkout delle run. L'API delle PR e' l'endpoint locale
-    di Azure Repos (../AzureRepos/Fixtures/AzureReposStub.ps1), che registra le richieste; il completamento di una PR
+    di Azure Repos (../AzureRepos/Fixtures/AzureReposStub.ps1), che registra le richieste; i passi che scrivono la
+    documentazione sono un repository dei template con il suo origin e i checkout delle run; il completamento di una PR
     si simula con il merge nel suo ramo di destinazione. Gli scenari del requisito girano gli script come in
     pipeline, in un processo a parte; la wiki si pubblica con Publish-Arc42Wiki.ps1, che richiede Java 17, e
     l'aggiornamento della documentazione usa il modello linguistico finto delle prove dei moduli.
@@ -35,6 +36,7 @@ BeforeAll {
     $script:Model = Start-ModelEndpoint
     $script:Workspaces = [Collections.Generic.List[string]]::new()
     $script:Source = 'Negozio.Notifier'
+    $script:TemplatesRepository = 'Pipelines'
 
     function Reset-Stub([object[]]$Active = @()) {
         Get-ChildItem $StubState -File | Remove-Item -Force
@@ -115,6 +117,7 @@ BeforeAll {
             DRAFT_SOURCES_FILE        = ''
             DRAFT_SOURCES_DIRECTORY   = ''
             DRAFT_SOURCE_REPOSITORIES = ''
+            DRAFT_TEMPLATES_DIRECTORY = ''
         }
         foreach ($name in $Overrides.Keys) { $environment[$name] = $Overrides[$name] }
         return $environment
@@ -127,10 +130,19 @@ BeforeAll {
     }
 
     # Il lavoro arriva in staging nel repository sorgente; la run della bozza ne registra l'albero nel ramo di bozza
-    # del documento, insieme alla pagina con il Notifier. Poi staging arriva in main, con o senza una correzione
-    # integrata direttamente in main.
-    function New-PromotionCase([switch]$WithCorrection) {
+    # del documento, insieme alla pagina con il Notifier e all'albero dei passi che l'hanno scritta. Poi staging
+    # arriva in main, con o senza una correzione integrata direttamente in main, con o senza un cambiamento dei passi.
+    function New-PromotionCase([switch]$WithCorrection, [switch]$WithTemplatesChange, [switch]$WithoutTemplatesRecord) {
         $root = New-Workspace 'case'
+        $templatesOrigin = Join-Path $root "origins/$TemplatesRepository.git"
+        git init -q --bare -b main $templatesOrigin
+        $templatesWork = Join-Path $root 'templates-work'
+        Invoke-Git $root init -q -b main $templatesWork | Out-Null
+        Invoke-Git $templatesWork remote add origin $templatesOrigin | Out-Null
+        Save-Files $templatesWork @{ 'V3/CI/Common/Steps/c4-describe.yaml' = "steps: []`n" } 'base'
+        Invoke-Git $templatesWork push -q origin main | Out-Null
+        $stagingTemplates = New-Clone $templatesOrigin 'main' (Join-Path $root 'staging-templates')
+
         $sourceOrigin = Join-Path $root "origins/$Source.git"
         git init -q --bare -b main $sourceOrigin
         $sourceWork = Join-Path $root 'source-work'
@@ -159,8 +171,14 @@ BeforeAll {
         Save-Files $docs $draft 'docs: documentation updated after the integration in staging'
         $written = Invoke-Script "$Scripts/Documentation/Write-DraftSources.ps1" $docs (Get-PipelineEnvironment @{
                 TARGET_BRANCH = 'staging'; SOURCE_BRANCH = 'staging'; DRAFT_SOURCES_DIRECTORY = $stagingSources; DRAFT_SOURCE_REPOSITORIES = $Source
+                DRAFT_TEMPLATES_DIRECTORY = $stagingTemplates
             })
         if ($written.ExitCode -ne 0) { throw "Write-DraftSources: $($written.Output)" }
+        if ($WithoutTemplatesRecord) {
+            $file = Join-Path $docs '.draft-sources'
+            $record = Get-Content -Raw $file | ConvertFrom-Json
+            [IO.File]::WriteAllText($file, (ConvertTo-Json -InputObject ([ordered]@{ sources = @($record.sources) }) -Depth 5) + "`n")
+        }
         Save-Files $docs @{} 'docs: draft sources'
         Invoke-Git $docs push -q origin staging | Out-Null
 
@@ -170,12 +188,38 @@ BeforeAll {
         Invoke-Git $sourceWork push -q origin main | Out-Null
         $mainSources = Join-Path $root 'main-sources'
         New-Clone $sourceOrigin 'main' (Join-Path $mainSources $Source) | Out-Null
+        if ($WithTemplatesChange) {
+            Save-Files $templatesWork @{ 'V3/CI/Common/Steps/c4-describe.yaml' = "steps:`n  - script: echo nuovi passi`n" } 'fix(c4): nuovi passi del modello'
+            Invoke-Git $templatesWork push -q origin main | Out-Null
+        }
+        $mainTemplates = New-Clone $templatesOrigin 'main' (Join-Path $root 'main-templates')
         $docsMain = New-Clone $docsOrigin 'main' (Join-Path $root 'docs-main')
-        return [pscustomobject]@{ Root = $root; DocsOrigin = $docsOrigin; DocsMain = $docsMain; MainSources = $mainSources; StagingSources = $stagingSources; Written = $written }
+        return [pscustomobject]@{
+            Root = $root; DocsOrigin = $docsOrigin; DocsMain = $docsMain; MainSources = $mainSources; StagingSources = $stagingSources
+            StagingTemplates = $stagingTemplates; MainTemplates = $mainTemplates; Written = $written
+        }
     }
 
     function Invoke-Promotion($Case) {
-        return Invoke-Script "$Scripts/Documentation/Promote-Documentation.ps1" $Case.DocsMain (Get-PipelineEnvironment @{ DRAFT_SOURCES_DIRECTORY = $Case.MainSources })
+        return Invoke-Script "$Scripts/Documentation/Promote-Documentation.ps1" $Case.DocsMain (Get-PipelineEnvironment @{
+                DRAFT_SOURCES_DIRECTORY = $Case.MainSources; DRAFT_TEMPLATES_DIRECTORY = $Case.MainTemplates
+            })
+    }
+
+    function Invoke-MainDocumentationUpdate($Case) {
+        Save-Files $Case.DocsMain ([ordered]@{
+                'docs/architecture/c4/generated/containers/negozio-notifier.dsl' = "notifier = container `"Notifier`" `"Notifiche push`"`n"
+            }) 'Merged PR 93: modello C4 scritto dai nuovi passi'
+        $rewritten = Get-SectionText "La piattaforma divide il lavoro fra applicazioni piccole. Il Notifier invia le notifiche push."
+        Reset-ModelEndpoint $Model @(New-Draft @(@{ path = 'docs/architecture/04_solution_strategy.md'; text = $rewritten; note = '' }))
+        $settings = Get-UpdateSettings
+        $settings.Endpoint = $Model.Endpoint
+        $settings.Model = 'scrittore'
+        $settings.AccessToken = 'token-di-prova'
+        $settings.Verifications = @('Documentation/Test-Documentation.ps1')
+        Push-Location $Case.DocsMain
+        try { return Invoke-DocumentationUpdate $settings }
+        finally { Pop-Location }
     }
 
     function Invoke-DraftWikiPublish($Case) {
@@ -314,6 +358,57 @@ Describe "Funzionalità: Bozza della documentazione per il lavoro arrivato in st
 }
 
 
+# Il comportamento atteso del Bug 2218 «La rigenerazione della documentazione si blocca dopo ogni modifica dei
+# passi», con un It per ogni Allora e ogni E.
+Describe "Funzionalità: La promozione non blocca più la rigenerazione" {
+
+    Context "Scenario: una bozza scritta da passi diversi" {
+        BeforeAll {
+            Reset-Stub
+            $case = New-PromotionCase -WithTemplatesChange
+            $promotion = Invoke-Promotion $case
+            $requests = @(Get-StubRequests)
+            $update = Invoke-MainDocumentationUpdate $case
+            $modelRequests = @(Get-ModelEndpointRequests $Model)
+        }
+
+        It 'Allora la bozza non si promuove' {
+            $promotion.ExitCode | Should -Be 0 -Because $promotion.Output
+            $promotion.Output | Should -Not -Match 'documentationPromoted'
+            $promotion.Output | Should -Match "$TemplatesRepository, i passi che scrivono la documentazione, arriva con un albero diverso da quello della bozza"
+            @($requests | Where-Object method -EQ 'POST') | Should -BeNullOrEmpty
+        }
+
+        It 'E il ramo principale si rigenera' {
+            $update.Status | Should -Be 'updated'
+            $modelRequests.Count | Should -Be 1
+            [IO.File]::ReadAllText((Join-Path $case.DocsMain 'docs/architecture/04_solution_strategy.md')) | Should -Match 'Il Notifier invia le notifiche push'
+        }
+    }
+
+    Context "Scenario: una bozza scritta con gli stessi passi" {
+        BeforeAll {
+            Reset-Stub
+            $case = New-PromotionCase
+            $promotion = Invoke-Promotion $case
+            $create = @(Get-StubRequests | Where-Object method -EQ 'POST')
+        }
+
+        It 'Allora la bozza si promuove' {
+            $promotion.ExitCode | Should -Be 0 -Because $promotion.Output
+            $promotion.Output | Should -Match ([regex]::Escape('##vso[task.setvariable variable=documentationPromoted]True'))
+            $create.Count | Should -Be 1
+        }
+
+        It 'E la PR di promozione nomina anche i passi che hanno scritto la bozza' {
+            $tree = "$(Invoke-Git $case.MainTemplates rev-parse 'HEAD^{tree}')".Trim()
+            $create[0].body.description | Should -Match "- $TemplatesRepository \(passi della documentazione\): [0-9a-f]{8}, albero $tree"
+            $create[0].body.description | Should -Match "- ${Source}: staging @ [0-9a-f]{8}, albero "
+        }
+    }
+}
+
+
 Describe 'Impostazioni della bozza dalle variabili della pipeline' {
     It 'Senza variabili la bozza e'' staging, la destinazione main e il ramo sorgente quello di destinazione' {
         $environment = Get-PipelineEnvironment @{ SYSTEM_COLLECTIONURI = ''; SYSTEM_TEAMPROJECT = ''; DRAFT_BRANCH = ''; TARGET_BRANCH = '' }
@@ -326,10 +421,11 @@ Describe 'Impostazioni della bozza dalle variabili della pipeline' {
         $settings.SourceBranch | Should -Be 'main'
         $settings.SourcesFile | Should -Be '.draft-sources'
         $settings.Repositories | Should -BeNullOrEmpty
+        $settings.TemplatesDirectory | Should -BeNullOrEmpty
     }
 
     It 'I rami arrivano senza refs/heads, una macro vale il default e i repository sono separati da punto e virgola' {
-        $environment = @{ DRAFT_BRANCH = 'refs/heads/bozza'; TARGET_BRANCH = '$(targetBranch)'; SOURCE_BRANCH = 'refs/heads/staging'; DRAFT_SOURCE_REPOSITORIES = ' A ; B ;' }
+        $environment = @{ DRAFT_BRANCH = 'refs/heads/bozza'; TARGET_BRANCH = '$(targetBranch)'; SOURCE_BRANCH = 'refs/heads/staging'; DRAFT_SOURCE_REPOSITORIES = ' A ; B ;'; DRAFT_TEMPLATES_DIRECTORY = '/ws/pipeline-templates' }
         $previous = @{}
         foreach ($name in $environment.Keys) { $previous[$name] = [Environment]::GetEnvironmentVariable($name); [Environment]::SetEnvironmentVariable($name, $environment[$name]) }
         try { $settings = Get-DraftSettings }
@@ -338,13 +434,15 @@ Describe 'Impostazioni della bozza dalle variabili della pipeline' {
         $settings.TargetBranch | Should -Be 'main'
         $settings.SourceBranch | Should -Be 'staging'
         $settings.Repositories | Should -Be @('A', 'B')
+        $settings.TemplatesDirectory | Should -Be '/ws/pipeline-templates'
     }
 }
 
 Describe 'Sorgenti della bozza (ADR-2125)' {
     BeforeAll {
         $case = New-PromotionCase
-        $record = (Get-OriginFile $case.DocsOrigin 'staging' '.draft-sources' | ConvertFrom-Json).sources
+        $written = Get-OriginFile $case.DocsOrigin 'staging' '.draft-sources' | ConvertFrom-Json
+        $record = $written.sources
     }
 
     It 'La run sul ramo di bozza registra il ramo letto, il commit e il suo albero git' {
@@ -357,10 +455,17 @@ Describe 'Sorgenti della bozza (ADR-2125)' {
         $record[0].tree | Should -Be "$(Invoke-Git $checkout rev-parse 'HEAD^{tree}')".Trim()
     }
 
+    It 'La run sul ramo di bozza registra anche il repository, il commit e l''albero git dei passi che la scrivono' {
+        $written.templates.repository | Should -Be $TemplatesRepository
+        $written.templates.commit | Should -Be "$(Invoke-Git $case.StagingTemplates rev-parse HEAD)".Trim()
+        $written.templates.tree | Should -Be "$(Invoke-Git $case.StagingTemplates rev-parse 'HEAD^{tree}')".Trim()
+        $case.Written.Output | Should -Match "$TemplatesRepository \(passi della documentazione\): [0-9a-f]{40}, albero [0-9a-f]{40}"
+    }
+
     It 'Un repository senza il ramo sorgente della bozza si legge su main' {
         $directory = New-Workspace 'docs'
         Push-Location $directory
-        try { $sources = @(Write-DraftSources @{ TargetBranch = 'staging'; SourceBranch = 'dev'; SourcesFile = 'out/.draft-sources'; SourcesDirectory = $case.MainSources; Repositories = @($Source) }) }
+        try { $sources = @((Write-DraftSources @{ TargetBranch = 'staging'; SourceBranch = 'dev'; SourcesFile = 'out/.draft-sources'; SourcesDirectory = $case.MainSources; Repositories = @($Source); TemplatesDirectory = $case.MainTemplates }).sources) }
         finally { Pop-Location }
         $sources[0].branch | Should -Be 'main'
         (Get-Content -Raw (Join-Path $directory 'out/.draft-sources') | ConvertFrom-Json).sources[0].branch | Should -Be 'main'
@@ -380,6 +485,11 @@ Describe 'Sorgenti della bozza (ADR-2125)' {
         { Write-DraftSources @{ TargetBranch = 'staging'; SourcesDirectory = $case.Root; Repositories = @('Assente') } } | Should -Throw '*checkout di Assente assente*'
     }
 
+    It 'Senza il checkout dei passi il passo fallisce nominando cio'' che manca' {
+        { Write-DraftSources @{ TargetBranch = 'staging'; SourcesDirectory = $case.MainSources; Repositories = @($Source); TemplatesDirectory = '' } } | Should -Throw '*DRAFT_TEMPLATES_DIRECTORY*'
+        { Write-DraftSources @{ TargetBranch = 'staging'; SourcesDirectory = $case.MainSources; Repositories = @($Source); TemplatesDirectory = (Join-Path $case.Root 'assente') } } | Should -Throw '*checkout dei passi della documentazione assente*'
+    }
+
     It 'Come passo della pipeline fallisce con un errore e, sul ramo principale, chiude senza scrivere' {
         $failed = Invoke-Script "$Scripts/Documentation/Write-DraftSources.ps1" (New-Workspace 'docs') (Get-PipelineEnvironment @{ TARGET_BRANCH = 'staging' })
         $failed.ExitCode | Should -Be 1
@@ -394,7 +504,7 @@ Describe 'Promozione della bozza (ADR-2127)' {
     BeforeAll {
         $case = New-PromotionCase
         function Invoke-PromotionIn([string]$Directory, [hashtable]$Overrides = @{}) {
-            $settings = @{ DraftBranch = 'staging'; TargetBranch = 'main'; SourcesFile = '.draft-sources'; SourcesDirectory = $case.MainSources }
+            $settings = @{ DraftBranch = 'staging'; TargetBranch = 'main'; SourcesFile = '.draft-sources'; SourcesDirectory = $case.MainSources; TemplatesDirectory = $case.MainTemplates }
             foreach ($name in $Overrides.Keys) { $settings[$name] = $Overrides[$name] }
             $previous = @{ SYSTEM_COLLECTIONURI = $env:SYSTEM_COLLECTIONURI; SYSTEM_TEAMPROJECT = $env:SYSTEM_TEAMPROJECT }
             $env:SYSTEM_COLLECTIONURI = "$StubEndpoint/"
@@ -414,8 +524,29 @@ Describe 'Promozione della bozza (ADR-2127)' {
     }
 
     It 'Un file delle sorgenti vuoto o un checkout assente non promuovono la bozza' {
-        Get-PromotionObstacle @{ SourcesFile = '.draft-sources'; DraftBranch = 'staging' } @() | Should -Match 'non elenca repository sorgente'
-        Get-PromotionObstacle @{ SourcesDirectory = $case.Root; TargetBranch = 'main' } @([pscustomobject]@{ repository = 'Assente'; tree = 'x' }) | Should -Be 'checkout di Assente assente'
+        Get-PromotionObstacle @{ SourcesFile = '.draft-sources'; DraftBranch = 'staging' } ([pscustomobject]@{ sources = @() }) | Should -Match 'non elenca repository sorgente'
+        Get-PromotionObstacle @{ SourcesDirectory = $case.Root; TargetBranch = 'main' } ([pscustomobject]@{ sources = @([pscustomobject]@{ repository = 'Assente'; tree = 'x' }) }) | Should -Be 'checkout di Assente assente'
+    }
+
+    It 'Un file delle sorgenti scritto senza la voce dei passi non promuove la bozza' {
+        Reset-Stub
+        $old = New-PromotionCase -WithoutTemplatesRecord
+        $outcome = Invoke-PromotionIn $old.DocsMain @{ SourcesDirectory = $old.MainSources; TemplatesDirectory = $old.MainTemplates }
+        $outcome.Promoted | Should -BeFalse
+        $outcome.Message | Should -Match '\.draft-sources del ramo staging non registra i passi che hanno scritto la bozza'
+        Get-StubRequests | Should -BeNullOrEmpty
+    }
+
+    It 'Un checkout dei passi assente non promuove la bozza' {
+        $draft = [pscustomobject]@{ sources = @(); templates = [pscustomobject]@{ repository = $TemplatesRepository; tree = 'x' } }
+        $draft.sources = @((Get-OriginFile $case.DocsOrigin 'staging' '.draft-sources' | ConvertFrom-Json).sources)
+        Get-PromotionObstacle @{ SourcesDirectory = $case.MainSources; TemplatesDirectory = (Join-Path $case.Root 'assente'); TargetBranch = 'main' } $draft | Should -Be 'checkout dei passi della documentazione assente'
+    }
+
+    It 'Come passo della pipeline fallisce con un errore se manca la cartella del checkout dei passi' {
+        $failed = Invoke-Script "$Scripts/Documentation/Promote-Documentation.ps1" $case.DocsMain (Get-PipelineEnvironment @{ DRAFT_SOURCES_DIRECTORY = $case.MainSources })
+        $failed.ExitCode | Should -Be 1
+        Get-Issues $failed.Output | Should -Match 'promozione della bozza: DRAFT_TEMPLATES_DIRECTORY'
     }
 
     It 'Una PR attiva dal ramo di bozza non ne apre un''altra' {
@@ -430,7 +561,7 @@ Describe 'Promozione della bozza (ADR-2127)' {
         Reset-Stub
         $other = New-PromotionCase
         Complete-PullRequest $other.DocsOrigin 'staging' 'main'
-        $outcome = Invoke-PromotionIn $other.DocsMain @{ SourcesDirectory = $other.MainSources }
+        $outcome = Invoke-PromotionIn $other.DocsMain @{ SourcesDirectory = $other.MainSources; TemplatesDirectory = $other.MainTemplates }
         $outcome.Promoted | Should -BeTrue
         $outcome.Message | Should -Match "contiene gia' la bozza"
         Get-StubRequests | Should -BeNullOrEmpty
