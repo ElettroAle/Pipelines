@@ -49,6 +49,8 @@
 #                        segreta del consumer: una variabile segreta arriva allo script solo cosi')
 #   reasoningEffort    → ragionamento del modello (default: high)
 #   maxDrafts          → stesure massime per decisione (default: 3)
+#   maxTokens          → tetto dei token di una risposta del modello, ragionamento compreso (default: 0, il default
+#                        del modulo del fornitore)
 #   guide              → guida di stile del documento, per la spiegazione riscritta (default: docs/STYLE.md)
 #   progressBranch     → ramo su cui si salvano le decisioni accettate, es. il ramo della PR del consumer
 #                        (default: nessuno, nessuna ripresa)
@@ -104,6 +106,10 @@ parameters:
   - name: maxDrafts
     type: number
     default: 3
+
+  - name: maxTokens
+    type: number
+    default: 0
 
   - name: guide
     type: string
@@ -163,6 +169,7 @@ steps:
         CLASSES_REPAIR_MODEL: ${{ parameters.model }}
         CLASSES_REPAIR_REASONING_EFFORT: ${{ parameters.reasoningEffort }}
         CLASSES_REPAIR_MAX_DRAFTS: ${{ parameters.maxDrafts }}
+        CLASSES_REPAIR_MAX_TOKENS: ${{ parameters.maxTokens }}
         CLASSES_REPAIR_PROVIDER: ${{ parameters.provider }}
         PROGRESS_BRANCH: ${{ parameters.progressBranch }}
         CANDIDATES_FILE: ${{ parameters.candidatesFile }}
@@ -187,6 +194,7 @@ steps:
         CLASSES_REPAIR_MODEL: ${{ parameters.model }}
         CLASSES_REPAIR_REASONING_EFFORT: ${{ parameters.reasoningEffort }}
         CLASSES_REPAIR_MAX_DRAFTS: ${{ parameters.maxDrafts }}
+        CLASSES_REPAIR_MAX_TOKENS: ${{ parameters.maxTokens }}
         CLASSES_REPAIR_PROVIDER: ${{ parameters.provider }}
         ANTHROPIC_API_KEY: ${{ parameters.anthropicApiKey }}
         PROGRESS_BRANCH: ${{ parameters.progressBranch }}

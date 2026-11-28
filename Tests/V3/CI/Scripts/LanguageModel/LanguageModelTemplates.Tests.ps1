@@ -120,3 +120,16 @@ Describe "Riparazione con Anthropic nel template <Template>" -ForEach @(
         $branch.Condition | Should -Be "and(eq(parameters.mode, 'fix'), eq(parameters.provider, 'anthropic'))"
     }
 }
+
+Describe "Tetto della risposta del modello nel template adr-classes-verify" {
+    BeforeAll { $script:ClassesTemplate = 'V3/CI/Common/Steps/adr-classes-verify.yaml' }
+
+    It "Senza tetto dichiarato vale il default del modulo del fornitore" {
+        Get-ParameterDefault $ClassesTemplate 'maxTokens' | Should -Be '0'
+    }
+
+    It "Con il fornitore <_> il tetto arriva allo script in CLASSES_REPAIR_MAX_TOKENS" -ForEach @('foundry', 'anthropic') {
+        $branch = Get-ProviderBranch $ClassesTemplate $_ 'Repair-DecisionClasses.ps1'
+        $branch.Text | Should -Match '(?m)^ {8}CLASSES_REPAIR_MAX_TOKENS: \$\{\{ parameters\.maxTokens \}\}$'
+    }
+}
