@@ -15,7 +15,8 @@
 # HTTP; throttle rifiuta con 429 e Retry-After di un secondo quel numero di richieste; fail-after rifiuta
 # con 503 ogni richiesta oltre quel numero, contato dall'ultimo azzeramento dello stato. Un rifiuto porta
 # sempre Retry-After. Le richieste ricevute restano in request-<n>.json, il loro percorso e le intestazioni
-# di autenticazione in route-<n>.json.
+# di autenticazione in route-<n>.json. L'API dei modelli di Anthropic risponde con il massimo di uscita del
+# modello, fuori dal conteggio delle richieste.
 
 param([string]$Endpoint, [string]$State)
 
@@ -101,6 +102,13 @@ while (-not (Test-Path $stopFile)) {
     $context = $pending.Result
     $reader = [IO.StreamReader]::new($context.Request.InputStream, [Text.Encoding]::UTF8)
     $body = $reader.ReadToEnd()
+    if ($context.Request.Url.AbsolutePath.StartsWith('/v1/models/')) {
+        $model = [Text.Encoding]::UTF8.GetBytes((@{ type = 'model'; id = $context.Request.Url.Segments[-1]; max_tokens = 64000 } | ConvertTo-Json -Compress))
+        $context.Response.ContentType = 'application/json'
+        $context.Response.OutputStream.Write($model, 0, $model.Length)
+        $context.Response.Close()
+        continue
+    }
     $count++
     [IO.File]::WriteAllText((Join-Path $State "request-$count.json"), $body)
     $route = @{ path = $context.Request.Url.AbsolutePath; apiKey = $context.Request.Headers['x-api-key']; version = $context.Request.Headers['anthropic-version']; authorization = $context.Request.Headers['Authorization'] }

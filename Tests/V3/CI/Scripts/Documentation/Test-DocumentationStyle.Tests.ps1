@@ -9,7 +9,8 @@
     Messages di Anthropic sul suo percorso: per ogni regola registrata restituisce una violazione,
     nella voce della regola, per ogni unita' segnata della sezione che contiene la frase indicata,
     con la correzione registrata; conserva le richieste ricevute e, in route-<n>.json, il percorso e
-    le intestazioni di autenticazione. Le prove verificano cosa lo script manda al modello, come riporta la
+    le intestazioni di autenticazione; l'API dei modelli di Anthropic risponde con il massimo di uscita
+    del modello. Le prove verificano cosa lo script manda al modello, come riporta la
     risposta e come applica le correzioni; il giudizio vero del modello si prova con gli esempi
     della guida di stile del repository della documentazione.
 #>
@@ -78,6 +79,13 @@ BeforeAll {
             $context = $pending.Result
             $reader = [IO.StreamReader]::new($context.Request.InputStream, [Text.Encoding]::UTF8)
             $body = $reader.ReadToEnd()
+            if ($context.Request.Url.AbsolutePath.StartsWith('/v1/models/')) {
+                $model = [Text.Encoding]::UTF8.GetBytes((@{ type = 'model'; id = $context.Request.Url.Segments[-1]; max_tokens = 64000 } | ConvertTo-Json -Compress))
+                $context.Response.ContentType = 'application/json'
+                $context.Response.OutputStream.Write($model, 0, $model.Length)
+                $context.Response.Close()
+                continue
+            }
             $count++
             [IO.File]::WriteAllText((Join-Path $State "request-$count.json"), $body)
             $route = @{ path = $context.Request.Url.AbsolutePath; apiKey = $context.Request.Headers['x-api-key']; version = $context.Request.Headers['anthropic-version']; authorization = $context.Request.Headers['Authorization'] }
