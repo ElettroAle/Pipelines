@@ -7,8 +7,8 @@
 # directory che non vi compare entra negli ambienti con cui scambia remote state. C4_TERRAFORM_INSTANCES
 # istanzia un modulo radice una volta per ogni directory che un glob trova, con il nome della directory in
 # una variabile (es. Tenant-Customers:customer_tenant_id=environments/{environment}/data/*).
-# Ogni ambiente ne scrive due, ciascuno per una domanda. L'allocazione: regione, piano di calcolo e le
-# applicazioni che ospita, con i servizi che ospitano container nella loro regione. La rete: reti virtuali
+# Ogni ambiente ne scrive due, ciascuno per una domanda. L'allocazione: regione, gruppo di risorse, piano di
+# calcolo e le applicazioni che ospita, con i servizi che ospitano container nel loro gruppo. La rete: reti virtuali
 # con subnet, applicazioni integrate, private endpoint e Application Gateway, profili Front Door con i loro
 # endpoint, e le relazioni di peering, origine e backend; un collegamento che la dichiarazione non risolve
 # da' un avviso. Ogni elemento porta il gruppo di risorse e il modulo radice che lo dichiara.
@@ -371,7 +371,7 @@ function Add-Root($State, [string]$Path, $Node) {
 function Add-Instances($Parent, $Item, [string[]]$Containers) {
     foreach ($container in $Containers) {
         if (@($Parent.instances | Where-Object container -EQ $container).Count) { continue }
-        $Parent.instances.Add([ordered]@{ container = $container; azureName = Get-ItemName $Item; resourceGroup = Get-ItemResourceGroup $Item; module = $Item.Root })
+        $Parent.instances.Add([ordered]@{ container = $container; kind = $Item.Level; azureName = Get-ItemName $Item; resourceGroup = Get-ItemResourceGroup $Item; module = $Item.Root })
     }
 }
 
@@ -460,15 +460,39 @@ function Get-RegionNode($State, [string]$Region) {
     return Add-Root $State $path (New-Node $State.Environment $path $Region $RegionTechnology 'deploymentNode' 'region' 'azure' '' '')
 }
 
-# Un piano che il codice non dichiara sta nella regione della sua applicazione.
+# Il gruppo di risorse sta nella sua regione; un gruppo che il codice non dichiara, nella regione della risorsa che
+# vi sta. Il gruppo non e' contenuto di se stesso, quindi non porta un gruppo di risorse.
+function Get-ResourceGroupNode($State, [string]$Name, [string]$Region) {
+    $declared = $State.ById["/resourcegroups/$($Name.ToLowerInvariant())"]
+    if ($declared) { $Region = Get-ItemRegion $State $declared }
+    $path = "$Region/resourcegroups/$($Name.ToLowerInvariant())"
+    if ($State.Nodes.ContainsKey($path)) { return $State.Nodes[$path] }
+    $node = if ($declared) { New-ItemNode $State $declared 'deploymentNode' $path }
+    else { New-Node $State.Environment $path $Name $LevelTechnology.resourceGroup 'deploymentNode' 'resourceGroup' '' '' $Name }
+    $node.resourceGroup = ''
+    $State.Nodes[$path] = Add-Child (Get-RegionNode $State $Region) $node
+    return $State.Nodes[$path]
+}
+
+# Il nodo che contiene una risorsa: il suo gruppo di risorse o, se il nome del gruppo non e' noto, la sua regione.
+function Get-ResourceParent($State, [string]$ResourceGroup, [string]$Region) {
+    if (-not $ResourceGroup -or $ResourceGroup.Contains('{')) { return Get-RegionNode $State $Region }
+    return Get-ResourceGroupNode $State $ResourceGroup $Region
+}
+
+function Get-ItemParent($State, $Item) {
+    return Get-ResourceParent $State (Get-ItemResourceGroup $Item) (Get-ItemRegion $State $Item)
+}
+
+# Un piano che il codice non dichiara sta nel gruppo del suo identificativo, nella regione della sua applicazione.
 function Get-PlanNode($State, [string]$PlanId, $Application) {
     $declared = $State.ById[(Get-NormalId $PlanId)]
     $region = if ($declared) { Get-ItemRegion $State $declared } else { Get-ItemRegion $State $Application }
-    $parent = Get-RegionNode $State $region
     $path = "$region/$(Get-NormalId $PlanId)"
     $parts = Split-AzureId $PlanId
     $node = if ($declared) { New-ItemNode $State $declared 'deploymentNode' $path }
     else { New-Node $State.Environment $path (Get-IdName $PlanId) $parts.Type 'deploymentNode' 'hostingPlan' 'azure' $parts.ResourceGroup (Get-IdName $PlanId) }
+    $parent = if ($declared) { Get-ItemParent $State $declared } else { Get-ResourceParent $State $parts.ResourceGroup $region }
     return Add-Child $parent $node
 }
 
@@ -491,14 +515,14 @@ function Get-ApplicationPlacement($Item, [hashtable]$Integrations) {
 
 # Un'applicazione senza piano e' il nodo di se stessa, con dentro le istanze dei container che ospita.
 function Add-PlanlessApplication($State, $Item) {
-    $region = Get-RegionNode $State (Get-ItemRegion $State $Item)
+    $parent = Get-ItemParent $State $Item
     $containers = @($State.Hosted[$Item.Key])
-    if (-not $containers) { [void](Add-Hosted $State $Item $region); return }
-    Add-Instances (Add-Child $region (New-ItemNode $State $Item 'deploymentNode' (Get-NormalId $Item.Id))) $Item $containers
+    if (-not $containers) { [void](Add-Hosted $State $Item $parent); return }
+    Add-Instances (Add-Child $parent (New-ItemNode $State $Item 'deploymentNode' (Get-NormalId $Item.Id))) $Item $containers
 }
 
-# Regione, piano di calcolo, istanze: un servizio gestito che ospita un container e' un'istanza nella sua
-# regione, una risorsa che non ne ospita resta fuori.
+# Regione, gruppo di risorse, piano di calcolo, istanze: un servizio gestito che ospita un container e' un'istanza
+# nel suo gruppo di risorse, una risorsa che non ne ospita resta fuori.
 function Get-AllocationNodes($State) {
     foreach ($item in (Get-ItemsOfLevel $State 'application')) {
         $placement = Get-ApplicationPlacement $item $State.Integrations
@@ -507,7 +531,7 @@ function Get-AllocationNodes($State) {
     }
     foreach ($item in (Get-ItemsOfLevel $State 'service')) {
         $containers = @($State.Hosted[$item.Key])
-        if ($containers) { Add-Instances (Get-RegionNode $State (Get-ItemRegion $State $item)) $item $containers }
+        if ($containers) { Add-Instances (Get-ItemParent $State $item) $item $containers }
     }
     return $State.Roots
 }

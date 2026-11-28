@@ -127,6 +127,30 @@ BeforeAll {
         return $docs
     }
 
+    $AllocationReading = "Le viste di allocazione si leggono dall'esterno verso l'interno: la regione Azure contiene i gruppi di risorse, un gruppo contiene i piani di calcolo e i servizi, un piano le applicazioni che esegue; i riquadri pieni sono le applicazioni e i servizi che conservano dati o messaggi, le frecce le chiamate fra loro."
+    $NetworkReading = "Le viste di rete mostrano le reti virtuali con le loro subnet, le applicazioni integrate in ogni subnet e gli accessi privati ai servizi; le frecce sono i peering fra le reti e il percorso delle richieste dall'ingresso pubblico alle applicazioni."
+
+    # La Deployment View con le viste di deployment come le scrive Export-C4CodeModel.ps1, ognuna con il suo tipo: la
+    # vista d'insieme dell'allocazione e una per applicazione e, con WithNetwork, la vista d'insieme della rete e quella
+    # di una rete.
+    function New-TypedDeploymentDocs([bool]$WithNetwork) {
+        $docs = New-ValidDocs
+        $workspace = 'docs/architecture/c4/workspace.dsl'
+        $view = { param($Key, $Title, $Include, $Type, $Subject) @("deployment sistema produzione `"$Key`" {", "title `"$Title`"", "include $Include", 'properties {', "`"type`" `"$Type`"") + @(if ($Subject) { "`"subject`" `"$Subject`"" }) + @('}', '}') }
+        Edit-Docs $docs 'docs/architecture/07_deployment_view.md' '<!-- vista: deployment-produzione -->' '<!-- vista: deployment-produzione* -->'
+        Edit-Docs $docs $workspace "                coda = component `"Coda`"`n            }" "                coda = component `"Coda`"`n            }`n            notifier = container `"Notifier`""
+        Edit-Docs $docs $workspace 'containerInstance client' "containerInstance client`n                containerInstance notifier"
+        $views = @(& $view 'deployment-produzione-client' 'Allocazione di Client' '*' 'allocation' 'client') + @(& $view 'deployment-produzione-notifier' 'Allocazione di Notifier' '*' 'allocation' 'notifier')
+        if ($WithNetwork) {
+            Edit-Docs $docs $workspace 'produzione = deploymentEnvironment "Produzione" {' (@(
+                    'produzione = deploymentEnvironment "Produzione" {', 'rete = deploymentNode "Rete" {', 'vnet = deploymentNode "vnet-hub" {', 'infrastructureNode "agw"', '}', '}'
+                ) -join "`n")
+            $views += @(& $view 'deployment-produzione-rete' 'Rete' 'rete vnet' 'network' '') + @(& $view 'deployment-produzione-rete-vnet' 'Rete · vnet-hub' 'vnet' 'network' 'vnet')
+        }
+        Edit-Docs $docs $workspace 'deployment sistema produzione "deployment-produzione" {' (@($views) + @('deployment sistema produzione "deployment-produzione" {', 'title "Allocazione"', 'properties {', '"type" "allocation"', '}') -join "`n")
+        return $docs
+    }
+
     # Una vista di allocazione come la scrive Export-C4CodeModel.ps1: la descrizione e gli ambienti di cui elencare i
     # gruppi di risorse nelle proprieta', e gli elementi con il gruppo, il modulo che li dichiara e il nome Azure. Il
     # private endpoint si chiama nella vista con la parte che raggiunge.
@@ -330,6 +354,70 @@ Describe "Funzionalità: Documentazione architetturale nella wiki" {
 
         It "E la vista d'insieme dell'ambiente mostra le applicazioni delle viste che seguono attraverso le loro istanze" {
             $page | Should -Not -Match 'Le sezioni che seguono mostrano'
+        }
+    }
+
+    Context "Scenario: un gruppo di sole viste di allocazione si apre con la chiave di lettura delle viste di allocazione (ADR-2173)" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $res = Invoke-WikiPublish (New-TypedDeploymentDocs $false) $wiki
+            $page = Get-WikiPage $wiki 'Architettura/7.-Deployment-View.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora il marcatore si apre con la frase delle viste di allocazione, prima della frase della vista d'insieme" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $page | Should -Match ([regex]::Escape("## In breve`n`n$AllocationReading La vista «Allocazione» mostra l'insieme; le viste che seguono ne riprendono una alla volta le parti: «Allocazione di Client» e «Allocazione di Notifier».`n`n### Allocazione`n"))
+        }
+
+        It "E la frase compare una volta sola" {
+            ([regex]::Matches($page, [regex]::Escape($AllocationReading))).Count | Should -Be 1
+        }
+
+        It "E non c'e' la frase delle viste di rete, che il gruppo non ha" {
+            $page | Should -Not -Match ([regex]::Escape($NetworkReading))
+        }
+    }
+
+    Context "Scenario: un gruppo con viste di allocazione e di rete come la Deployment View ha la chiave di lettura di ogni tipo, nell'ordine di comparsa (ADR-2173)" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $res = Invoke-WikiPublish (New-TypedDeploymentDocs $true) $wiki
+            $page = Get-WikiPage $wiki 'Architettura/7.-Deployment-View.md'
+            $english = New-Wiki
+            $englishResult = Invoke-WikiPublish (ConvertTo-EnglishConventions (New-TypedDeploymentDocs $true)) $english 'EN'
+            $englishPage = Get-WikiPage $english 'Architecture/7.-Deployment-View.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root, $english.Root -ErrorAction SilentlyContinue }
+
+        It "Allora il marcatore si apre con la frase delle viste di allocazione e con quella delle viste di rete, poi con le frasi dei tratti" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $page | Should -Match ([regex]::Escape((@(
+                            "## In breve`n`n$AllocationReading $NetworkReading"
+                            "La vista «Allocazione» mostra l'insieme; le viste che seguono ne riprendono una alla volta le parti: «Allocazione di Client» e «Allocazione di Notifier»."
+                            "La vista «Rete» mostra l'insieme; le viste che seguono ne riprendono una alla volta le parti: «Rete · vnet-hub».`n`n### Allocazione`n"
+                        ) -join ' ')))
+        }
+
+        It "E in inglese le frasi sono le corrispondenti" {
+            $englishResult.ExitCode | Should -Be 0 -Because $englishResult.Output
+            $englishPage | Should -Match ([regex]::Escape("The allocation views read from the outside in: the Azure region holds the resource groups, a group holds the compute plans and the services, a plan the applications it runs; the filled boxes are the applications and the services that keep data or messages, the arrows the calls between them. The network views show the virtual networks with their subnets, the applications integrated in each subnet and the private accesses to the services; the arrows are the peerings between the networks and the path of the requests from the public entry to the applications. The view"))
+        }
+    }
+
+    Context "Scenario: un gruppo di viste della Building Block View, senza viste di deployment, resta com'e' (ADR-2173)" {
+        BeforeAll {
+            $wiki = New-Wiki
+            $res = Invoke-WikiPublish (New-PeerLevelDocs @('client', 'bff', 'motore')) $wiki
+            $page = Get-WikiPage $wiki 'Architettura/5.-Building-Block-View.md'
+        }
+        AfterAll { Remove-Item -Recurse -Force $wiki.Root -ErrorAction SilentlyContinue }
+
+        It "Allora il marcatore si apre con le sole frasi delle viste alla pari, senza chiave di lettura" {
+            $res.ExitCode | Should -Be 0 -Because $res.Output
+            $page | Should -Match ([regex]::Escape("## Componenti`n`nLe sezioni che seguono mostrano, per BFF, Client e API del Motore, una vista per ciascuno di questi livelli"))
+            $page | Should -Not -Match ([regex]::Escape($AllocationReading))
+            $page | Should -Not -Match ([regex]::Escape($NetworkReading))
         }
     }
 
