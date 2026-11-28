@@ -306,11 +306,12 @@ Il modello è sostituito da un endpoint locale che risponde come Azure OpenAI, o
 
 #### `LanguageModel.Tests.ps1`, `Foundry.Tests.ps1`, `Anthropic.Tests.ps1`, `LanguageModelTemplates.Tests.ps1`
 
-Il fornitore è un endpoint locale (`Fixtures/ModelEndpointStub.ps1`) che conserva percorso, intestazioni e corpo
-di ogni richiesta e risponde con le risposte registrate dal test; la Azure CLI e l'attesa fra i tentativi sono
-mock. Lo scenario `Un passo di documentazione usa Claude` del requisito si prova nei test dei tre passi
-(`Test-DocumentationStyle`, `Write-C4ModelText`, `Repair-DiagramFlows`) con la Azure CLI finta di
-`Fixtures/AzureCliProbe.ps1`. `LanguageModelTemplates.Tests.ps1` legge il testo dei template dei passi che chiamano il modello e
+Il fornitore è un endpoint locale (`Fixtures/ModelEndpointStub.ps1`) che conserva metodo, percorso, intestazioni
+e corpo di ogni richiesta e risponde con le risposte registrate dal test, anche in ritardo o come flusso di eventi
+del server; un percorso fisso, come l'API dei modelli di Anthropic, risponde sempre con la sua voce. La Azure CLI
+e l'attesa fra i tentativi sono mock. Lo scenario `Un passo di documentazione usa Claude` del requisito si prova
+nei test dei tre passi (`Test-DocumentationStyle`, `Write-C4ModelText`, `Repair-DiagramFlows`) con la Azure CLI
+finta di `Fixtures/AzureCliProbe.ps1`, e i loro endpoint rispondono all'API dei modelli con il massimo di uscita. `LanguageModelTemplates.Tests.ps1` legge il testo dei template dei passi che chiamano il modello e
 degli entry point `quality-arc42` e `quality-docs`.
 
 | Suite | Scenario testato |

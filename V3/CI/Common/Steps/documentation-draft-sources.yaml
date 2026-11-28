@@ -4,8 +4,10 @@
 #
 # Su una run che scrive la bozza del documento (targetBranch diverso da main) registra nel checkout del
 # documento il file sourcesFile, in JSON: per ogni repository sorgente il ramo letto, il commit e l'albero git
-# del commit (V3/CI/Scripts/Documentation/Write-DraftSources.ps1). Il ramo letto e' sourceBranch, main per un
-# repository che non lo ha. documentation-promote.yaml confronta questi alberi con quelli del ramo principale.
+# del commit, e per il checkout dei template in templatesDirectory, i passi che scrivono la bozza, il nome del
+# repository, il commit e l'albero git (V3/CI/Scripts/Documentation/Write-DraftSources.ps1). Il ramo letto e'
+# sourceBranch, main per un repository che non lo ha. documentation-promote.yaml confronta questi alberi con
+# quelli della run del ramo principale.
 # Con targetBranch main il passo non scrive nulla. Il file entra nella PR della bozza con i paths del consumer.
 #
 # Riusato da:
@@ -20,7 +22,8 @@
 #   targetBranch       → ramo del documento della run (default: main)
 #   sourcesFile        → file delle sorgenti, relativo a workingDirectory (default: .draft-sources)
 #   workingDirectory   → checkout del repository del documento (default: $(Build.SourcesDirectory))
-#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#   templatesDirectory → checkout del repo dei template, registrato fra le sorgenti della bozza
+#                        (default: $(Pipeline.Workspace)/pipeline-templates)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -64,6 +67,7 @@ steps:
     env:
       DRAFT_SOURCE_REPOSITORIES: ${{ join(';', parameters.sourceRepositories) }}
       DRAFT_SOURCES_DIRECTORY: ${{ parameters.sourcesDirectory }}
+      DRAFT_TEMPLATES_DIRECTORY: ${{ parameters.templatesDirectory }}
       DRAFT_SOURCES_FILE: ${{ parameters.sourcesFile }}
       SOURCE_BRANCH: ${{ parameters.sourceBranch }}
       TARGET_BRANCH: ${{ parameters.targetBranch }}

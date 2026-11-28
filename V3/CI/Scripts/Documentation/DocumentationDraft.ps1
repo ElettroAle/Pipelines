@@ -2,9 +2,10 @@
 
 # Il ramo di bozza del documento (Write-DraftSources.ps1, Promote-Documentation.ps1, Sync-DocumentationDraft.ps1).
 # Ogni run che scrive la bozza registra nel documento, per ogni repository sorgente, il ramo letto, il commit e il suo
-# albero git. Quando i repository sorgente arrivano nel ramo principale con gli stessi alberi, il testo della bozza,
-# gia' verificato, diventa quello ufficiale con una PR dal ramo di bozza, senza una nuova stesura; dopo ogni
-# aggiornamento del ramo principale la bozza lo riceve con una PR, e le pagine che non differiscono piu' spariscono.
+# albero git, e lo stesso per il repository dei passi che la scrivono. Quando i repository sorgente arrivano nel ramo
+# principale con gli stessi alberi e i passi sono gli stessi, il testo della bozza, gia' verificato, diventa quello
+# ufficiale con una PR dal ramo di bozza, senza una nuova stesura; dopo ogni aggiornamento del ramo principale la
+# bozza lo riceve con una PR, e le pagine che non differiscono piu' spariscono.
 
 $DraftApiVersion = '7.1'
 
@@ -26,12 +27,13 @@ function Get-DraftBranchSetting([string]$Value, [string]$Default) {
 function Get-DraftSettings {
     $target = Get-DraftBranchSetting $env:TARGET_BRANCH 'main'
     return @{
-        DraftBranch      = Get-DraftBranchSetting $env:DRAFT_BRANCH 'staging'
-        TargetBranch     = $target
-        SourceBranch     = Get-DraftBranchSetting $env:SOURCE_BRANCH $target
-        SourcesFile      = Get-DraftSetting $env:DRAFT_SOURCES_FILE '.draft-sources'
-        SourcesDirectory = Get-DraftSetting $env:DRAFT_SOURCES_DIRECTORY ''
-        Repositories     = Split-DraftList (Get-DraftSetting $env:DRAFT_SOURCE_REPOSITORIES '')
+        DraftBranch        = Get-DraftBranchSetting $env:DRAFT_BRANCH 'staging'
+        TargetBranch       = $target
+        SourceBranch       = Get-DraftBranchSetting $env:SOURCE_BRANCH $target
+        SourcesFile        = Get-DraftSetting $env:DRAFT_SOURCES_FILE '.draft-sources'
+        SourcesDirectory   = Get-DraftSetting $env:DRAFT_SOURCES_DIRECTORY ''
+        Repositories       = Split-DraftList (Get-DraftSetting $env:DRAFT_SOURCE_REPOSITORIES '')
+        TemplatesDirectory = Get-DraftSetting $env:DRAFT_TEMPLATES_DIRECTORY ''
     }
 }
 
@@ -69,15 +71,38 @@ function Get-SourceRecord($Settings, [string]$Repository) {
     }
 }
 
+function Get-DraftRepositoryName([string]$Origin) {
+    return ($Origin.Trim().TrimEnd('/') -split '[\\/]')[-1] -replace '\.git$', ''
+}
+
+function Get-TemplatesCheckout($Settings) {
+    if (-not $Settings.TemplatesDirectory) { throw 'DRAFT_TEMPLATES_DIRECTORY e'' obbligatoria: il checkout del repository dei passi che scrivono la documentazione' }
+    if (-not (Test-Path (Join-Path $Settings.TemplatesDirectory '.git'))) { return $null }
+    return $Settings.TemplatesDirectory
+}
+
+function Get-TemplatesRecord($Settings) {
+    $directory = Get-TemplatesCheckout $Settings
+    if (-not $directory) { throw "checkout dei passi della documentazione assente in $($Settings.TemplatesDirectory)" }
+    return [ordered]@{
+        repository = Get-DraftRepositoryName "$(Invoke-DraftGit $directory remote get-url origin)"
+        commit     = "$(Invoke-DraftGit $directory rev-parse HEAD)".Trim()
+        tree       = "$(Invoke-DraftGit $directory rev-parse 'HEAD^{tree}')".Trim()
+    }
+}
+
 # Solo una run sul ramo di bozza scrive il file: il documento ufficiale non documenta una bozza.
 function Write-DraftSources($Settings) {
     if ($Settings.TargetBranch -eq 'main') { return $null }
     if (-not $Settings.Repositories) { throw 'DRAFT_SOURCE_REPOSITORIES e'' obbligatoria: i repository sorgente della bozza' }
-    $sources = @($Settings.Repositories | ForEach-Object { Get-SourceRecord $Settings $_ })
+    $draft = [ordered]@{
+        sources   = @($Settings.Repositories | ForEach-Object { Get-SourceRecord $Settings $_ })
+        templates = Get-TemplatesRecord $Settings
+    }
     $path = [IO.Path]::GetFullPath($Settings.SourcesFile, (Get-Location).Path)
     New-Item -ItemType Directory -Force -Path (Split-Path $path) | Out-Null
-    [IO.File]::WriteAllText($path, (ConvertTo-Json -InputObject ([ordered]@{ sources = $sources }) -Depth 5) + "`n")
-    return $sources
+    [IO.File]::WriteAllText($path, (ConvertTo-Json -InputObject $draft -Depth 5) + "`n")
+    return $draft
 }
 
 function Update-DraftRemoteBranch([string]$Branch) {
@@ -92,7 +117,7 @@ function Read-DraftSources($Settings) {
     $found = $LASTEXITCODE -eq 0
     $global:LASTEXITCODE = 0
     if (-not $found) { return $null }
-    return @(((Invoke-DraftGit . show $object) -join "`n" | ConvertFrom-Json).sources)
+    return (Invoke-DraftGit . show $object) -join "`n" | ConvertFrom-Json
 }
 
 function Get-SourceTree($Settings, [string]$Repository) {
@@ -101,16 +126,29 @@ function Get-SourceTree($Settings, [string]$Repository) {
     return "$(Invoke-DraftGit $directory rev-parse 'HEAD^{tree}')".Trim()
 }
 
+function Get-TemplatesTree($Settings) {
+    $directory = Get-TemplatesCheckout $Settings
+    if (-not $directory) { return $null }
+    return "$(Invoke-DraftGit $directory rev-parse 'HEAD^{tree}')".Trim()
+}
+
 # La bozza vale come documento ufficiale solo se ogni repository che documenta arriva nel ramo principale con
-# lo stesso albero: un commit in piu', anche se non tocca la documentazione, chiede una nuova stesura.
-function Get-PromotionObstacle($Settings, $Sources) {
-    if ($null -eq $Sources) { return "nessun $($Settings.SourcesFile) nel ramo $($Settings.DraftBranch)" }
-    if (-not @($Sources).Count) { return "$($Settings.SourcesFile) del ramo $($Settings.DraftBranch) non elenca repository sorgente" }
-    foreach ($source in $Sources) {
+# lo stesso albero: un commit in piu', anche se non tocca la documentazione, chiede una nuova stesura. Vale anche
+# per i passi che l'hanno scritta: il controllo di qualita' del documento rigenera con i passi della run, e
+# respinge un testo scritto da passi diversi.
+function Get-PromotionObstacle($Settings, $Draft) {
+    if ($null -eq $Draft) { return "nessun $($Settings.SourcesFile) nel ramo $($Settings.DraftBranch)" }
+    $sources = @($Draft.sources | Where-Object { $_ })
+    if (-not $sources.Count) { return "$($Settings.SourcesFile) del ramo $($Settings.DraftBranch) non elenca repository sorgente" }
+    foreach ($source in $sources) {
         $tree = Get-SourceTree $Settings $source.repository
         if (-not $tree) { return "checkout di $($source.repository) assente" }
         if ($tree -ne $source.tree) { return "$($source.repository) arriva in $($Settings.TargetBranch) con un albero diverso da quello della bozza" }
     }
+    if (-not $Draft.templates) { return "$($Settings.SourcesFile) del ramo $($Settings.DraftBranch) non registra i passi che hanno scritto la bozza" }
+    $templatesTree = Get-TemplatesTree $Settings
+    if (-not $templatesTree) { return 'checkout dei passi della documentazione assente' }
+    if ($templatesTree -ne $Draft.templates.tree) { return "$($Draft.templates.repository), i passi che scrivono la documentazione, arriva con un albero diverso da quello della bozza" }
     return $null
 }
 
@@ -122,8 +160,7 @@ function Test-DraftBranchContains([string]$Branch, [string]$Ancestor) {
 }
 
 function Get-DraftRepositoryApi {
-    $origin = "$(git remote get-url origin)".Trim()
-    $name = ($origin.TrimEnd('/') -split '[\\/]')[-1] -replace '\.git$', ''
+    $name = Get-DraftRepositoryName "$(git remote get-url origin)"
     return "$("$env:SYSTEM_COLLECTIONURI".TrimEnd('/'))/$env:SYSTEM_TEAMPROJECT/_apis/git/repositories/$name"
 }
 
@@ -149,21 +186,27 @@ function Publish-BranchPullRequest([string]$Source, [string]$Target, [string]$Ti
     return $created
 }
 
-function Format-DraftSourcesDescription($Sources) {
-    $lines = @($Sources | ForEach-Object { "- $($_.repository): $($_.branch) @ $("$($_.commit)".Substring(0, [math]::Min(8, "$($_.commit)".Length))), albero $($_.tree)" })
-    return "Il testo della bozza e' gia' verificato e documenta gli stessi alberi dei repository sorgente:`n`n$($lines -join "`n")"
+function Format-DraftCommit([string]$Commit) {
+    return $Commit.Substring(0, [math]::Min(8, $Commit.Length))
+}
+
+function Format-DraftSourcesDescription($Draft) {
+    $lines = @($Draft.sources | ForEach-Object { "- $($_.repository): $($_.branch) @ $(Format-DraftCommit $_.commit), albero $($_.tree)" })
+    $templates = $Draft.templates
+    $lines += "- $($templates.repository) (passi della documentazione): $(Format-DraftCommit $templates.commit), albero $($templates.tree)"
+    return "Il testo della bozza e' gia' verificato e documenta gli stessi alberi dei repository sorgente, scritto dagli stessi passi:`n`n$($lines -join "`n")"
 }
 
 function Invoke-DocumentationPromotion($Settings) {
-    $sources = Read-DraftSources $Settings
-    $obstacle = Get-PromotionObstacle $Settings $sources
+    $draft = Read-DraftSources $Settings
+    $obstacle = Get-PromotionObstacle $Settings $draft
     if ($obstacle) { return @{ Promoted = $false; Message = "Nessuna promozione della bozza, la documentazione si riscrive: $obstacle" } }
     Update-DraftRemoteBranch $Settings.TargetBranch
     if (Test-DraftBranchContains $Settings.TargetBranch $Settings.DraftBranch) {
         return @{ Promoted = $true; Message = "Il ramo $($Settings.TargetBranch) contiene gia' la bozza di $($Settings.DraftBranch)" }
     }
     $title = "docs: $($Settings.DraftBranch) documentation promoted to $($Settings.TargetBranch)"
-    $pullRequest = Publish-BranchPullRequest $Settings.DraftBranch $Settings.TargetBranch $title (Format-DraftSourcesDescription $sources)
+    $pullRequest = Publish-BranchPullRequest $Settings.DraftBranch $Settings.TargetBranch $title (Format-DraftSourcesDescription $draft)
     return @{ Promoted = $true; Message = "Bozza promossa con la PR $($pullRequest.pullRequestId) da $($Settings.DraftBranch) verso $($Settings.TargetBranch)" }
 }
 

@@ -4,12 +4,14 @@
 #
 # Primo passo della documentazione del ramo principale (V3/CI/Scripts/Documentation/Promote-Documentation.ps1):
 # legge sourcesFile dal ramo draftBranch del documento e confronta l'albero git di ogni repository elencato con
-# quello del checkout che la run documenta. Alberi tutti uguali: una PR in auto-complete da draftBranch a
+# quello del checkout che la run documenta, e l'albero dei template che hanno scritto la bozza con quello del
+# checkout dei template della run. Alberi tutti uguali: una PR in auto-complete da draftBranch a
 # targetBranch, con merge e senza cancellare il ramo, porta la bozza gia' verificata nel documento ufficiale, e la
 # variabile documentationPromoted vale True, cosi' modello, decisioni e testo (c4-read*, c4-describe, c4-generate,
-# adr-register, documentation-update) non girano. Un albero diverso, un checkout, il file o il ramo di bozza
-# assenti: nessuna PR, e la run riscrive la documentazione come senza bozza. L'identita' della build deve leggere
-# e contribuire al repository del documento e contribuire alle PR.
+# adr-register, documentation-update) non girano. Un albero diverso, anche quello dei template, un checkout, il
+# file, la sua voce dei template o il ramo di bozza assenti: nessuna PR, e la run riscrive la documentazione come
+# senza bozza. L'identita' della build deve leggere e contribuire al repository del documento e contribuire
+# alle PR.
 #
 # Riusato da:
 #   il consumer, come primo passo della documentazione dopo l'integrazione nel ramo principale
@@ -22,7 +24,8 @@
 #   targetBranch       → ramo principale del documento (default: main)
 #   sourcesFile        → file delle sorgenti della bozza (default: .draft-sources)
 #   workingDirectory   → checkout del repository del documento (default: $(Build.SourcesDirectory))
-#   templatesDirectory → checkout del repo dei template (default: $(Pipeline.Workspace)/pipeline-templates)
+#   templatesDirectory → checkout del repo dei template, confrontato con quello della bozza
+#                        (default: $(Pipeline.Workspace)/pipeline-templates)
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -62,6 +65,7 @@ steps:
       pwsh: true
     env:
       DRAFT_SOURCES_DIRECTORY: ${{ parameters.sourcesDirectory }}
+      DRAFT_TEMPLATES_DIRECTORY: ${{ parameters.templatesDirectory }}
       DRAFT_SOURCES_FILE: ${{ parameters.sourcesFile }}
       DRAFT_BRANCH: ${{ parameters.draftBranch }}
       TARGET_BRANCH: ${{ parameters.targetBranch }}

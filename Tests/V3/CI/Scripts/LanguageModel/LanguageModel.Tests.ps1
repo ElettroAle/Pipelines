@@ -24,7 +24,7 @@ Describe "LanguageModel — scelta del fornitore" {
     }
 
     It "Il fornitore si riconosce senza badare a maiuscole e spazi" {
-        (New-LanguageModel -Provider ' Anthropic ' -Model 'claude-sonnet-5-5').Provider | Should -Be 'anthropic'
+        (New-LanguageModel -Provider ' Anthropic ' -Model 'claude-sonnet-5-5' -MaxTokens 8000).Provider | Should -Be 'anthropic'
     }
 
     It "Un fornitore sconosciuto è un errore che elenca quelli disponibili" {
@@ -34,7 +34,7 @@ Describe "LanguageModel — scelta del fornitore" {
     It "Invoke-LanguageModel chiama il modulo del fornitore del client" {
         Mock Invoke-AnthropicLanguageModel { @{ Response = 'da Anthropic'; Usage = @{ Input = 1; Output = 2 } } }
         Mock Invoke-FoundryLanguageModel { @{ Response = 'da Foundry'; Usage = @{ Input = 1; Output = 2 } } }
-        $client = New-LanguageModel -Provider 'anthropic' -Model 'claude-sonnet-5-5'
+        $client = New-LanguageModel -Provider 'anthropic' -Model 'claude-sonnet-5-5' -MaxTokens 8000
         (Invoke-LanguageModel $client 'istruzioni' 'domanda' @{} 'schema').Response | Should -Be 'da Anthropic'
         Should -Invoke Invoke-FoundryLanguageModel -Times 0 -Exactly
     }
